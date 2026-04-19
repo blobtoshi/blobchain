@@ -536,15 +536,16 @@ function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry }) {
 }
 
 // 9. SEND TX FORM ──────────────────────────────────────────────────────────────
-function SendTx({ wallet, chain, onBroadcast }) {
-  const [to, setTo] = useState(""); const [amt, setAmt] = useState("");
-  const [st, setSt] = useState("idle"); const [err, setErr] = useState("");
+function SendTxForm({ wallet, chain, onBroadcast, onSent }: any) {
+  const [to, setTo] = useState("");
+  const [amt, setAmt] = useState("");
+  const [st, setSt] = useState("idle");
+  const [err, setErr] = useState("");
   const balance = calcBalance(wallet.address, chain);
-  const F = '"Courier New",monospace';
-  const inp: any = { width: "100%", padding: "10px 14px", background: "transparent", border: "1px solid #0a2030", color: "#00ffcc", fontFamily: F, fontSize: 12, letterSpacing: 1, marginBottom: 10, outline: "none", boxSizing: "border-box" };
 
   async function send() {
-    setErr(""); const amount = parseFloat(amt);
+    setErr("");
+    const amount = parseFloat(amt);
     if (!to.startsWith("0x") || to.length < 10) { setErr("Invalid address"); return; }
     if (!amount || amount <= 0) { setErr("Invalid amount"); return; }
     if (amount + TX_FEE > balance) { setErr(`Insufficient balance (need ${(amount + TX_FEE).toFixed(6)})`); return; }
@@ -565,152 +566,204 @@ function SendTx({ wallet, chain, onBroadcast }) {
       await Relay.pushTx(tx);
       onBroadcast(tx);
       setSt("sent"); setTo(""); setAmt("");
-      setTimeout(() => setSt("idle"), 3000);
+      setTimeout(() => { setSt("idle"); onSent?.(); }, 1500);
     } catch (e) { setErr(String(e)); setSt("idle"); }
   }
 
+  const disabled = st !== "idle";
+  const label = st === "idle" ? "Broadcast transaction"
+              : st === "signing" ? "Signing…"
+              : st === "broadcasting" ? "Broadcasting…"
+              : "✓ Sent";
+
   return (
-    <div style={{ fontFamily: F }}>
-      <div style={{ color: "#0e2030", fontSize: 9, letterSpacing: 3, marginBottom: 14 }}>SEND $BLOB</div>
-      <div style={{ color: "#1a3040", fontSize: 10, marginBottom: 14 }}>
-        Balance: <span style={{ color: "#00ffcc" }}>{balance.toFixed(6)} $BLOB</span> · Fee: {TX_FEE} $BLOB
+    <div className="space-y-3">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-muted-foreground">Available</span>
+        <span className="num text-primary">{balance.toFixed(6)} $BLOB</span>
       </div>
-      <input value={to} onChange={e => setTo(e.target.value)} placeholder="Recipient address (0x...)" style={inp} />
-      <input value={amt} onChange={e => setAmt(e.target.value)} placeholder="Amount" type="number" min="0" style={inp} />
-      {err && <div style={{ color: "#ff4455", fontSize: 10, marginBottom: 10 }}>{err}</div>}
-      {st === "sent" && <div style={{ color: "#00ffcc", fontSize: 10, marginBottom: 10 }}>✓ Broadcast to network · Pending mempool</div>}
-      <button onClick={send} disabled={st !== "idle"} style={{
-        padding: "10px 32px", background: "transparent", border: "2px solid #00ffcc44",
-        color: st === "idle" ? "#00ffcc" : "#1a4455", fontFamily: F, fontSize: 12,
-        letterSpacing: 3, cursor: st === "idle" ? "pointer" : "default",
-      }}>
-        {st === "idle" ? "BROADCAST TX" : st === "signing" ? "SIGNING…" : st === "broadcasting" ? "BROADCASTING…" : "✓ SENT"}
+      <div className="space-y-2">
+        <label className="label-eyebrow block">Recipient</label>
+        <input
+          value={to}
+          onChange={e => setTo(e.target.value)}
+          placeholder="0x…"
+          className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm num placeholder:text-muted-foreground/60"
+        />
+      </div>
+      <div className="space-y-2">
+        <label className="label-eyebrow block">Amount</label>
+        <div className="relative">
+          <input
+            value={amt}
+            onChange={e => setAmt(e.target.value)}
+            type="number"
+            min="0"
+            step="0.000001"
+            placeholder="0.00"
+            className="w-full px-4 py-3 pr-20 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm num placeholder:text-muted-foreground/60"
+          />
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$BLOB</span>
+        </div>
+      </div>
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>Network fee</span>
+        <span className="num">{TX_FEE} $BLOB → miner</span>
+      </div>
+      {err && <div className="text-xs text-destructive">{err}</div>}
+      {st === "sent" && <div className="text-xs text-primary">✓ Broadcast to mempool</div>}
+      <button
+        onClick={send}
+        disabled={disabled}
+        className="w-full py-3 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition"
+      >
+        {label}
       </button>
     </div>
   );
 }
 
 // 10. MINING PANEL ─────────────────────────────────────────────────────────────
-function MiningPanel({ blockInfo, entries, myEntry, chain }) {
+function MiningPanel({ blockInfo, entries, myEntry, chain }: any) {
   const sorted = [...entries].sort((a, b) => b.score - a.score);
-  const total = entries.reduce((s, e) => s + e.score, 0);
+  const total = entries.reduce((s: number, e: any) => s + e.score, 0);
   const supplyNow = calcTotalSupply(chain);
-  const F = '"Courier New",monospace';
-  const Bar = ({ pct, col }) => (
-    <div style={{ flex: 1, height: 3, background: "#0a1a28", borderRadius: 1 }}>
-      <div style={{ width: `${pct}%`, height: "100%", background: col, borderRadius: 1, transition: "width .6s" }} />
+
+  const Stat = ({ label, value, accent = "text-foreground" }: any) => (
+    <div className="glass p-4">
+      <div className={`num text-xl font-semibold ${accent}`}>{value}</div>
+      <div className="label-eyebrow mt-1">{label}</div>
     </div>
   );
+
   return (
-    <div style={{ fontFamily: F }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 1, marginBottom: 14 }}>
-        {[
-          ["#" + blockInfo.height, "BLOCK", "#00ffcc"],
-          [blockInfo.reward + " $BLOB", "REWARD", "#ffcc00"],
-          [blockInfo.remaining + "s", "REMAINING", "#3a86ff"],
-          [entries.length, "MINERS", "#ff6b6b"],
-        ].map(([v, l, c]: any) => (
-          <div key={l} style={{ padding: "12px 14px", background: "#060a14", border: "1px solid #0a1828" }}>
-            <div style={{ color: c, fontSize: 18, fontWeight: "bold", fontFamily: F }}>{v}</div>
-            <div style={{ color: "#0e2030", fontSize: 8, marginTop: 3, letterSpacing: 2 }}>{l}</div>
-          </div>
-        ))}
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <Stat label="Block" value={`#${blockInfo.height}`} accent="text-primary" />
+        <Stat label="Reward" value={`${blockInfo.reward} $BLOB`} accent="text-[hsl(var(--warning))]" />
+        <Stat label="Remaining" value={`${blockInfo.remaining}s`} accent="text-[hsl(var(--info))]" />
+        <Stat label="Miners" value={entries.length} />
       </div>
 
-      <div style={{ padding: "10px 14px", border: "1px solid #0a1828", marginBottom: 14 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-          <span style={{ color: "#0e2030", fontSize: 9, letterSpacing: 2 }}>$BLOB SUPPLY</span>
-          <span style={{ color: "#2a5544", fontSize: 9 }}>{supplyNow.toFixed(2)} / {MAX_SUPPLY.toLocaleString()}</span>
+      <div className="glass p-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="label-eyebrow">$BLOB Supply</span>
+          <span className="text-xs num text-muted-foreground">
+            {supplyNow.toFixed(2)} / {MAX_SUPPLY.toLocaleString()}
+          </span>
         </div>
-        <Bar pct={(supplyNow / MAX_SUPPLY) * 100} col="#00ffcc" />
+        <div className="h-1 rounded-full bg-secondary overflow-hidden">
+          <div
+            className="h-full bg-primary transition-all duration-500"
+            style={{ width: `${Math.min((supplyNow / MAX_SUPPLY) * 100, 100)}%` }}
+          />
+        </div>
       </div>
 
-      <div style={{ color: "#0e2030", fontSize: 9, letterSpacing: 2, marginBottom: 8 }}>CURRENT BLOCK ENTRIES</div>
-      {entries.length === 0 && (
-        <div style={{ color: "#0a1e2a", fontSize: 11, padding: "20px 0", textAlign: "center" }}>
-          No entries yet this block — play Blob Run to submit yours
-        </div>
-      )}
-      {sorted.map((e, i) => {
-        const pct = total > 0 ? +((e.score / total) * 100).toFixed(1) : 0;
-        const isMe = e.address === myEntry?.address;
-        return (
-          <div key={e.address + i} style={{ padding: "10px 14px", marginBottom: 2, background: isMe ? "rgba(0,255,204,.04)" : "#060a14", border: isMe ? "1px solid #00ffcc22" : "1px solid #0a1828" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ color: i === 0 ? "#ffcc00" : "#1a3040", fontSize: i < 3 ? 14 : 11, width: 24 }}>
-                {i === 0 ? "👑" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}`}
-              </span>
-              <span style={{ flex: 1, color: isMe ? "#00ffcc" : "#3a5566", fontSize: 11 }}>{e.username || e.address?.slice(0, 14)}</span>
-              <span style={{ color: "#4a7060", fontSize: 11, fontWeight: "bold" }}>{e.score.toLocaleString()}</span>
-              <span style={{ color: pct > 20 ? "#ffcc00" : pct > 5 ? "#3a8855" : "#1a3040", fontSize: 10, width: 50, textAlign: "right" }}>{pct}%</span>
-              <div style={{ width: 80 }}>
-                <Bar pct={Math.min(pct, 100)} col={isMe ? "#00ffcc" : i === 0 ? "#ffcc00" : "#2a5566"} />
-              </div>
-            </div>
+      <div>
+        <div className="label-eyebrow mb-3">Current block entries</div>
+        {entries.length === 0 ? (
+          <div className="glass p-8 text-center text-sm text-muted-foreground">
+            No entries yet — play Blob Run to submit yours
           </div>
-        );
-      })}
-      {myEntry && (
-        <div style={{ marginTop: 10, color: "#0e2030", fontSize: 9, textAlign: "center", letterSpacing: 1 }}>
-          Your win probability: <span style={{ color: "#00ffcc" }}>{winProbability(myEntry.score, entries)}%</span> · Lottery is weighted random — anyone can win
-        </div>
-      )}
+        ) : (
+          <div className="space-y-1.5">
+            {sorted.map((e: any, i: number) => {
+              const pct = total > 0 ? +((e.score / total) * 100).toFixed(1) : 0;
+              const isMe = e.address === myEntry?.address;
+              return (
+                <div
+                  key={e.address + i}
+                  className={`glass px-4 py-3 flex items-center gap-3 ${isMe ? "ring-1 ring-primary/40" : ""}`}
+                >
+                  <span className="w-6 text-sm">
+                    {i === 0 ? "👑" : i === 1 ? "🥈" : i === 2 ? "🥉" : <span className="text-muted-foreground">{i + 1}</span>}
+                  </span>
+                  <span className={`flex-1 text-sm truncate ${isMe ? "text-primary" : "text-foreground/80"}`}>
+                    {e.username || e.address?.slice(0, 14)}
+                  </span>
+                  <span className="num text-sm font-medium">{e.score.toLocaleString()}</span>
+                  <div className="w-24 h-1 rounded-full bg-secondary overflow-hidden">
+                    <div
+                      className={`h-full ${isMe ? "bg-primary" : i === 0 ? "bg-[hsl(var(--warning))]" : "bg-muted-foreground"}`}
+                      style={{ width: `${Math.min(pct, 100)}%` }}
+                    />
+                  </div>
+                  <span className="num text-xs w-12 text-right text-muted-foreground">{pct}%</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {myEntry && (
+          <div className="mt-3 text-xs text-center text-muted-foreground">
+            Your win probability: <span className="text-primary num">{winProbability(myEntry.score, entries)}%</span>
+            {" · weighted random lottery"}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 // 11. BLOCK EXPLORER ──────────────────────────────────────────────────────────
-function BlockExplorer({ chain, blockInfo }) {
-  const [sel, setSel] = useState(null);
-  const F = '"Courier New",monospace';
+function BlockExplorer({ chain, blockInfo }: any) {
+  const [sel, setSel] = useState<number | null>(null);
   const display = [...chain].reverse().slice(0, 30);
-  const grid = "60px 1fr 90px 90px 60px";
+
   return (
-    <div style={{ fontFamily: F }}>
-      <div style={{ padding: "10px 16px", border: "1px solid #00ffcc11", marginBottom: 14 }}>
-        <span style={{ color: "#2a5544", fontSize: 10 }}>⬡ BLOB CHAIN</span>
-        <span style={{ color: "#0e2030", fontSize: 9, marginLeft: 16 }}>{chain.length} blocks</span>
+    <div className="space-y-2">
+      <div className="flex items-center justify-between glass px-4 py-3">
+        <span className="text-sm">⬡ BLOB Chain</span>
+        <span className="text-xs text-muted-foreground num">{chain.length} blocks</span>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: grid, gap: 10, padding: "8px 14px" }}>
-        {["HEIGHT", "WINNER", "SCORE", "REWARD", "TXS"].map(h => (
-          <div key={h} style={{ color: "#0a1e2a", fontSize: 8, letterSpacing: 2 }}>{h}</div>
+
+      <div className="glass-hi px-4 py-3 ring-1 ring-[hsl(var(--warning)/0.2)]">
+        <div className="grid grid-cols-[60px_1fr_80px_100px_50px] gap-3 items-center text-sm">
+          <span className="num text-[hsl(var(--warning))]">#{blockInfo.height}</span>
+          <span className="text-muted-foreground">🕒 mining…</span>
+          <span className="text-muted-foreground">—</span>
+          <span className="num text-[hsl(var(--warning))]">{blockInfo.reward} $BLOB</span>
+          <span className="text-muted-foreground num text-right">—</span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-[60px_1fr_80px_100px_50px] gap-3 px-4 py-2">
+        {["Height", "Winner", "Score", "Reward", "Txs"].map(h => (
+          <div key={h} className="label-eyebrow">{h}</div>
         ))}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: grid, gap: 10, padding: "10px 14px", background: "#060a14", border: "1px solid #ffcc0011", marginBottom: 2 }}>
-        <div style={{ color: "#ffcc00", fontSize: 11 }}>#{blockInfo.height}</div>
-        <div style={{ color: "#1a3040", fontSize: 11 }}>🕒 mining...</div>
-        <div style={{ color: "#1a3040", fontSize: 11 }}>—</div>
-        <div style={{ color: "#ffcc00", fontSize: 11 }}>{blockInfo.reward} $BLOB</div>
-        <div style={{ color: "#1a3040", fontSize: 11 }}>—</div>
-      </div>
-      {display.map(b => (
+
+      {display.map((b: any) => (
         <div key={b.height}>
-          <div onClick={() => setSel(sel === b.height ? null : b.height)}
-            style={{ display: "grid", gridTemplateColumns: grid, gap: 10, padding: "10px 14px", cursor: "pointer", borderBottom: "1px solid #07101a" }}>
-            <div style={{ color: "#1a3040", fontSize: 11 }}>#{b.height}</div>
-            <div style={{ color: "#5a8090", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {b.winnerUsername || b.winner?.slice(0, 18) || "—"}
-            </div>
-            <div style={{ color: "#2a5040", fontSize: 11 }}>{b.winnerScore > 0 ? b.winnerScore : "—"}</div>
-            <div style={{ color: "#3a6050", fontSize: 11 }}>{b.reward > 0 ? `${b.reward} ⬡` : "—"}</div>
-            <div style={{ color: "#1a3040", fontSize: 11 }}>{(b.transactions || []).length}</div>
+          <div
+            onClick={() => setSel(sel === b.height ? null : b.height)}
+            className="glass px-4 py-3 cursor-pointer hover:bg-secondary/30 transition grid grid-cols-[60px_1fr_80px_100px_50px] gap-3 items-center text-sm"
+          >
+            <span className="num text-muted-foreground">#{b.height}</span>
+            <span className="truncate text-foreground/80">{b.winnerUsername || b.winner?.slice(0, 18) || "—"}</span>
+            <span className="num text-muted-foreground">{b.winnerScore > 0 ? b.winnerScore : "—"}</span>
+            <span className="num text-primary/80">{b.reward > 0 ? `${b.reward} ⬡` : "—"}</span>
+            <span className="num text-right text-muted-foreground">{(b.transactions || []).length}</span>
           </div>
           {sel === b.height && (
-            <div style={{ padding: "12px 20px", background: "#060a14", border: "1px solid #0a1828", marginBottom: 2, fontSize: 9, color: "#2a5060", lineHeight: 2.4, overflowX: "auto" }}>
-              <div><span style={{ color: "#0e2030" }}>HASH: </span>{b.hash}</div>
-              <div><span style={{ color: "#0e2030" }}>PREV: </span>{b.previousHash?.slice(0, 40)}…</div>
-              <div><span style={{ color: "#0e2030" }}>SEED: </span>{b.seed}</div>
-              <div><span style={{ color: "#0e2030" }}>TIME: </span>{new Date(b.timestamp).toLocaleString()}</div>
-              <div><span style={{ color: "#0e2030" }}>WINNER: </span>{b.winner || "—"}</div>
-              {(b.transactions || []).map((tx, i) => (
-                <div key={i} style={{ color: "#1a3040" }}>TX: {tx.fromUsername || tx.from?.slice(0, 10)} → {tx.to?.slice(0, 10)} · {tx.amount} $BLOB</div>
+            <div className="glass mt-1 p-4 text-xs text-muted-foreground space-y-1.5 overflow-x-auto">
+              <div><span className="label-eyebrow mr-2">Hash</span><span className="num text-foreground/70">{b.hash}</span></div>
+              <div><span className="label-eyebrow mr-2">Prev</span><span className="num text-foreground/70">{b.previousHash?.slice(0, 40)}…</span></div>
+              <div><span className="label-eyebrow mr-2">Seed</span><span className="num">{b.seed}</span></div>
+              <div><span className="label-eyebrow mr-2">Time</span>{new Date(b.timestamp).toLocaleString()}</div>
+              <div><span className="label-eyebrow mr-2">Winner</span><span className="num text-foreground/70">{b.winner || "—"}</span></div>
+              {(b.transactions || []).map((tx: any, i: number) => (
+                <div key={i} className="num text-foreground/60">
+                  TX · {tx.fromUsername || tx.from?.slice(0, 10)} → {tx.to?.slice(0, 10)} · {tx.amount} $BLOB
+                </div>
               ))}
             </div>
           )}
         </div>
       ))}
       {chain.length <= 1 && (
-        <div style={{ color: "#0a1e2a", textAlign: "center", padding: "30px 0", fontSize: 11 }}>
+        <div className="glass text-center py-10 text-sm text-muted-foreground">
           Chain starts at genesis · Mine the first block to begin
         </div>
       )}
@@ -719,91 +772,128 @@ function BlockExplorer({ chain, blockInfo }) {
 }
 
 // 12. MEMPOOL VIEW ─────────────────────────────────────────────────────────────
-function Mempool({ mempool, wallet }) {
-  const F = '"Courier New",monospace';
+function Mempool({ mempool, wallet }: any) {
   return (
-    <div style={{ fontFamily: F }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-        <div style={{ color: "#0e2030", fontSize: 9, letterSpacing: 2 }}>PENDING TRANSACTIONS</div>
-        <div style={{ color: "#1a3040", fontSize: 9 }}>{mempool.length} unconfirmed</div>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="label-eyebrow">Pending transactions</span>
+        <span className="text-xs text-muted-foreground num">{mempool.length} unconfirmed</span>
       </div>
-      {mempool.length === 0 && (
-        <div style={{ color: "#0a1e2a", textAlign: "center", padding: "30px 0", fontSize: 11 }}>
+      {mempool.length === 0 ? (
+        <div className="glass text-center py-10 text-sm text-muted-foreground">
           No pending transactions · Mempool empty
         </div>
+      ) : (
+        <div className="space-y-2">
+          {mempool.map((tx: any, i: number) => {
+            const isMe = tx.from === wallet.address;
+            return (
+              <div
+                key={tx.id || i}
+                className={`glass px-4 py-3 border-l-2 ${isMe ? "border-l-primary" : "border-l-muted"}`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm text-foreground/80">{tx.fromUsername || tx.from?.slice(0, 16) + "…"}</span>
+                  <span className="num text-sm font-medium text-primary/90">{tx.amount} $BLOB</span>
+                </div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span className="num">fee {tx.fee || TX_FEE}</span>
+                  <span className="num">{new Date(tx.timestamp).toLocaleTimeString()}</span>
+                  <span>⧗ pending</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
-      {mempool.map((tx, i) => {
-        const isMe = tx.from === wallet.address;
-        return (
-          <div key={tx.id || i} style={{ padding: "10px 16px", marginBottom: 3, background: isMe ? "rgba(0,255,204,.03)" : "rgba(255,255,255,.015)", border: isMe ? "1px solid #00ffcc1a" : "1px solid transparent", borderLeft: "3px solid #0a2030" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-              <span style={{ color: "#2a5060", fontSize: 11 }}>{tx.fromUsername || tx.from?.slice(0, 16) + "…"}</span>
-              <span style={{ color: "#3a6050", fontSize: 11, fontWeight: "bold" }}>{tx.amount} $BLOB</span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ color: "#0a1e2a", fontSize: 9 }}>fee: {tx.fee || TX_FEE} $BLOB</span>
-              <span style={{ color: "#0a1e2a", fontSize: 9 }}>{new Date(tx.timestamp).toLocaleTimeString()}</span>
-              <span style={{ color: "#0f3020", fontSize: 9 }}>⧗ pending</span>
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }
 
-// 13. WALLET SCREEN ────────────────────────────────────────────────────────────
-function WalletScreen({ wallet, chain, mempool }) {
+// 13. WALLET SCREEN (Send lives here) ─────────────────────────────────────────
+function WalletScreen({ wallet, chain, mempool, onBroadcast }: any) {
   const [showPriv, setShowPriv] = useState(false);
   const [copied, setCopied] = useState(false);
   const balance = calcBalance(wallet.address, chain);
-  const pending = mempool.filter(tx => tx.to === wallet.address).reduce((s, tx) => s + tx.amount, 0);
-  const totalBlocks = chain.filter(b => b.winner === wallet.address).length;
-  const totalMined = chain.filter(b => b.winner === wallet.address).reduce((s, b) => s + (b.reward || 0), 0);
-  const F = '"Courier New",monospace';
+  const pending = mempool
+    .filter((tx: any) => tx.to === wallet.address)
+    .reduce((s: number, tx: any) => s + tx.amount, 0);
+  const totalBlocks = chain.filter((b: any) => b.winner === wallet.address).length;
+  const totalMined = chain
+    .filter((b: any) => b.winner === wallet.address)
+    .reduce((s: number, b: any) => s + (b.reward || 0), 0);
+
   const copy = async () => {
-    try { await navigator.clipboard.writeText(wallet.address); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch {}
+    try {
+      await navigator.clipboard.writeText(wallet.address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {}
   };
-  const Stat = ({ label, val, col = "#2a5060" }: any) => (
-    <div style={{ padding: "14px 18px", background: "#060a14", border: "1px solid #0a1828", textAlign: "center" }}>
-      <div style={{ color: col, fontSize: 18, fontWeight: "bold", fontFamily: F }}>{val}</div>
-      <div style={{ color: "#0e2030", fontSize: 8, marginTop: 3, letterSpacing: 2 }}>{label}</div>
-    </div>
-  );
+
   return (
-    <div style={{ fontFamily: F }}>
-      <div style={{ padding: 20, border: "1px solid #00ffcc1a", background: "rgba(0,255,204,.02)", marginBottom: 14 }}>
-        <div style={{ color: "#0e2030", fontSize: 8, letterSpacing: 3, marginBottom: 10 }}>YOUR NODE · WALLET</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-          <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#00ffcc", boxShadow: "0 0 12px #00ffcc", flexShrink: 0 }} />
-          <div style={{ color: "#2a5060", fontSize: 12, wordBreak: "break-all" }}>{wallet.address}</div>
-          <button onClick={copy} style={{ background: "transparent", border: "1px solid #0a2030", color: copied ? "#00ffcc" : "#1a3040", fontFamily: F, fontSize: 9, padding: "4px 10px", cursor: "pointer", letterSpacing: 1, flexShrink: 0 }}>
-            {copied ? "COPIED" : "COPY"}
-          </button>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="lg:col-span-2 space-y-4">
+        <div className="glass-hi p-6">
+          <div className="label-eyebrow mb-4">Your wallet</div>
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-2 h-2 rounded-full bg-primary shadow-[0_0_12px_hsl(var(--primary))]" />
+            <div className="num text-sm text-foreground/80 truncate flex-1">{wallet.address}</div>
+            <button
+              onClick={copy}
+              className="px-3 py-1 rounded-md text-xs border border-border hover:border-primary/40 hover:text-primary transition"
+            >
+              {copied ? "Copied" : "Copy"}
+            </button>
+          </div>
+          <div className="num text-5xl font-semibold text-primary leading-none mb-2">
+            {balance.toFixed(6)}
+            <span className="text-base text-muted-foreground ml-2">$BLOB</span>
+          </div>
+          {pending > 0 && (
+            <div className="text-xs text-muted-foreground num">+{pending.toFixed(6)} pending</div>
+          )}
         </div>
-        <div style={{ color: "#00ffcc", fontSize: 36, fontWeight: "bold", textShadow: "0 0 30px #00ffcc55", marginBottom: 4 }}>
-          {balance.toFixed(6)} <span style={{ fontSize: 16, color: "#2a6644" }}>$BLOB</span>
+
+        <div className="grid grid-cols-3 gap-2">
+          <div className="glass p-4">
+            <div className="num text-2xl font-semibold text-[hsl(var(--warning))]">{totalBlocks}</div>
+            <div className="label-eyebrow mt-1">Blocks mined</div>
+          </div>
+          <div className="glass p-4">
+            <div className="num text-2xl font-semibold text-primary">{totalMined.toFixed(2)}</div>
+            <div className="label-eyebrow mt-1">Total earned</div>
+          </div>
+          <div className="glass p-4">
+            <div className="num text-2xl font-semibold text-[hsl(var(--info))]">{chain.length - 1}</div>
+            <div className="label-eyebrow mt-1">Chain height</div>
+          </div>
         </div>
-        {pending > 0 && <div style={{ color: "#1a4455", fontSize: 10 }}>+{pending.toFixed(6)} pending</div>}
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 1, marginBottom: 14 }}>
-        <Stat label="BLOCKS MINED" val={totalBlocks} col="#ffcc00" />
-        <Stat label="TOTAL EARNED" val={totalMined.toFixed(2)} col="#00ffcc" />
-        <Stat label="CHAIN HEIGHT" val={chain.length - 1} col="#3a86ff" />
-      </div>
-      <div style={{ padding: "12px 16px", border: "1px solid #0a1828", background: "#060a14" }}>
-        <div style={{ color: "#0e2030", fontSize: 9, letterSpacing: 2, marginBottom: 8 }}>PUBLIC KEY (JWK)</div>
-        <div style={{ color: "#0a1e2a", fontSize: 8, wordBreak: "break-all", lineHeight: 1.6 }}>{wallet.publicKey}</div>
-        <div style={{ marginTop: 10 }}>
-          <button onClick={() => setShowPriv(!showPriv)} style={{ background: "transparent", border: "1px solid #ff224422", color: "#ff2244", fontFamily: F, fontSize: 9, padding: "5px 12px", cursor: "pointer", letterSpacing: 1 }}>
-            {showPriv ? "HIDE PRIVATE KEY ▲" : "SHOW PRIVATE KEY ▼"}
+
+        <div className="glass p-4">
+          <div className="label-eyebrow mb-2">Public key (JWK)</div>
+          <div className="num text-[10px] text-muted-foreground/80 break-all leading-relaxed">
+            {wallet.publicKey}
+          </div>
+          <button
+            onClick={() => setShowPriv(!showPriv)}
+            className="mt-3 px-3 py-1 rounded-md text-xs border border-destructive/30 text-destructive hover:bg-destructive/10 transition"
+          >
+            {showPriv ? "Hide private key ▲" : "Show private key ▼"}
           </button>
           {showPriv && (
-            <div style={{ marginTop: 8, padding: "10px 12px", border: "1px solid #ff224422" }}>
-              <div style={{ color: "#ff2244", fontSize: 9, marginBottom: 6 }}>⚠ NEVER share this key</div>
-              <div style={{ color: "#1a2030", fontSize: 8, wordBreak: "break-all", lineHeight: 1.6 }}>{wallet.privateKey}</div>
+            <div className="mt-3 p-3 rounded-md border border-destructive/30 bg-destructive/5">
+              <div className="text-xs text-destructive mb-2">⚠ Never share this key</div>
+              <div className="num text-[10px] text-foreground/60 break-all leading-relaxed">{wallet.privateKey}</div>
             </div>
           )}
+        </div>
+      </div>
+
+      <div className="lg:col-span-1">
+        <div className="glass-hi p-6 lg:sticky lg:top-20">
+          <div className="label-eyebrow mb-4">Send $BLOB</div>
+          <SendTxForm wallet={wallet} chain={chain} onBroadcast={onBroadcast} />
         </div>
       </div>
     </div>
@@ -811,50 +901,55 @@ function WalletScreen({ wallet, chain, mempool }) {
 }
 
 // 14. NETWORK / NODES VIEW ─────────────────────────────────────────────────────
-function NetworkView({ nodeCount, chain, blockInfo }) {
-  const totalTxs = chain.reduce((s, b) => s + (b.transactions || []).length, 0);
+function NetworkView({ nodeCount, chain, blockInfo }: any) {
+  const totalTxs = chain.reduce((s: number, b: any) => s + (b.transactions || []).length, 0);
   const supply = calcTotalSupply(chain);
-  const F = '"Courier New",monospace';
-  const Stat = ({ l, v, c = "#2a5060" }: any) => (
-    <div style={{ padding: 14, background: "#060a14", border: "1px solid #0a1828" }}>
-      <div style={{ color: c, fontSize: 20, fontWeight: "bold" }}>{v}</div>
-      <div style={{ color: "#0e2030", fontSize: 8, marginTop: 3, letterSpacing: 2 }}>{l}</div>
+
+  const Stat = ({ l, v, c = "text-foreground" }: any) => (
+    <div className="glass p-4">
+      <div className={`num text-2xl font-semibold ${c}`}>{v}</div>
+      <div className="label-eyebrow mt-1">{l}</div>
     </div>
   );
+
   return (
-    <div style={{ fontFamily: F }}>
-      <div style={{ color: "#0e2030", fontSize: 9, letterSpacing: 3, marginBottom: 14 }}>BLOB CHAIN NETWORK</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, marginBottom: 14 }}>
-        <Stat l="ACTIVE NODES" v={nodeCount} c="#00ffcc" />
-        <Stat l="CHAIN HEIGHT" v={chain.length - 1} c="#3a86ff" />
-        <Stat l="TOTAL SUPPLY" v={supply.toFixed(2) + " $BLOB"} c="#ffcc00" />
-        <Stat l="CONFIRMED TXS" v={totalTxs} c="#ff6b6b" />
+    <div className="space-y-4">
+      <div className="label-eyebrow">BLOB Chain network</div>
+      <div className="grid grid-cols-2 gap-2">
+        <Stat l="Active nodes" v={nodeCount} c="text-primary" />
+        <Stat l="Chain height" v={chain.length - 1} c="text-[hsl(var(--info))]" />
+        <Stat l="Total supply" v={`${supply.toFixed(2)} $BLOB`} c="text-[hsl(var(--warning))]" />
+        <Stat l="Confirmed txs" v={totalTxs} c="text-foreground" />
       </div>
-      <div style={{ padding: "14px 16px", border: "1px solid #0a1828", background: "#060a14", marginBottom: 10 }}>
-        <div style={{ color: "#0e2030", fontSize: 9, letterSpacing: 2, marginBottom: 10 }}>HOW NODES WORK</div>
-        {[
-          "Every browser tab running this app is a full node",
-          "Nodes receive transactions, validate them, and add to mempool",
-          "Nodes receive score entries and independently compute the winner",
-          "Winner is determined by weighted random lottery — higher score = higher chance",
-          "All nodes verify the winning block before accepting it to the chain",
-          "Realtime gossip is the network between nodes",
-          "Persistent storage holds the canonical chain — nodes fetch on startup",
-        ].map((t, i) => (
-          <div key={i} style={{ display: "flex", gap: 10, marginBottom: 8, alignItems: "flex-start" }}>
-            <span style={{ color: "#00ffcc", fontSize: 10, flexShrink: 0, marginTop: 1 }}>⬡</span>
-            <span style={{ color: "#1a3040", fontSize: 10, lineHeight: 1.7 }}>{t}</span>
-          </div>
-        ))}
+
+      <div className="glass p-5">
+        <div className="label-eyebrow mb-3">How nodes work</div>
+        <div className="space-y-2">
+          {[
+            "Every browser tab running this app is a full node",
+            "Nodes receive transactions, validate them, and add to mempool",
+            "Nodes receive score entries and independently compute the winner",
+            "Winner is determined by weighted random lottery — higher score = higher chance",
+            "All nodes verify the winning block before accepting it to the chain",
+            "Realtime gossip is the network between nodes",
+            "Persistent storage holds the canonical chain — nodes fetch on startup",
+          ].map((t, i) => (
+            <div key={i} className="flex gap-3 text-sm text-foreground/70">
+              <span className="text-primary mt-1">⬡</span>
+              <span>{t}</span>
+            </div>
+          ))}
+        </div>
       </div>
-      <div style={{ padding: "12px 16px", border: "1px solid #ffcc0011", background: "rgba(255,204,0,.015)" }}>
-        <div style={{ color: "#0e2030", fontSize: 9, letterSpacing: 2, marginBottom: 8 }}>CONSENSUS ALGORITHM</div>
-        <div style={{ color: "#1a3040", fontSize: 10, lineHeight: 2 }}>
-          Proof-of-Gaming (PoG) · Block time: {BLOCK_TIME}s · Max supply: {MAX_SUPPLY.toLocaleString()} $BLOB<br />
-          Halving every {HALVING_BLOCKS.toLocaleString()} blocks · Current reward: {blockInfo.reward} $BLOB<br />
-          Winner selection: deterministic weighted lottery seeded from block height<br />
-          Score proof: ECDSA-signed (P-256) input submitted to all nodes<br />
-          Level seed: derived from block height — identical for all miners
+
+      <div className="glass p-5">
+        <div className="label-eyebrow mb-3">Consensus algorithm</div>
+        <div className="text-sm text-foreground/70 space-y-1.5">
+          <div>Proof-of-Gaming · Block time: <span className="num">{BLOCK_TIME}s</span> · Max supply: <span className="num">{MAX_SUPPLY.toLocaleString()}</span> $BLOB</div>
+          <div>Halving every <span className="num">{HALVING_BLOCKS.toLocaleString()}</span> blocks · Current reward: <span className="num">{blockInfo.reward}</span> $BLOB</div>
+          <div>Winner selection: deterministic weighted lottery seeded from block height</div>
+          <div>Score proof: ECDSA-signed (P-256) input submitted to all nodes</div>
+          <div>Level seed: derived from block height — identical for all miners</div>
         </div>
       </div>
     </div>

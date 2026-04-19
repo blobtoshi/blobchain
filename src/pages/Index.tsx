@@ -6,6 +6,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import * as Relay from "@/lib/blobRelay";
 
 // 1. CONFIG ────────────────────────────────────────────────────────────────────
 const BLOCK_TIME = 120;

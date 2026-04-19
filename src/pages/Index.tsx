@@ -1134,25 +1134,39 @@ export default function BlobChainApp() {
 
   if (!wallet) {
     return (
-      <div style={{ minHeight: "100vh", background: "#030508", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: F }}>
-        <div style={{ textAlign: "center", maxWidth: 420, padding: 28 }}>
-          <div style={{ fontSize: 44, fontWeight: "bold", color: "#00ffcc", letterSpacing: 8, textShadow: "0 0 50px #00ffcc77", marginBottom: 6 }}>⬡ BLOB</div>
-          <div style={{ color: "#0a1e28", fontSize: 10, letterSpacing: 5, marginBottom: 10 }}>PROOF-OF-GAMING BLOCKCHAIN</div>
-          <div style={{ color: "#0a1828", fontSize: 9, marginBottom: 40, lineHeight: 2 }}>
+      <div className="min-h-screen flex items-center justify-center px-6 relative">
+        <div className="w-full max-w-md text-center relative z-10">
+          <div className="num text-5xl font-semibold tracking-[0.3em] text-primary mb-2 drop-shadow-[0_0_24px_hsl(var(--primary)/0.5)]">
+            ⬡ BLOB
+          </div>
+          <div className="label-eyebrow mb-3">Proof-of-Gaming Blockchain</div>
+          <div className="text-xs text-muted-foreground mb-10 leading-relaxed">
             Bitcoin clone · $BLOB token · 0 premine · Gameplay-mined
           </div>
-          <div style={{ color: "#1a3040", fontSize: 10, marginBottom: 12, textAlign: "left" }}>Miner name</div>
-          <input value={nameIn} onChange={e => setNameIn(e.target.value)} onKeyDown={e => e.key === "Enter" && !creating && createWallet()}
-            placeholder="SatoshiBlob…" maxLength={24}
-            style={{ width: "100%", padding: "13px 16px", background: "transparent", border: "2px solid #00ffcc22", color: "#00ffcc", fontFamily: F, fontSize: 14, letterSpacing: 2, outline: "none", boxSizing: "border-box", marginBottom: 12 }}
-          />
-          <button onClick={createWallet} disabled={creating || !nameIn.trim()} style={{ width: "100%", padding: 14, background: "transparent", border: "2px solid #00ffcc", color: "#00ffcc", fontFamily: F, fontSize: 13, letterSpacing: 4, cursor: "pointer", fontWeight: "bold", opacity: nameIn.trim() ? 1 : .5 }}>
-            {creating ? "GENERATING KEYPAIR…" : "GENERATE WALLET & JOIN NETWORK"}
-          </button>
-          <div style={{ marginTop: 20, color: "#061018", fontSize: 9, lineHeight: 2.4 }}>
-            ECDSA P-256 keypair generated in your browser<br />
-            Private key stored locally · Never leaves your device<br />
-            Your browser tab = a full node on the network
+
+          <div className="glass-hi p-6 text-left space-y-4">
+            <div>
+              <label className="label-eyebrow block mb-2">Miner name</label>
+              <input
+                value={nameIn}
+                onChange={e => setNameIn(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && !creating && createWallet()}
+                placeholder="SatoshiBlob…"
+                maxLength={24}
+                className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm"
+              />
+            </div>
+            <button
+              onClick={createWallet}
+              disabled={creating || !nameIn.trim()}
+              className="w-full py-3 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition"
+            >
+              {creating ? "Generating keypair…" : "Generate wallet & join network"}
+            </button>
+            <div className="text-[11px] text-muted-foreground/80 leading-relaxed text-center pt-2">
+              ECDSA P-256 keypair generated in your browser<br />
+              Private key stored locally · Never leaves your device
+            </div>
           </div>
         </div>
       </div>
@@ -1161,71 +1175,105 @@ export default function BlobChainApp() {
 
   const balance = calcBalance(wallet.address, chain);
   const nav = [
-    { id: "mine", text: "MINE" },
-    { id: "wallet", text: "WALLET" },
-    { id: "send", text: "SEND" },
-    { id: "mempool", text: "MEMPOOL" },
-    { id: "chain", text: "EXPLORER" },
-    { id: "network", text: "NETWORK" },
+    { id: "mine", text: "Mine" },
+    { id: "wallet", text: "Wallet" },
+    { id: "mempool", text: "Mempool" },
+    { id: "chain", text: "Explorer" },
+    { id: "network", text: "Network" },
   ];
 
   return (
-    <div style={{ minHeight: "100vh", background: "#030508", fontFamily: F, paddingBottom: 40 }}>
+    <div className="min-h-screen pb-16 relative">
       {newBlock && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 1000, padding: "12px 24px", background: newBlock.isMine ? "rgba(0,255,204,.18)" : "rgba(10,20,40,.96)", borderBottom: `2px solid ${newBlock.isMine ? "#00ffcc" : "#ffcc00"}`, textAlign: "center", display: "flex", justifyContent: "center", alignItems: "center", gap: 20 }}>
-          <span style={{ color: newBlock.isMine ? "#00ffcc" : "#ffcc00", fontSize: 14, fontWeight: "bold", letterSpacing: 3 }}>
-            {newBlock.isMine ? "🏆 YOU MINED BLOCK" : "⬡ NEW BLOCK"} #{newBlock.height}
+        <div
+          className={`fixed top-0 left-0 right-0 z-[1000] px-6 py-3 backdrop-blur-xl border-b text-center flex justify-center items-center gap-5 ${
+            newBlock.isMine
+              ? "bg-primary/15 border-primary/50"
+              : "bg-card/80 border-[hsl(var(--warning)/0.4)]"
+          }`}
+        >
+          <span className={`text-sm font-semibold tracking-wide ${newBlock.isMine ? "text-primary" : "text-[hsl(var(--warning))]"}`}>
+            {newBlock.isMine ? "🏆 You mined block" : "⬡ New block"} #{newBlock.height}
           </span>
-          <span style={{ color: "#2a5060", fontSize: 11 }}>
-            Winner: {newBlock.winnerUsername || "—"} · Score: {newBlock.winnerScore?.toLocaleString()} · Reward: {newBlock.reward} $BLOB
+          <span className="text-xs text-muted-foreground">
+            Winner: {newBlock.winnerUsername || "—"} · Score: <span className="num">{newBlock.winnerScore?.toLocaleString()}</span> · Reward: <span className="num text-foreground/80">{newBlock.reward} $BLOB</span>
           </span>
         </div>
       )}
 
-      <div style={{ borderBottom: "1px solid #07101a", background: "#040710", padding: "0 20px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 50, position: "sticky", top: 0, zIndex: 90 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <h1 style={{ color: "#00ffcc", fontWeight: "bold", fontSize: 16, letterSpacing: 5, textShadow: "0 0 16px #00ffcc44", margin: 0 }}>⬡ BLOB</h1>
-          <div style={{ color: "#0a1e28", fontSize: 8, letterSpacing: 2 }}>PoG</div>
-        </div>
-        <div style={{ display: "flex", gap: 1 }}>
-          {nav.map(n => (
-            <button key={n.id} onClick={() => setScreen(n.id)} style={{
-              background: screen === n.id ? "rgba(0,255,204,.06)" : "transparent",
-              border: screen === n.id ? "1px solid #00ffcc1a" : "1px solid transparent",
-              color: screen === n.id ? "#00ffcc" : "#1a3a4a",
-              padding: "5px 14px", fontFamily: F, fontSize: 9, letterSpacing: 2, cursor: "pointer",
-            }}>{n.text}</button>
-          ))}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#00ffcc", boxShadow: "0 0 8px #00ffcc" }} />
-          <span style={{ color: "#1a4455", fontSize: 10 }}>{wallet.username}</span>
-          <span style={{ color: "#00ffcc", fontSize: 10, marginLeft: 4 }}>{balance.toFixed(4)} $BLOB</span>
-          <span style={{ fontSize: 9, marginLeft: 8, borderLeft: "1px solid #0a1828", paddingLeft: 10, color: blockInfo.remaining < 20 ? "#ff4422" : "#0a1e28" }}>
-            {blockInfo.remaining}s
-          </span>
-        </div>
-      </div>
+      {/* Header */}
+      <header className="sticky top-0 z-50 backdrop-blur-xl bg-background/70 border-b border-border">
+        <div className="max-w-6xl mx-auto px-5 h-14 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <h1 className="text-base font-semibold tracking-[0.25em] text-primary drop-shadow-[0_0_12px_hsl(var(--primary)/0.4)]">⬡ BLOB</h1>
+            <span className="label-eyebrow hidden sm:inline">PoG</span>
+          </div>
 
-      <div style={{ padding: 20, maxWidth: 860, margin: "0 auto" }}>
+          <nav className="flex items-center gap-1">
+            {nav.map(n => (
+              <button
+                key={n.id}
+                onClick={() => setScreen(n.id)}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
+                  screen === n.id
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                }`}
+              >
+                {n.text}
+              </button>
+            ))}
+          </nav>
+
+          <div className="flex items-center gap-3">
+            <Dialog>
+              <DialogTrigger asChild>
+                <button
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition"
+                  aria-label="Quick send"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  Send
+                </button>
+              </DialogTrigger>
+              <DialogContent className="glass-hi border-border max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="text-sm font-medium">Send $BLOB</DialogTitle>
+                </DialogHeader>
+                <SendTxForm wallet={wallet} chain={chain} onBroadcast={onTxBroadcast} />
+              </DialogContent>
+            </Dialog>
+
+            <div className="hidden md:flex items-center gap-2 text-xs">
+              <div className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
+              <span className="text-muted-foreground">{wallet.username}</span>
+              <span className="num text-primary">{balance.toFixed(4)}</span>
+            </div>
+            <div className={`num text-xs px-2 py-1 rounded-md border border-border ${blockInfo.remaining < 20 ? "text-destructive border-destructive/40" : "text-muted-foreground"}`}>
+              {blockInfo.remaining}s
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-6xl mx-auto px-5 py-6 relative z-10">
         {screen === "mine" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div className="space-y-5">
             <BlobRunGame wallet={wallet} blockInfo={blockInfo} onEntrySubmit={onEntrySubmit} myEntry={myEntry} />
             <MiningPanel blockInfo={blockInfo} entries={entries} myEntry={myEntry} chain={chain} />
           </div>
         )}
-        {screen === "wallet" && <WalletScreen wallet={wallet} chain={chain} mempool={mempool} />}
-        {screen === "send" && <SendTx wallet={wallet} chain={chain} onBroadcast={onTxBroadcast} />}
+        {screen === "wallet" && <WalletScreen wallet={wallet} chain={chain} mempool={mempool} onBroadcast={onTxBroadcast} />}
         {screen === "mempool" && <Mempool mempool={mempool} wallet={wallet} />}
         {screen === "chain" && <BlockExplorer chain={chain} blockInfo={blockInfo} />}
         {screen === "network" && <NetworkView nodeCount={nodeCount} chain={chain} blockInfo={blockInfo} />}
-      </div>
+      </main>
 
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, borderTop: "1px solid #07101a", background: "#040710", padding: "6px 20px", display: "flex", justifyContent: "space-between", color: "#0a1e28", fontSize: 8, letterSpacing: 2, fontFamily: F }}>
-        <span>⬡ BLOB CHAIN · PROOF-OF-GAMING</span>
-        <span>BLOCK #{blockInfo.height} · SEED {blockInfo.seed} · {blockInfo.remaining}s</span>
-        <span>{chain.length - 1} BLOCKS · {calcTotalSupply(chain).toFixed(2)} / {MAX_SUPPLY.toLocaleString()}</span>
-      </div>
+      <footer className="fixed bottom-0 left-0 right-0 backdrop-blur-xl bg-background/70 border-t border-border px-5 py-2 flex justify-between items-center text-[10px] text-muted-foreground/70 num">
+        <span className="hidden sm:inline">⬡ BLOB CHAIN · Proof-of-Gaming</span>
+        <span>Block #{blockInfo.height} · {blockInfo.remaining}s</span>
+        <span>{chain.length - 1} blocks · {calcTotalSupply(chain).toFixed(2)} / {MAX_SUPPLY.toLocaleString()}</span>
+      </footer>
     </div>
   );
 }

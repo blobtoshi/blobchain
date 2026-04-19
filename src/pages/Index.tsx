@@ -936,7 +936,7 @@ export default function BlobChainApp() {
       const prevBlock = currentChain.find(b => b.height === closedHeight) || currentChain[currentChain.length - 1];
       const seedNum = closedHeight * 6364136223846793 + 1442695040888963407;
       const winner = pickWinner(closedEntries, Math.abs(seedNum % 2147483647));
-      const txsToInclude = mempool.slice(0, 50);
+      const txsToInclude = currentMempool.slice(0, 50);
       const halvings = Math.floor(closedHeight / HALVING_BLOCKS);
       const reward = INITIAL_REWARD / Math.pow(2, halvings);
 
@@ -953,7 +953,7 @@ export default function BlobChainApp() {
           reward: winner ? reward : 0,
           seed: String(closedHeight),
           nodeCount,
-          totalSupply: calcTotalSupply(chain) + (winner ? reward : 0),
+          totalSupply: calcTotalSupply(currentChain) + (winner ? reward : 0),
         };
         newB.hash = await computeBlockHash(newB);
 
@@ -962,7 +962,7 @@ export default function BlobChainApp() {
           return [...c, newB].sort((a, b2) => a.height - b2.height);
         });
         setMempool(m => m.filter(t => !txsToInclude.find(x => x.id === t.id)));
-        setNewBlock({ ...newB, isMine: winner?.address === wallet?.address });
+        setNewBlock({ ...newB, isMine: winner?.address === currentWallet?.address });
         setTimeout(() => setNewBlock(null), 5000);
         setEntries([]);
         setMyEntry(null);

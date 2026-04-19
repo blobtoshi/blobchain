@@ -168,18 +168,7 @@ function generateLevel(seed) {
 }
 const TYMAP = { low: GY - 52, mid: GY - 94, high: GY - 140 };
 
-// 6. P2P LAYER (no-op stub when Supabase env missing) ──────────────────────────
-const SB = {
-  async getChain() { return [GENESIS]; },
-  async pushBlock(_b) {},
-  async getMempool() { return []; },
-  async pushTx(_tx) {},
-  async clearTxs(_ids) {},
-  async getEntries(_h) { return []; },
-  async pushEntry(_e) {},
-  subscribe(_onMessage) { return () => {}; },
-  async broadcast(_t, _d) {},
-};
+// 6. P2P LAYER — backed by Lovable Cloud (see src/lib/blobRelay.ts) ───────────
 
 // 7. CANVAS DRAW HELPERS ───────────────────────────────────────────────────────
 function drawBG(ctx, frame, nodes) {

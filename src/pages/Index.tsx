@@ -447,8 +447,7 @@ function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry }) {
               signature: sig,
               submitted_at: new Date().toISOString(),
             };
-            SB.pushEntry(entry);
-            SB.broadcast("entry", entry);
+            Relay.pushEntry(entry);
             onEntrySubmit(entry);
             setGs(prev => ({ ...prev, status: "dead", score: finalScore }));
             draw(); return;
@@ -563,8 +562,7 @@ function SendTx({ wallet, chain, onBroadcast }) {
         status: "pending",
       };
       setSt("broadcasting");
-      await SB.pushTx(tx);
-      SB.broadcast("tx", tx);
+      await Relay.pushTx(tx);
       onBroadcast(tx);
       setSt("sent"); setTo(""); setAmt("");
       setTimeout(() => setSt("idle"), 3000);

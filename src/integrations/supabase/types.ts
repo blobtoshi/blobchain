@@ -14,13 +14,190 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      blob_chain: {
+        Row: {
+          created_at: string | null
+          hash: string
+          height: number
+          mining_entries: string | null
+          node_count: number | null
+          previous_hash: string
+          reward: number | null
+          seed: string
+          timestamp: number
+          total_supply: number | null
+          transactions: string | null
+          winner: string | null
+          winner_score: number | null
+          winner_username: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          hash: string
+          height: number
+          mining_entries?: string | null
+          node_count?: number | null
+          previous_hash: string
+          reward?: number | null
+          seed: string
+          timestamp: number
+          total_supply?: number | null
+          transactions?: string | null
+          winner?: string | null
+          winner_score?: number | null
+          winner_username?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          hash?: string
+          height?: number
+          mining_entries?: string | null
+          node_count?: number | null
+          previous_hash?: string
+          reward?: number | null
+          seed?: string
+          timestamp?: number
+          total_supply?: number | null
+          transactions?: string | null
+          winner?: string | null
+          winner_score?: number | null
+          winner_username?: string | null
+        }
+        Relationships: []
+      }
+      blob_entries: {
+        Row: {
+          address: string
+          block_height: number
+          block_seed: string | null
+          score: number
+          signature: string
+          submitted_at: string | null
+          username: string | null
+        }
+        Insert: {
+          address: string
+          block_height: number
+          block_seed?: string | null
+          score?: number
+          signature: string
+          submitted_at?: string | null
+          username?: string | null
+        }
+        Update: {
+          address?: string
+          block_height?: number
+          block_seed?: string | null
+          score?: number
+          signature?: string
+          submitted_at?: string | null
+          username?: string | null
+        }
+        Relationships: []
+      }
+      blob_mempool: {
+        Row: {
+          amount: number
+          created_at: string | null
+          fee: number | null
+          from_address: string
+          from_username: string | null
+          id: string
+          public_key: string
+          signature: string
+          status: string | null
+          timestamp: number
+          to_address: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          fee?: number | null
+          from_address: string
+          from_username?: string | null
+          id: string
+          public_key: string
+          signature: string
+          status?: string | null
+          timestamp: number
+          to_address: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          fee?: number | null
+          from_address?: string
+          from_username?: string | null
+          id?: string
+          public_key?: string
+          signature?: string
+          status?: string | null
+          timestamp?: number
+          to_address?: string
+        }
+        Relationships: []
+      }
+      blob_players: {
+        Row: {
+          address: string
+          best_score: number | null
+          blocks_won: number | null
+          first_seen: string | null
+          games_played: number | null
+          last_active: string | null
+          public_key: string | null
+          total_mined: number | null
+          username: string
+        }
+        Insert: {
+          address: string
+          best_score?: number | null
+          blocks_won?: number | null
+          first_seen?: string | null
+          games_played?: number | null
+          last_active?: string | null
+          public_key?: string | null
+          total_mined?: number | null
+          username: string
+        }
+        Update: {
+          address?: string
+          best_score?: number | null
+          blocks_won?: number | null
+          first_seen?: string | null
+          games_played?: number | null
+          last_active?: string | null
+          public_key?: string | null
+          total_mined?: number | null
+          username?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_block_leaderboard: {
+        Args: { p_height: number }
+        Returns: {
+          address: string
+          rank: number
+          score: number
+          username: string
+          win_pct: number
+        }[]
+      }
+      get_player_stats: {
+        Args: { p_address: string }
+        Returns: {
+          avg_score: number
+          best_score: number
+          blocks_won: number
+          games_played: number
+          total_mined: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

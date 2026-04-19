@@ -882,15 +882,9 @@ export default function BlobChainApp() {
     try {
       const saved = localStorage.getItem("blob_wallet_v2");
       if (saved) setWallet(JSON.parse(saved));
-      const savedChain = localStorage.getItem("blob_chain_v2");
-      if (savedChain) setChain(JSON.parse(savedChain));
     } catch {}
     document.title = "⬡ BLOB CHAIN — Proof-of-Gaming";
   }, []);
-
-  useEffect(() => {
-    try { localStorage.setItem("blob_chain_v2", JSON.stringify(chain)); } catch {}
-  }, [chain]);
 
   async function createWallet() {
     if (!nameIn.trim()) return;
@@ -917,51 +911,117 @@ export default function BlobChainApp() {
   useEffect(() => { chainRef.current = chain; }, [chain]);
   useEffect(() => { walletRef.current = wallet; }, [wallet]);
 
-  // Block sealing
+  // ── P2P RELAY: initial load + realtime subscription ────────────────────
+  const currentHeightRef = useRef(blockInfo.height);
+  useEffect(() => { currentHeightRef.current = blockInfo.height; }, [blockInfo.height]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [c, m, e] = await Promise.all([
+        Relay.fetchChain(),
+        Relay.fetchMempool(),
+        Relay.fetchEntries(currentHeightRef.current),
+      ]);
+      if (cancelled) return;
+      if (c.length) setChain(c);
+      setMempool(m);
+      setEntries(e);
+    })();
+
+    const unsub = Relay.subscribeRelay({
+      onBlock: (b) => {
+        setChain(prev => {
+          if (prev.find(x => x.height === b.height)) return prev;
+          return [...prev, b].sort((a, b2) => a.height - b2.height);
+        });
+        setNewBlock({ ...b, isMine: b.winner === walletRef.current?.address });
+        setTimeout(() => setNewBlock(null), 5000);
+        // entries from a closed block no longer apply to the new round
+        if (b.height >= currentHeightRef.current - 1) {
+          setEntries([]);
+          setMyEntry(null);
+        }
+      },
+      onTx: (t) => {
+        setMempool(prev => prev.find(x => x.id === t.id) ? prev : [...prev, t]);
+      },
+      onTxRemoved: (id) => {
+        setMempool(prev => prev.filter(x => x.id !== id));
+      },
+      onEntry: (en) => {
+        if (en.block_height !== currentHeightRef.current) return;
+        setEntries(prev => {
+          const i = prev.findIndex(x => x.address === en.address);
+          if (i === -1) return [...prev, en];
+          const copy = prev.slice(); copy[i] = en; return copy;
+        });
+      },
+    });
+    return () => { cancelled = true; unsub(); };
+  }, []);
+
+  // When the height ticks, refresh entries for the new round from the relay
+  useEffect(() => {
+    (async () => {
+      const e = await Relay.fetchEntries(blockInfo.height);
+      setEntries(e);
+    })();
+  }, [blockInfo.height]);
+
+  // Block sealing — leader-elects locally, persists to relay (idempotent on PK)
   const prevHeightRef = useRef(blockInfo.height);
   useEffect(() => {
     const prevHeight = prevHeightRef.current;
-    if (blockInfo.height !== prevHeight) {
-      const closedHeight = blockInfo.height - 1;
-      prevHeightRef.current = blockInfo.height;
-      const closedEntries = entriesRef.current;
+    if (blockInfo.height === prevHeight) return;
+    const closedHeight = blockInfo.height - 1;
+    prevHeightRef.current = blockInfo.height;
+
+    (async () => {
+      // Pull the authoritative entry set for the closed block from the relay
+      // so every node converges on the same winner.
+      const closedEntries = await Relay.fetchEntries(closedHeight);
       const currentChain = chainRef.current;
       const currentMempool = mempoolRef.current;
       const currentWallet = walletRef.current;
-      const prevBlock = currentChain.find(b => b.height === closedHeight) || currentChain[currentChain.length - 1];
+      if (currentChain.find(b => b.height === closedHeight)) return; // already sealed
+      const prevBlock = currentChain.find(b => b.height === closedHeight - 1)
+        || currentChain[currentChain.length - 1];
       const seedNum = closedHeight * 6364136223846793 + 1442695040888963407;
       const winner = pickWinner(closedEntries, Math.abs(seedNum % 2147483647));
       const txsToInclude = currentMempool.slice(0, 50);
       const reward = getRewardForHeight(closedHeight);
 
-      (async () => {
-        const newB: any = {
-          height: closedHeight,
-          previousHash: prevBlock?.hash || GENESIS.hash,
-          timestamp: Date.now(),
-          transactions: txsToInclude,
-          miningEntries: closedEntries,
-          winner: winner?.address || null,
-          winnerUsername: winner?.username || null,
-          winnerScore: winner?.score || 0,
-          reward: winner ? reward : 0,
-          seed: String(closedHeight),
-          nodeCount,
-          totalSupply: calcTotalSupply(currentChain) + (winner ? reward : 0),
-        };
-        newB.hash = await computeBlockHash(newB);
+      const newB: any = {
+        height: closedHeight,
+        previousHash: prevBlock?.hash || GENESIS.hash,
+        timestamp: Date.now(),
+        transactions: txsToInclude,
+        miningEntries: closedEntries,
+        winner: winner?.address || null,
+        winnerUsername: winner?.username || null,
+        winnerScore: winner?.score || 0,
+        reward: winner ? reward : 0,
+        seed: String(closedHeight),
+        nodeCount,
+        totalSupply: calcTotalSupply(currentChain) + (winner ? reward : 0),
+      };
+      newB.hash = await computeBlockHash(newB);
 
-        setChain(c => {
-          if (c.find(b => b.height === closedHeight)) return c;
-          return [...c, newB].sort((a, b2) => a.height - b2.height);
-        });
-        setMempool(m => m.filter(t => !txsToInclude.find(x => x.id === t.id)));
-        setNewBlock({ ...newB, isMine: winner?.address === currentWallet?.address });
-        setTimeout(() => setNewBlock(null), 5000);
-        setEntries([]);
-        setMyEntry(null);
-      })();
-    }
+      setChain(c => {
+        if (c.find(b => b.height === closedHeight)) return c;
+        return [...c, newB].sort((a, b2) => a.height - b2.height);
+      });
+      setMempool(m => m.filter(t => !txsToInclude.find(x => x.id === t.id)));
+      setNewBlock({ ...newB, isMine: winner?.address === currentWallet?.address });
+      setTimeout(() => setNewBlock(null), 5000);
+      setEntries([]);
+      setMyEntry(null);
+
+      // Best-effort persistence; PK collision is fine (another node won the race).
+      Relay.pushBlock(newB);
+      if (txsToInclude.length) Relay.clearTxs(txsToInclude.map(t => t.id));
+    })();
   }, [blockInfo.height]);
 
   const onEntrySubmit = useCallback(entry => {

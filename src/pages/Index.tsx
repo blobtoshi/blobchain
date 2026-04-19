@@ -7,6 +7,8 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import * as Relay from "@/lib/blobRelay";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Send } from "lucide-react";
 
 // 1. CONFIG ────────────────────────────────────────────────────────────────────
 const BLOCK_TIME = 120;

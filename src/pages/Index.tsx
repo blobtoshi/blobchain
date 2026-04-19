@@ -13,6 +13,7 @@ const INITIAL_REWARD = 50;
 const HALVING_BLOCKS = 210000;
 const MAX_SUPPLY = 21000000;
 const TX_FEE = 0.001;
+const GENESIS_TIME_MS = 1745000000000;
 
 const SB_URL: string | undefined = (import.meta as any)?.env?.VITE_SUPABASE_URL;
 const SB_KEY: string | undefined = (import.meta as any)?.env?.VITE_SUPABASE_ANON_KEY;
@@ -66,13 +67,19 @@ function mkPrng(seed) {
 }
 
 // 3. BLOCK TIMING ──────────────────────────────────────────────────────────────
+function getRewardForHeight(height) {
+  const halvings = Math.floor(height / HALVING_BLOCKS);
+  return Math.min(INITIAL_REWARD / Math.pow(2, halvings), INITIAL_REWARD);
+}
+
 function getBlockInfo() {
   const now = Math.floor(Date.now() / 1000);
-  const height = Math.floor(now / BLOCK_TIME);
-  const elapsed = now % BLOCK_TIME;
+  const genesis = Math.floor(GENESIS_TIME_MS / 1000);
+  const sinceGenesis = Math.max(0, now - genesis);
+  const height = Math.floor(sinceGenesis / BLOCK_TIME) + 1;
+  const elapsed = sinceGenesis % BLOCK_TIME;
   const remaining = BLOCK_TIME - elapsed;
-  const halvings = Math.floor(height / HALVING_BLOCKS);
-  const reward = Math.min(INITIAL_REWARD / Math.pow(2, halvings), INITIAL_REWARD);
+  const reward = getRewardForHeight(height);
   const seed = height * 6364136223846793 + 1442695040888963407;
   return { height, elapsed, remaining, reward, seed: Math.abs(seed % 2147483647) };
 }
@@ -81,7 +88,7 @@ function getBlockInfo() {
 const GENESIS = {
   height: 0,
   previousHash: "0".repeat(64),
-  timestamp: 1745000000000,
+  timestamp: GENESIS_TIME_MS,
   transactions: [],
   miningEntries: [],
   winner: null,
@@ -937,8 +944,7 @@ export default function BlobChainApp() {
       const seedNum = closedHeight * 6364136223846793 + 1442695040888963407;
       const winner = pickWinner(closedEntries, Math.abs(seedNum % 2147483647));
       const txsToInclude = currentMempool.slice(0, 50);
-      const halvings = Math.floor(closedHeight / HALVING_BLOCKS);
-      const reward = INITIAL_REWARD / Math.pow(2, halvings);
+      const reward = getRewardForHeight(closedHeight);
 
       (async () => {
         const newB: any = {

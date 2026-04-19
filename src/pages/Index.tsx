@@ -990,7 +990,9 @@ export default function BlobChainApp() {
       const seedNum = closedHeight * 6364136223846793 + 1442695040888963407;
       const winner = pickWinner(closedEntries, Math.abs(seedNum % 2147483647));
       const txsToInclude = currentMempool.slice(0, 50);
-      const reward = getRewardForHeight(closedHeight);
+      const baseReward = getRewardForHeight(closedHeight);
+      const feeTotal = txsToInclude.reduce((s, t) => s + (Number(t.fee) || 0), 0);
+      const reward = winner ? baseReward + feeTotal : 0;
 
       const newB: any = {
         height: closedHeight,
@@ -1001,10 +1003,10 @@ export default function BlobChainApp() {
         winner: winner?.address || null,
         winnerUsername: winner?.username || null,
         winnerScore: winner?.score || 0,
-        reward: winner ? reward : 0,
+        reward,
         seed: String(closedHeight),
         nodeCount,
-        totalSupply: calcTotalSupply(currentChain) + (winner ? reward : 0),
+        totalSupply: calcTotalSupply(currentChain) + reward,
       };
       newB.hash = await computeBlockHash(newB);
 

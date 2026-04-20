@@ -405,38 +405,76 @@ function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry }) {
       });
     }
 
+    function roundedRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
     function drawHUD() {
       const secs = blockInfo.remaining;
       const m = Math.floor(secs / 60), s = secs % 60;
       const tstr = `${m}:${s.toString().padStart(2, "0")}`;
       const urgent = secs < 20;
+      const FNT = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, sans-serif';
+      const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+
       ctx.save();
-      ctx.shadowColor = "#00ffcc"; ctx.shadowBlur = 10;
-      ctx.fillStyle = "#00ffcc"; ctx.font = 'bold 22px "Courier New",monospace';
-      ctx.textAlign = "left"; ctx.fillText(g.score.toLocaleString(), 16, 36);
-      ctx.shadowBlur = 0; ctx.fillStyle = "#0e2830";
-      ctx.font = '8px "Courier New",monospace'; ctx.fillText("SCORE", 16, 48);
+
+      ctx.fillStyle = "rgba(7, 12, 22, 0.55)";
+      roundedRect(ctx, 12, 10, CW - 24, 38, 12);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(125, 255, 224, 0.10)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(180, 220, 230, 0.45)";
+      ctx.font = `9px ${FNT}`;
+      ctx.textAlign = "left";
+      ctx.fillText("SCORE", 26, 24);
+      ctx.fillStyle = "#e7fff8";
+      ctx.font = `600 18px ${MONO}`;
+      ctx.fillText(g.score.toLocaleString(), 26, 42);
+
       ctx.textAlign = "center";
-      ctx.shadowColor = urgent ? "#ff3322" : "#00ffcc"; ctx.shadowBlur = urgent ? 20 : 6;
-      ctx.fillStyle = urgent ? "#ff3322" : "#00ffcc";
-      ctx.font = 'bold 18px "Courier New",monospace'; ctx.fillText(tstr, CW / 2, 34);
-      ctx.shadowBlur = 0; ctx.fillStyle = "#0e2830";
-      ctx.font = '8px "Courier New",monospace'; ctx.fillText("BLOCK " + blockInfo.height, CW / 2, 47);
-      ctx.textAlign = "right"; ctx.fillStyle = "#0e2830";
-      ctx.font = '9px "Courier New",monospace';
-      ctx.fillText(`⬡ ${blockInfo.reward} $BLOB REWARD`, CW - 14, 36);
-      ctx.fillStyle = "#0a2030"; ctx.font = '8px "Courier New",monospace';
-      ctx.fillText(`SPD ×${g.speed.toFixed(1)}`, CW - 14, 48);
+      ctx.fillStyle = "rgba(180, 220, 230, 0.45)";
+      ctx.font = `9px ${FNT}`;
+      ctx.fillText(`BLOCK #${blockInfo.height}`, CW / 2, 24);
+      ctx.shadowColor = urgent ? "#ff5a6e" : "#7dffe0";
+      ctx.shadowBlur = urgent ? 12 : 6;
+      ctx.fillStyle = urgent ? "#ff8896" : "#7dffe0";
+      ctx.font = `600 18px ${MONO}`;
+      ctx.fillText(tstr, CW / 2, 42);
+      ctx.shadowBlur = 0;
+
+      ctx.textAlign = "right";
+      ctx.fillStyle = "rgba(180, 220, 230, 0.45)";
+      ctx.font = `9px ${FNT}`;
+      ctx.fillText(`SPEED ×${g.speed.toFixed(1)}`, CW - 26, 24);
+      ctx.fillStyle = "#e7fff8";
+      ctx.font = `600 14px ${MONO}`;
+      ctx.fillText(`${blockInfo.reward} $BLOB`, CW - 26, 42);
+
       if (g.combo > 1) {
-        ctx.textAlign = "left"; ctx.shadowColor = "#ffcc00"; ctx.shadowBlur = 14;
-        ctx.fillStyle = "#ffcc00";
-        ctx.font = `bold ${Math.min(11 + g.combo * 2, 26)}px "Courier New",monospace`;
-        ctx.fillText(`×${g.combo} COMBO!`, 16, CH - 20);
+        ctx.textAlign = "left";
+        ctx.shadowColor = "#ffd166"; ctx.shadowBlur = 14;
+        ctx.fillStyle = "#ffd166";
+        ctx.font = `700 ${Math.min(13 + g.combo * 2, 26)}px ${FNT}`;
+        ctx.fillText(`×${g.combo} combo`, 26, CH - 24);
+        ctx.shadowBlur = 0;
       }
       if (g.locked) {
-        ctx.textAlign = "center"; ctx.shadowColor = "#ff3355"; ctx.shadowBlur = 8;
-        ctx.fillStyle = "#ff3355"; ctx.font = 'bold 10px "Courier New",monospace';
-        ctx.fillText("⚠ SCORE SUBMITTED · PROOF IN NETWORK", CW / 2, CH - 14);
+        ctx.textAlign = "center";
+        ctx.fillStyle = "rgba(7, 12, 22, 0.6)";
+        roundedRect(ctx, CW / 2 - 160, CH - 36, 320, 24, 12);
+        ctx.fill();
+        ctx.fillStyle = "#7dffe0";
+        ctx.font = `600 10px ${FNT}`;
+        ctx.fillText("✓ Score broadcast — proof in network", CW / 2, CH - 20);
       }
       ctx.restore();
     }

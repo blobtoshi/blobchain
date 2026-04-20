@@ -727,83 +727,140 @@ function SendTxForm({ wallet, chain, onBroadcast, onSent }: any) {
   );
 }
 
-// 10. MINING PANEL ─────────────────────────────────────────────────────────────
+// 10. MINE HERO ────────────────────────────────────────────────────────────────
+function MineHero({ blockInfo, onLaunch }: any) {
+  const m = Math.floor(blockInfo.remaining / 60);
+  const s = blockInfo.remaining % 60;
+  const time = m > 0 ? `${m}m ${s}s` : `${s}s`;
+  return (
+    <div className="relative overflow-hidden rounded-3xl glass-hi px-6 py-12 sm:py-16 text-center">
+      {/* Soft halo */}
+      <div className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[480px] h-[480px] rounded-full bg-primary/10 blur-3xl" />
+      <div className="relative">
+        <h1 className="text-5xl sm:text-6xl font-semibold tracking-tight mb-3">
+          <span className="text-foreground">MINE </span>
+          <span className="text-primary drop-shadow-[0_0_24px_hsl(var(--primary)/0.5)]">$BLOB</span>
+        </h1>
+        <div className="text-xs sm:text-sm text-muted-foreground mb-8 num">
+          Block #{blockInfo.height} · Reward: {blockInfo.reward} $BLOB · Level seed #{blockInfo.seed}
+        </div>
+        <div className="text-4xl sm:text-5xl font-light text-primary/90 mb-6 num">
+          {time} remaining
+        </div>
+        <div className="inline-flex items-center gap-3 px-5 py-2 rounded-full border border-glass-border bg-card/40 text-[10px] sm:text-xs tracking-[0.18em] text-muted-foreground uppercase mb-3 num">
+          <span>Space / Jump</span>
+          <span className="text-border">·</span>
+          <span>↓ Duck</span>
+          <span className="text-border">·</span>
+          <span>Ƀ +50 Pts</span>
+        </div>
+        <div className="text-[11px] text-muted-foreground/70 mb-8">
+          Higher score = higher probability of winning block reward
+        </div>
+        <button
+          onClick={onLaunch}
+          className="group relative inline-flex items-center gap-2 px-10 py-4 rounded-full bg-primary/10 border border-primary/40 text-primary font-semibold tracking-wide text-sm sm:text-base hover:bg-primary/20 transition-all shadow-[0_0_40px_hsl(var(--primary)/0.35)] hover:shadow-[0_0_60px_hsl(var(--primary)/0.55)]"
+        >
+          <Play className="w-4 h-4 fill-primary" />
+          LAUNCH BLOB RUN
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// 11. MINING PANEL ─────────────────────────────────────────────────────────────
 function MiningPanel({ blockInfo, entries, myEntry, chain }: any) {
   const sorted = [...entries].sort((a, b) => b.score - a.score);
   const total = entries.reduce((s: number, e: any) => s + e.score, 0);
   const supplyNow = calcTotalSupply(chain);
+  const supplyPct = Math.min((supplyNow / MAX_SUPPLY) * 100, 100);
 
-  const Stat = ({ label, value, accent = "text-foreground" }: any) => (
-    <div className="glass p-4">
-      <div className={`num text-xl font-semibold ${accent}`}>{value}</div>
-      <div className="label-eyebrow mt-1">{label}</div>
+  const Stat = ({ label, value, accent }: any) => (
+    <div className="px-1">
+      <div className="label-eyebrow mb-2">{label}</div>
+      <div className={`text-2xl sm:text-3xl font-semibold num ${accent || "text-foreground"}`}>{value}</div>
     </div>
   );
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 px-1">
         <Stat label="Block" value={`#${blockInfo.height}`} accent="text-primary" />
-        <Stat label="Reward" value={`${blockInfo.reward} $BLOB`} accent="text-[hsl(var(--warning))]" />
-        <Stat label="Remaining" value={`${blockInfo.remaining}s`} accent="text-[hsl(var(--info))]" />
+        <Stat label="Reward" value={`${blockInfo.reward} $BLOB`} />
+        <Stat label="Remaining" value={`${blockInfo.remaining}s`} accent="text-primary" />
         <Stat label="Miners" value={entries.length} />
       </div>
 
-      <div className="glass p-4">
-        <div className="flex items-center justify-between mb-2">
-          <span className="label-eyebrow">$BLOB Supply</span>
-          <span className="text-xs num text-muted-foreground">
-            {supplyNow.toFixed(2)} / {MAX_SUPPLY.toLocaleString()}
+      <div className="glass px-5 py-4">
+        <div className="flex items-center justify-between mb-3 text-xs">
+          <span className="font-medium tracking-wide">$BLOB SUPPLY</span>
+          <span className="text-muted-foreground num">
+            {supplyNow.toFixed(2)} / {MAX_SUPPLY.toLocaleString()} ({supplyPct.toFixed(5)}%)
           </span>
         </div>
-        <div className="h-1 rounded-full bg-secondary overflow-hidden">
+        <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
           <div
-            className="h-full bg-primary transition-all duration-500"
-            style={{ width: `${Math.min((supplyNow / MAX_SUPPLY) * 100, 100)}%` }}
+            className="h-full bg-gradient-to-r from-primary to-accent transition-all duration-500 shadow-[0_0_12px_hsl(var(--primary)/0.6)]"
+            style={{ width: `${supplyPct}%` }}
           />
         </div>
       </div>
 
       <div>
-        <div className="label-eyebrow mb-3">Current block entries</div>
         {entries.length === 0 ? (
-          <div className="glass p-8 text-center text-sm text-muted-foreground">
-            No entries yet — play Blob Run to submit yours
+          <div className="relative glass overflow-hidden">
+            <div className="px-6 py-10 sm:py-14 flex items-center min-h-[160px]">
+              <div className="text-base sm:text-lg text-foreground/80 max-w-[60%] leading-relaxed">
+                No entries yet — play Blob Run to submit yours
+              </div>
+            </div>
+            <img
+              src={runnerArt}
+              alt=""
+              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-40 sm:w-48 opacity-70"
+              loading="lazy"
+              width={512}
+              height={512}
+            />
           </div>
         ) : (
-          <div className="space-y-1.5">
-            {sorted.map((e: any, i: number) => {
-              const pct = total > 0 ? +((e.score / total) * 100).toFixed(1) : 0;
-              const isMe = e.address === myEntry?.address;
-              return (
-                <div
-                  key={e.address + i}
-                  className={`glass px-4 py-3 flex items-center gap-3 ${isMe ? "ring-1 ring-primary/40" : ""}`}
-                >
-                  <span className="w-6 text-sm">
-                    {i === 0 ? "👑" : i === 1 ? "🥈" : i === 2 ? "🥉" : <span className="text-muted-foreground">{i + 1}</span>}
-                  </span>
-                  <span className={`flex-1 text-sm truncate ${isMe ? "text-primary" : "text-foreground/80"}`}>
-                    {e.username || e.address?.slice(0, 14)}
-                  </span>
-                  <span className="num text-sm font-medium">{e.score.toLocaleString()}</span>
-                  <div className="w-24 h-1 rounded-full bg-secondary overflow-hidden">
-                    <div
-                      className={`h-full ${isMe ? "bg-primary" : i === 0 ? "bg-[hsl(var(--warning))]" : "bg-muted-foreground"}`}
-                      style={{ width: `${Math.min(pct, 100)}%` }}
-                    />
+          <>
+            <div className="label-eyebrow mb-3 px-1">Current block entries</div>
+            <div className="space-y-1.5">
+              {sorted.map((e: any, i: number) => {
+                const pct = total > 0 ? +((e.score / total) * 100).toFixed(1) : 0;
+                const isMe = e.address === myEntry?.address;
+                return (
+                  <div
+                    key={e.address + i}
+                    className={`glass px-4 py-3 flex items-center gap-3 ${isMe ? "ring-1 ring-primary/40" : ""}`}
+                  >
+                    <span className="w-6 text-sm">
+                      {i === 0 ? "👑" : i === 1 ? "🥈" : i === 2 ? "🥉" : <span className="text-muted-foreground">{i + 1}</span>}
+                    </span>
+                    <span className={`flex-1 text-sm truncate ${isMe ? "text-primary" : "text-foreground/80"}`}>
+                      {e.username || e.address?.slice(0, 14)}
+                    </span>
+                    <span className="num text-sm font-medium">{e.score.toLocaleString()}</span>
+                    <div className="w-24 h-1 rounded-full bg-secondary overflow-hidden">
+                      <div
+                        className={`h-full ${isMe ? "bg-primary" : i === 0 ? "bg-[hsl(var(--warning))]" : "bg-muted-foreground"}`}
+                        style={{ width: `${Math.min(pct, 100)}%` }}
+                      />
+                    </div>
+                    <span className="num text-xs w-12 text-right text-muted-foreground">{pct}%</span>
                   </div>
-                  <span className="num text-xs w-12 text-right text-muted-foreground">{pct}%</span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-        {myEntry && (
-          <div className="mt-3 text-xs text-center text-muted-foreground">
-            Your win probability: <span className="text-primary num">{winProbability(myEntry.score, entries)}%</span>
-            {" · weighted random lottery"}
-          </div>
+                );
+              })}
+            </div>
+            {myEntry && (
+              <div className="mt-3 text-xs text-center text-muted-foreground">
+                Your win probability: <span className="text-primary num">{winProbability(myEntry.score, entries)}%</span>
+                {" · weighted random lottery"}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

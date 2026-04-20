@@ -593,59 +593,49 @@ function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry }) {
     jRef.current = true; setTimeout(() => { jRef.current = false; }, 120);
   };
 
-  const F = '"Courier New",monospace';
-  const Ov = ({ ch }) => (
-    <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(5,7,15,.92)", fontFamily: F }}>
-      {ch}
-    </div>
-  );
-  const Btn = ({ onClick, children, col = "#00ffcc" }) => (
-    <button onClick={onClick} style={{ background: "transparent", border: `2px solid ${col}`, color: col, padding: "11px 44px", fontSize: 13, fontFamily: F, letterSpacing: 4, cursor: "pointer", fontWeight: "bold" }}
-      onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = col + "22"}
-      onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
-    >{children}</button>
-  );
+  // Expose start to parent via ref-like prop
+  (BlobRunGame as any).__startRun = startRun;
 
   return (
-    <div>
-      <div style={{ position: "relative", lineHeight: 0, borderRadius: 2, overflow: "hidden" }}>
+    <div className="space-y-2">
+      <div className="relative rounded-2xl overflow-hidden border border-glass-border" style={{ lineHeight: 0, boxShadow: "0 20px 60px hsl(220 50% 2% / 0.6)" }}>
         <canvas ref={cvs} width={CW} height={CH}
-          style={{ display: "block", maxWidth: "100%", boxShadow: "0 0 60px #00ffcc0a" }}
+          style={{ display: "block", width: "100%", height: "auto" }}
           onTouchStart={onTap} onTouchEnd={() => { jRef.current = false; }}
         />
         {gs.status === "idle" && (
-          <Ov ch={<>
-            <div style={{ fontSize: 46, marginBottom: 8 }}>⬡</div>
-            <div style={{ color: "#00ffcc", fontSize: 22, letterSpacing: 6, fontWeight: "bold", marginBottom: 6, textShadow: "0 0 20px #00ffcc" }}>
-              MINE $BLOB
-            </div>
-            <div style={{ color: "#2a4455", fontSize: 11, marginBottom: 6, textAlign: "center", lineHeight: 1.9 }}>
-              Block #{blockInfo.height} · Reward: {blockInfo.reward} $BLOB<br />
-              {blockInfo.remaining}s remaining · Level seed #{blockInfo.seed}
-            </div>
-            <div style={{ color: "#0e2030", fontSize: 10, marginBottom: 30, textAlign: "center", lineHeight: 2 }}>
-              SPACE/↑ JUMP · ↓ DUCK · Ƀ +50 PTS<br />
-              Higher score = higher probability of winning block reward
-            </div>
-            <Btn onClick={startRun}>START MINING</Btn>
-          </>} />
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
+            <div className="text-xs tracking-[0.3em] text-muted-foreground mb-2">READY</div>
+            <div className="text-2xl font-semibold text-foreground mb-1">Tap to start running</div>
+            <div className="text-xs text-muted-foreground mb-6">SPACE / ↑ jump · ↓ duck · Ƀ +50 pts</div>
+            <button
+              onClick={startRun}
+              className="px-8 py-3 rounded-full bg-primary text-primary-foreground text-sm font-semibold tracking-wide hover:scale-[1.02] transition-transform shadow-[0_0_30px_hsl(var(--primary)/0.4)]"
+            >
+              Start run
+            </button>
+          </div>
         )}
         {gs.status === "dead" && (
-          <Ov ch={<>
-            <div style={{ color: "#ff2244", fontSize: 26, fontWeight: "bold", letterSpacing: 5, textShadow: "0 0 24px #ff2244", marginBottom: 4 }}>FORKED</div>
-            <div style={{ color: "#1a3040", fontSize: 10, letterSpacing: 3, marginBottom: 18 }}>PROOF BROADCAST TO ALL NODES</div>
-            <div style={{ color: "#00ffcc", fontSize: 54, fontWeight: "bold", textShadow: "0 0 36px #00ffcc66", marginBottom: 4 }}>
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/85 backdrop-blur-sm">
+            <div className="text-[10px] tracking-[0.3em] text-destructive/80 mb-2">FORKED</div>
+            <div className="num text-5xl font-semibold text-primary mb-1 drop-shadow-[0_0_24px_hsl(var(--primary)/0.5)]">
               {gs.score.toLocaleString()}
             </div>
-            <div style={{ color: "#1a3040", fontSize: 10, marginBottom: 28, textAlign: "center" }}>
-              Block closes in {blockInfo.remaining}s · Weighted lottery determines winner
-            </div>
-            <Btn onClick={startRun} col="#ff2244">NEXT BLOCK</Btn>
-          </>} />
+            <div className="text-xs text-muted-foreground mb-6">Block closes in {blockInfo.remaining}s · Score broadcast</div>
+            <button
+              onClick={startRun}
+              className="px-8 py-3 rounded-full bg-primary text-primary-foreground text-sm font-semibold tracking-wide hover:scale-[1.02] transition-transform shadow-[0_0_30px_hsl(var(--primary)/0.4)]"
+            >
+              Run again
+            </button>
+          </div>
         )}
       </div>
-      <div style={{ display: "flex", justifyContent: "center", gap: 28, marginTop: 8, color: "#1a3040", fontSize: 9, letterSpacing: 2, fontFamily: F }}>
-        <span>SPACE/↑ JUMP</span><span>↓ DUCK</span><span>Ƀ +50 PTS</span><span>SURVIVE TO MINE</span>
+      <div className="flex justify-center gap-6 text-[10px] tracking-[0.2em] text-muted-foreground/70 uppercase">
+        <span>Space / ↑ Jump</span>
+        <span>↓ Duck</span>
+        <span>Ƀ +50 pts</span>
       </div>
     </div>
   );

@@ -8,7 +8,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import * as Relay from "@/lib/blobRelay";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Send } from "lucide-react";
+import { Send, Play } from "lucide-react";
+import runnerArt from "@/assets/runner.png";
 
 // 1. CONFIG ────────────────────────────────────────────────────────────────────
 const BLOCK_TIME = 120;
@@ -174,43 +175,93 @@ const TYMAP = { low: GY - 52, mid: GY - 94, high: GY - 140 };
 
 // 7. CANVAS DRAW HELPERS ───────────────────────────────────────────────────────
 function drawBG(ctx, frame, nodes) {
-  ctx.fillStyle = "#05070f";
-  ctx.fillRect(0, 0, CW, CH);
-  for (let i = 0; i < 8; i++) {
-    const t = i / 8;
-    const x = ((CW * t + frame * (1.2 + t * 3.5)) % CW);
-    ctx.strokeStyle = `rgba(0,255,180,${0.02 + t * 0.035})`;
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(x, GY); ctx.lineTo(x - 90, CH); ctx.stroke();
-  }
+  // Deep gradient sky
+  const sky = ctx.createLinearGradient(0, 0, 0, GY);
+  sky.addColorStop(0, "#070b18");
+  sky.addColorStop(1, "#0a1828");
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, CW, GY);
+
+  // Soft glow horizon
+  const halo = ctx.createRadialGradient(CW / 2, GY, 10, CW / 2, GY, CW * 0.7);
+  halo.addColorStop(0, "rgba(0, 255, 204, 0.10)");
+  halo.addColorStop(1, "rgba(0, 255, 204, 0)");
+  ctx.fillStyle = halo;
+  ctx.fillRect(0, 0, CW, GY);
+
+  // Distant parallax dots / nodes
   nodes.forEach(n => {
-    ctx.save(); ctx.globalAlpha = n.a;
-    ctx.strokeStyle = "#00ffcc"; ctx.lineWidth = .8;
-    ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2); ctx.stroke();
+    ctx.save();
+    ctx.globalAlpha = n.a;
+    ctx.fillStyle = "#7ad9c5";
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, n.r * 0.4, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
   });
-  const g = ctx.createLinearGradient(0, GY, 0, CH);
-  g.addColorStop(0, "#091a30"); g.addColorStop(1, "#030810");
-  ctx.fillStyle = g; ctx.fillRect(0, GY, CW, CH - GY);
-  ctx.save(); ctx.shadowColor = "#00ffcc"; ctx.shadowBlur = 10;
-  ctx.strokeStyle = "#00ffcc"; ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.moveTo(0, GY); ctx.lineTo(CW, GY); ctx.stroke();
+
+  // Subtle parallax grid lines on ground
+  const gg = ctx.createLinearGradient(0, GY, 0, CH);
+  gg.addColorStop(0, "#0d2233");
+  gg.addColorStop(1, "#04080f");
+  ctx.fillStyle = gg;
+  ctx.fillRect(0, GY, CW, CH - GY);
+
+  ctx.save();
+  ctx.strokeStyle = "rgba(0, 255, 204, 0.08)";
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 6; i++) {
+    const yy = GY + ((i * 14 + frame * 1.5) % (CH - GY));
+    ctx.beginPath();
+    ctx.moveTo(0, yy);
+    ctx.lineTo(CW, yy);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Crisp horizon line
+  ctx.save();
+  ctx.shadowColor = "#00ffcc";
+  ctx.shadowBlur = 8;
+  ctx.strokeStyle = "rgba(0, 255, 204, 0.55)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, GY);
+  ctx.lineTo(CW, GY);
+  ctx.stroke();
   ctx.restore();
 }
 
 function drawBlob(ctx, x, y, action, wob, sq, blink) {
   const duck = action === "duck";
-  const rx = duck ? 32 : 20, ry = duck ? 15 : 26;
+  const rx = duck ? 32 : 22, ry = duck ? 16 : 28;
   const wb = Math.sin(wob * .12) * (duck ? 1.5 : 2.5);
-  ctx.save(); ctx.translate(x, y); ctx.scale(1, sq);
-  ctx.shadowColor = "#00ffcc"; ctx.shadowBlur = 20;
-  ctx.beginPath(); ctx.fillStyle = "#00ffcc";
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(1, sq);
+
+  // Soft outer glow
+  ctx.shadowColor = "#00ffcc";
+  ctx.shadowBlur = 24;
+
+  // Body gradient
+  const bodyGrad = ctx.createRadialGradient(-4, -6, 2, 0, 0, rx + 6);
+  bodyGrad.addColorStop(0, "#7dffe0");
+  bodyGrad.addColorStop(1, "#00d6a8");
+  ctx.fillStyle = bodyGrad;
+  ctx.beginPath();
   ctx.moveTo(0, -ry);
   ctx.bezierCurveTo(rx + wb, -ry * .7, rx + wb, ry * .7, 0, ry);
   ctx.bezierCurveTo(-rx - wb, ry * .7, -rx - wb, -ry * .7, 0, -ry);
   ctx.fill();
-  ctx.shadowBlur = 0; ctx.fillStyle = "rgba(160,255,230,.18)";
-  ctx.beginPath(); ctx.ellipse(-5, -7, rx * .36, ry * .3, -.3, 0, Math.PI * 2); ctx.fill();
+
+  ctx.shadowBlur = 0;
+  // Highlight
+  ctx.fillStyle = "rgba(255,255,255,.22)";
+  ctx.beginPath();
+  ctx.ellipse(-5, -9, rx * .42, ry * .28, -.3, 0, Math.PI * 2);
+  ctx.fill();
+
   if (!duck) {
     if (!blink) {
       ctx.fillStyle = "#001510";
@@ -224,10 +275,6 @@ function drawBlob(ctx, x, y, action, wob, sq, blink) {
       ctx.beginPath(); ctx.moveTo(-12, -8); ctx.lineTo(-4, -8); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(4, -8); ctx.lineTo(12, -8); ctx.stroke();
     }
-    const sw = Math.sin(wob * .24) * 10;
-    ctx.shadowBlur = 0; ctx.fillStyle = "#009966";
-    ctx.beginPath(); ctx.ellipse(-7, ry - 3, 5, 8, sw * .07, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(7, ry - 3, 5, 8, -sw * .07, 0, Math.PI * 2); ctx.fill();
   } else {
     ctx.fillStyle = "#001510";
     ctx.beginPath(); ctx.ellipse(-8, 0, 4.5, 2.5, 0, 0, Math.PI * 2); ctx.fill();
@@ -237,32 +284,61 @@ function drawBlob(ctx, x, y, action, wob, sq, blink) {
 }
 
 function drawFork(ctx, o) {
+  // Modern minimal obstacle: glowing vertical bar with cap
+  ctx.save();
   const cx = o.x + o.w / 2;
-  ctx.save(); ctx.shadowColor = "#ff2244"; ctx.shadowBlur = 16;
-  ctx.fillStyle = "#bb1133";
-  ctx.fillRect(cx - 4, o.y + o.h * .46, 8, o.h * .54);
+  // Soft glow halo
+  const grad = ctx.createLinearGradient(cx, o.y, cx, o.y + o.h);
+  grad.addColorStop(0, "rgba(255, 90, 110, 0.95)");
+  grad.addColorStop(1, "rgba(255, 90, 110, 0.55)");
+  ctx.shadowColor = "#ff5a6e";
+  ctx.shadowBlur = 18;
+  ctx.fillStyle = grad;
+  // Pill shape
+  const r = 6;
+  const x = cx - 7, y = o.y, w = 14, h = o.h;
   ctx.beginPath();
-  ctx.moveTo(cx, o.y + o.h * .49);
-  ctx.lineTo(o.x + 3, o.y + 7); ctx.lineTo(o.x + 13, o.y + 7);
-  ctx.lineTo(cx, o.y + o.h * .27);
-  ctx.lineTo(o.x + o.w - 13, o.y + 7); ctx.lineTo(o.x + o.w - 3, o.y + 7);
-  ctx.closePath(); ctx.fillStyle = "#ff2244"; ctx.fill();
-  ctx.shadowBlur = 0; ctx.fillStyle = "#ff5566";
-  ctx.font = "bold 7px monospace"; ctx.textAlign = "center";
-  ctx.fillText("FORK", cx, o.y - 4);
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+  ctx.fill();
+  // Inner highlight
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "rgba(255,255,255,0.18)";
+  ctx.fillRect(x + 2, y + 4, 2, h - 8);
   ctx.restore();
 }
 
 function drawToken(ctx, tx, ty, frame) {
   const p = Math.sin(frame * .08 + tx * .009) * 2.5;
-  ctx.save(); ctx.translate(tx, ty + p);
-  ctx.shadowColor = "#00aaff"; ctx.shadowBlur = 20;
-  ctx.strokeStyle = "#00aaff"; ctx.lineWidth = 1.8;
-  ctx.beginPath(); ctx.arc(0, 0, 13, 0, Math.PI * 2); ctx.stroke();
-  ctx.fillStyle = "rgba(0,170,255,.1)"; ctx.fill();
-  ctx.fillStyle = "#00aaff"; ctx.font = "bold 11px monospace";
+  ctx.save();
+  ctx.translate(tx, ty + p);
+  // Outer halo
+  const grad = ctx.createRadialGradient(0, 0, 2, 0, 0, 18);
+  grad.addColorStop(0, "rgba(120, 200, 255, 0.6)");
+  grad.addColorStop(1, "rgba(120, 200, 255, 0)");
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI * 2); ctx.fill();
+  // Coin
+  ctx.shadowColor = "#5fb8ff";
+  ctx.shadowBlur = 14;
+  const coin = ctx.createLinearGradient(0, -12, 0, 12);
+  coin.addColorStop(0, "#a9dcff");
+  coin.addColorStop(1, "#3a96e6");
+  ctx.fillStyle = coin;
+  ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "#062338";
+  ctx.font = "bold 11px ui-sans-serif, system-ui, sans-serif";
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.shadowBlur = 6; ctx.fillText("Ƀ", 0, 1);
+  ctx.fillText("Ƀ", 0, 1);
   ctx.restore();
 }
 
@@ -329,38 +405,76 @@ function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry }) {
       });
     }
 
+    function roundedRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
     function drawHUD() {
       const secs = blockInfo.remaining;
       const m = Math.floor(secs / 60), s = secs % 60;
       const tstr = `${m}:${s.toString().padStart(2, "0")}`;
       const urgent = secs < 20;
+      const FNT = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, sans-serif';
+      const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+
       ctx.save();
-      ctx.shadowColor = "#00ffcc"; ctx.shadowBlur = 10;
-      ctx.fillStyle = "#00ffcc"; ctx.font = 'bold 22px "Courier New",monospace';
-      ctx.textAlign = "left"; ctx.fillText(g.score.toLocaleString(), 16, 36);
-      ctx.shadowBlur = 0; ctx.fillStyle = "#0e2830";
-      ctx.font = '8px "Courier New",monospace'; ctx.fillText("SCORE", 16, 48);
+
+      ctx.fillStyle = "rgba(7, 12, 22, 0.55)";
+      roundedRect(ctx, 12, 10, CW - 24, 38, 12);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(125, 255, 224, 0.10)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(180, 220, 230, 0.45)";
+      ctx.font = `9px ${FNT}`;
+      ctx.textAlign = "left";
+      ctx.fillText("SCORE", 26, 24);
+      ctx.fillStyle = "#e7fff8";
+      ctx.font = `600 18px ${MONO}`;
+      ctx.fillText(g.score.toLocaleString(), 26, 42);
+
       ctx.textAlign = "center";
-      ctx.shadowColor = urgent ? "#ff3322" : "#00ffcc"; ctx.shadowBlur = urgent ? 20 : 6;
-      ctx.fillStyle = urgent ? "#ff3322" : "#00ffcc";
-      ctx.font = 'bold 18px "Courier New",monospace'; ctx.fillText(tstr, CW / 2, 34);
-      ctx.shadowBlur = 0; ctx.fillStyle = "#0e2830";
-      ctx.font = '8px "Courier New",monospace'; ctx.fillText("BLOCK " + blockInfo.height, CW / 2, 47);
-      ctx.textAlign = "right"; ctx.fillStyle = "#0e2830";
-      ctx.font = '9px "Courier New",monospace';
-      ctx.fillText(`⬡ ${blockInfo.reward} $BLOB REWARD`, CW - 14, 36);
-      ctx.fillStyle = "#0a2030"; ctx.font = '8px "Courier New",monospace';
-      ctx.fillText(`SPD ×${g.speed.toFixed(1)}`, CW - 14, 48);
+      ctx.fillStyle = "rgba(180, 220, 230, 0.45)";
+      ctx.font = `9px ${FNT}`;
+      ctx.fillText(`BLOCK #${blockInfo.height}`, CW / 2, 24);
+      ctx.shadowColor = urgent ? "#ff5a6e" : "#7dffe0";
+      ctx.shadowBlur = urgent ? 12 : 6;
+      ctx.fillStyle = urgent ? "#ff8896" : "#7dffe0";
+      ctx.font = `600 18px ${MONO}`;
+      ctx.fillText(tstr, CW / 2, 42);
+      ctx.shadowBlur = 0;
+
+      ctx.textAlign = "right";
+      ctx.fillStyle = "rgba(180, 220, 230, 0.45)";
+      ctx.font = `9px ${FNT}`;
+      ctx.fillText(`SPEED ×${g.speed.toFixed(1)}`, CW - 26, 24);
+      ctx.fillStyle = "#e7fff8";
+      ctx.font = `600 14px ${MONO}`;
+      ctx.fillText(`${blockInfo.reward} $BLOB`, CW - 26, 42);
+
       if (g.combo > 1) {
-        ctx.textAlign = "left"; ctx.shadowColor = "#ffcc00"; ctx.shadowBlur = 14;
-        ctx.fillStyle = "#ffcc00";
-        ctx.font = `bold ${Math.min(11 + g.combo * 2, 26)}px "Courier New",monospace`;
-        ctx.fillText(`×${g.combo} COMBO!`, 16, CH - 20);
+        ctx.textAlign = "left";
+        ctx.shadowColor = "#ffd166"; ctx.shadowBlur = 14;
+        ctx.fillStyle = "#ffd166";
+        ctx.font = `700 ${Math.min(13 + g.combo * 2, 26)}px ${FNT}`;
+        ctx.fillText(`×${g.combo} combo`, 26, CH - 24);
+        ctx.shadowBlur = 0;
       }
       if (g.locked) {
-        ctx.textAlign = "center"; ctx.shadowColor = "#ff3355"; ctx.shadowBlur = 8;
-        ctx.fillStyle = "#ff3355"; ctx.font = 'bold 10px "Courier New",monospace';
-        ctx.fillText("⚠ SCORE SUBMITTED · PROOF IN NETWORK", CW / 2, CH - 14);
+        ctx.textAlign = "center";
+        ctx.fillStyle = "rgba(7, 12, 22, 0.6)";
+        roundedRect(ctx, CW / 2 - 160, CH - 36, 320, 24, 12);
+        ctx.fill();
+        ctx.fillStyle = "#7dffe0";
+        ctx.font = `600 10px ${FNT}`;
+        ctx.fillText("✓ Score broadcast — proof in network", CW / 2, CH - 20);
       }
       ctx.restore();
     }
@@ -473,65 +587,60 @@ function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry }) {
     raf.current = requestAnimationFrame(loop);
   }, [blockInfo, wallet, onEntrySubmit, myEntry]);
 
+  // Auto-start when mounted
+  useEffect(() => {
+    startRun();
+    return () => cancelAnimationFrame(raf.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const onTap = e => {
     e.preventDefault();
     if (gs.status === "idle" || gs.status === "dead") { startRun(); return; }
     jRef.current = true; setTimeout(() => { jRef.current = false; }, 120);
   };
 
-  const F = '"Courier New",monospace';
-  const Ov = ({ ch }) => (
-    <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(5,7,15,.92)", fontFamily: F }}>
-      {ch}
-    </div>
-  );
-  const Btn = ({ onClick, children, col = "#00ffcc" }) => (
-    <button onClick={onClick} style={{ background: "transparent", border: `2px solid ${col}`, color: col, padding: "11px 44px", fontSize: 13, fontFamily: F, letterSpacing: 4, cursor: "pointer", fontWeight: "bold" }}
-      onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = col + "22"}
-      onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
-    >{children}</button>
-  );
 
   return (
-    <div>
-      <div style={{ position: "relative", lineHeight: 0, borderRadius: 2, overflow: "hidden" }}>
+    <div className="space-y-2">
+      <div className="relative rounded-2xl overflow-hidden border border-border/50" style={{ lineHeight: 0, boxShadow: "0 20px 60px hsl(220 50% 2% / 0.6)" }}>
         <canvas ref={cvs} width={CW} height={CH}
-          style={{ display: "block", maxWidth: "100%", boxShadow: "0 0 60px #00ffcc0a" }}
+          style={{ display: "block", width: "100%", height: "auto" }}
           onTouchStart={onTap} onTouchEnd={() => { jRef.current = false; }}
         />
         {gs.status === "idle" && (
-          <Ov ch={<>
-            <div style={{ fontSize: 46, marginBottom: 8 }}>⬡</div>
-            <div style={{ color: "#00ffcc", fontSize: 22, letterSpacing: 6, fontWeight: "bold", marginBottom: 6, textShadow: "0 0 20px #00ffcc" }}>
-              MINE $BLOB
-            </div>
-            <div style={{ color: "#2a4455", fontSize: 11, marginBottom: 6, textAlign: "center", lineHeight: 1.9 }}>
-              Block #{blockInfo.height} · Reward: {blockInfo.reward} $BLOB<br />
-              {blockInfo.remaining}s remaining · Level seed #{blockInfo.seed}
-            </div>
-            <div style={{ color: "#0e2030", fontSize: 10, marginBottom: 30, textAlign: "center", lineHeight: 2 }}>
-              SPACE/↑ JUMP · ↓ DUCK · Ƀ +50 PTS<br />
-              Higher score = higher probability of winning block reward
-            </div>
-            <Btn onClick={startRun}>START MINING</Btn>
-          </>} />
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
+            <div className="text-xs tracking-[0.3em] text-muted-foreground mb-2">READY</div>
+            <div className="text-2xl font-semibold text-foreground mb-1">Tap to start running</div>
+            <div className="text-xs text-muted-foreground mb-6">SPACE / ↑ jump · ↓ duck · Ƀ +50 pts</div>
+            <button
+              onClick={startRun}
+              className="px-8 py-3 rounded-full bg-primary text-primary-foreground text-sm font-semibold tracking-wide hover:scale-[1.02] transition-transform shadow-[0_0_30px_hsl(var(--primary)/0.4)]"
+            >
+              Start run
+            </button>
+          </div>
         )}
         {gs.status === "dead" && (
-          <Ov ch={<>
-            <div style={{ color: "#ff2244", fontSize: 26, fontWeight: "bold", letterSpacing: 5, textShadow: "0 0 24px #ff2244", marginBottom: 4 }}>FORKED</div>
-            <div style={{ color: "#1a3040", fontSize: 10, letterSpacing: 3, marginBottom: 18 }}>PROOF BROADCAST TO ALL NODES</div>
-            <div style={{ color: "#00ffcc", fontSize: 54, fontWeight: "bold", textShadow: "0 0 36px #00ffcc66", marginBottom: 4 }}>
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/85 backdrop-blur-sm">
+            <div className="text-[10px] tracking-[0.3em] text-destructive/80 mb-2">FORKED</div>
+            <div className="num text-5xl font-semibold text-primary mb-1 drop-shadow-[0_0_24px_hsl(var(--primary)/0.5)]">
               {gs.score.toLocaleString()}
             </div>
-            <div style={{ color: "#1a3040", fontSize: 10, marginBottom: 28, textAlign: "center" }}>
-              Block closes in {blockInfo.remaining}s · Weighted lottery determines winner
-            </div>
-            <Btn onClick={startRun} col="#ff2244">NEXT BLOCK</Btn>
-          </>} />
+            <div className="text-xs text-muted-foreground mb-6">Block closes in {blockInfo.remaining}s · Score broadcast</div>
+            <button
+              onClick={startRun}
+              className="px-8 py-3 rounded-full bg-primary text-primary-foreground text-sm font-semibold tracking-wide hover:scale-[1.02] transition-transform shadow-[0_0_30px_hsl(var(--primary)/0.4)]"
+            >
+              Run again
+            </button>
+          </div>
         )}
       </div>
-      <div style={{ display: "flex", justifyContent: "center", gap: 28, marginTop: 8, color: "#1a3040", fontSize: 9, letterSpacing: 2, fontFamily: F }}>
-        <span>SPACE/↑ JUMP</span><span>↓ DUCK</span><span>Ƀ +50 PTS</span><span>SURVIVE TO MINE</span>
+      <div className="flex justify-center gap-6 text-[10px] tracking-[0.2em] text-muted-foreground/70 uppercase">
+        <span>Space / ↑ Jump</span>
+        <span>↓ Duck</span>
+        <span>Ƀ +50 pts</span>
       </div>
     </div>
   );
@@ -625,83 +734,140 @@ function SendTxForm({ wallet, chain, onBroadcast, onSent }: any) {
   );
 }
 
-// 10. MINING PANEL ─────────────────────────────────────────────────────────────
+// 10. MINE HERO ────────────────────────────────────────────────────────────────
+function MineHero({ blockInfo, onLaunch }: any) {
+  const m = Math.floor(blockInfo.remaining / 60);
+  const s = blockInfo.remaining % 60;
+  const time = m > 0 ? `${m}m ${s}s` : `${s}s`;
+  return (
+    <div className="relative overflow-hidden rounded-3xl glass-hi px-6 py-12 sm:py-16 text-center">
+      {/* Soft halo */}
+      <div className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[480px] h-[480px] rounded-full bg-primary/10 blur-3xl" />
+      <div className="relative">
+        <h1 className="text-5xl sm:text-6xl font-semibold tracking-tight mb-3">
+          <span className="text-foreground">MINE </span>
+          <span className="text-primary drop-shadow-[0_0_24px_hsl(var(--primary)/0.5)]">$BLOB</span>
+        </h1>
+        <div className="text-xs sm:text-sm text-muted-foreground mb-8 num">
+          Block #{blockInfo.height} · Reward: {blockInfo.reward} $BLOB · Level seed #{blockInfo.seed}
+        </div>
+        <div className="text-4xl sm:text-5xl font-light text-primary/90 mb-6 num">
+          {time} remaining
+        </div>
+        <div className="inline-flex items-center gap-3 px-5 py-2 rounded-full border border-border/50 bg-card/40 text-[10px] sm:text-xs tracking-[0.18em] text-muted-foreground uppercase mb-3 num">
+          <span>Space / Jump</span>
+          <span className="text-border">·</span>
+          <span>↓ Duck</span>
+          <span className="text-border">·</span>
+          <span>Ƀ +50 Pts</span>
+        </div>
+        <div className="text-[11px] text-muted-foreground/70 mb-8">
+          Higher score = higher probability of winning block reward
+        </div>
+        <button
+          onClick={onLaunch}
+          className="group relative inline-flex items-center gap-2 px-10 py-4 rounded-full bg-primary/10 border border-primary/40 text-primary font-semibold tracking-wide text-sm sm:text-base hover:bg-primary/20 transition-all shadow-[0_0_40px_hsl(var(--primary)/0.35)] hover:shadow-[0_0_60px_hsl(var(--primary)/0.55)]"
+        >
+          <Play className="w-4 h-4 fill-primary" />
+          LAUNCH BLOB RUN
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// 11. MINING PANEL ─────────────────────────────────────────────────────────────
 function MiningPanel({ blockInfo, entries, myEntry, chain }: any) {
   const sorted = [...entries].sort((a, b) => b.score - a.score);
   const total = entries.reduce((s: number, e: any) => s + e.score, 0);
   const supplyNow = calcTotalSupply(chain);
+  const supplyPct = Math.min((supplyNow / MAX_SUPPLY) * 100, 100);
 
-  const Stat = ({ label, value, accent = "text-foreground" }: any) => (
-    <div className="glass p-4">
-      <div className={`num text-xl font-semibold ${accent}`}>{value}</div>
-      <div className="label-eyebrow mt-1">{label}</div>
+  const Stat = ({ label, value, accent }: any) => (
+    <div className="px-1">
+      <div className="label-eyebrow mb-2">{label}</div>
+      <div className={`text-2xl sm:text-3xl font-semibold num ${accent || "text-foreground"}`}>{value}</div>
     </div>
   );
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 px-1">
         <Stat label="Block" value={`#${blockInfo.height}`} accent="text-primary" />
-        <Stat label="Reward" value={`${blockInfo.reward} $BLOB`} accent="text-[hsl(var(--warning))]" />
-        <Stat label="Remaining" value={`${blockInfo.remaining}s`} accent="text-[hsl(var(--info))]" />
+        <Stat label="Reward" value={`${blockInfo.reward} $BLOB`} />
+        <Stat label="Remaining" value={`${blockInfo.remaining}s`} accent="text-primary" />
         <Stat label="Miners" value={entries.length} />
       </div>
 
-      <div className="glass p-4">
-        <div className="flex items-center justify-between mb-2">
-          <span className="label-eyebrow">$BLOB Supply</span>
-          <span className="text-xs num text-muted-foreground">
-            {supplyNow.toFixed(2)} / {MAX_SUPPLY.toLocaleString()}
+      <div className="glass px-5 py-4">
+        <div className="flex items-center justify-between mb-3 text-xs">
+          <span className="font-medium tracking-wide">$BLOB SUPPLY</span>
+          <span className="text-muted-foreground num">
+            {supplyNow.toFixed(2)} / {MAX_SUPPLY.toLocaleString()} ({supplyPct.toFixed(5)}%)
           </span>
         </div>
-        <div className="h-1 rounded-full bg-secondary overflow-hidden">
+        <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
           <div
-            className="h-full bg-primary transition-all duration-500"
-            style={{ width: `${Math.min((supplyNow / MAX_SUPPLY) * 100, 100)}%` }}
+            className="h-full bg-gradient-to-r from-primary to-accent transition-all duration-500 shadow-[0_0_12px_hsl(var(--primary)/0.6)]"
+            style={{ width: `${supplyPct}%` }}
           />
         </div>
       </div>
 
       <div>
-        <div className="label-eyebrow mb-3">Current block entries</div>
         {entries.length === 0 ? (
-          <div className="glass p-8 text-center text-sm text-muted-foreground">
-            No entries yet — play Blob Run to submit yours
+          <div className="relative glass overflow-hidden">
+            <div className="px-6 py-10 sm:py-14 flex items-center min-h-[160px]">
+              <div className="text-base sm:text-lg text-foreground/80 max-w-[60%] leading-relaxed">
+                No entries yet — play Blob Run to submit yours
+              </div>
+            </div>
+            <img
+              src={runnerArt}
+              alt=""
+              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-40 sm:w-48 opacity-70"
+              loading="lazy"
+              width={512}
+              height={512}
+            />
           </div>
         ) : (
-          <div className="space-y-1.5">
-            {sorted.map((e: any, i: number) => {
-              const pct = total > 0 ? +((e.score / total) * 100).toFixed(1) : 0;
-              const isMe = e.address === myEntry?.address;
-              return (
-                <div
-                  key={e.address + i}
-                  className={`glass px-4 py-3 flex items-center gap-3 ${isMe ? "ring-1 ring-primary/40" : ""}`}
-                >
-                  <span className="w-6 text-sm">
-                    {i === 0 ? "👑" : i === 1 ? "🥈" : i === 2 ? "🥉" : <span className="text-muted-foreground">{i + 1}</span>}
-                  </span>
-                  <span className={`flex-1 text-sm truncate ${isMe ? "text-primary" : "text-foreground/80"}`}>
-                    {e.username || e.address?.slice(0, 14)}
-                  </span>
-                  <span className="num text-sm font-medium">{e.score.toLocaleString()}</span>
-                  <div className="w-24 h-1 rounded-full bg-secondary overflow-hidden">
-                    <div
-                      className={`h-full ${isMe ? "bg-primary" : i === 0 ? "bg-[hsl(var(--warning))]" : "bg-muted-foreground"}`}
-                      style={{ width: `${Math.min(pct, 100)}%` }}
-                    />
+          <>
+            <div className="label-eyebrow mb-3 px-1">Current block entries</div>
+            <div className="space-y-1.5">
+              {sorted.map((e: any, i: number) => {
+                const pct = total > 0 ? +((e.score / total) * 100).toFixed(1) : 0;
+                const isMe = e.address === myEntry?.address;
+                return (
+                  <div
+                    key={e.address + i}
+                    className={`glass px-4 py-3 flex items-center gap-3 ${isMe ? "ring-1 ring-primary/40" : ""}`}
+                  >
+                    <span className="w-6 text-sm">
+                      {i === 0 ? "👑" : i === 1 ? "🥈" : i === 2 ? "🥉" : <span className="text-muted-foreground">{i + 1}</span>}
+                    </span>
+                    <span className={`flex-1 text-sm truncate ${isMe ? "text-primary" : "text-foreground/80"}`}>
+                      {e.username || e.address?.slice(0, 14)}
+                    </span>
+                    <span className="num text-sm font-medium">{e.score.toLocaleString()}</span>
+                    <div className="w-24 h-1 rounded-full bg-secondary overflow-hidden">
+                      <div
+                        className={`h-full ${isMe ? "bg-primary" : i === 0 ? "bg-[hsl(var(--warning))]" : "bg-muted-foreground"}`}
+                        style={{ width: `${Math.min(pct, 100)}%` }}
+                      />
+                    </div>
+                    <span className="num text-xs w-12 text-right text-muted-foreground">{pct}%</span>
                   </div>
-                  <span className="num text-xs w-12 text-right text-muted-foreground">{pct}%</span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-        {myEntry && (
-          <div className="mt-3 text-xs text-center text-muted-foreground">
-            Your win probability: <span className="text-primary num">{winProbability(myEntry.score, entries)}%</span>
-            {" · weighted random lottery"}
-          </div>
+                );
+              })}
+            </div>
+            {myEntry && (
+              <div className="mt-3 text-xs text-center text-muted-foreground">
+                Your win probability: <span className="text-primary num">{winProbability(myEntry.score, entries)}%</span>
+                {" · weighted random lottery"}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -974,6 +1140,7 @@ export default function BlobChainApp() {
   const [nodeCount] = useState(1);
   const [newBlock, setNewBlock] = useState<any>(null);
   const [screen, setScreen] = useState("mine");
+  const [gameLaunched, setGameLaunched] = useState(false);
 
   useEffect(() => {
     try {
@@ -1203,33 +1370,41 @@ export default function BlobChainApp() {
 
       {/* Header */}
       <header className="sticky top-0 z-50 backdrop-blur-xl bg-background/70 border-b border-border">
-        <div className="max-w-6xl mx-auto px-5 h-14 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <h1 className="text-base font-semibold tracking-[0.25em] text-primary drop-shadow-[0_0_12px_hsl(var(--primary)/0.4)]">⬡ BLOB</h1>
-            <span className="label-eyebrow hidden sm:inline">PoG</span>
-          </div>
+        <div className="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between gap-4">
+          <h1 className="text-base font-semibold tracking-[0.35em] text-primary drop-shadow-[0_0_12px_hsl(var(--primary)/0.4)]">
+            BLOB
+          </h1>
 
-          <nav className="flex items-center gap-1">
-            {nav.map(n => (
-              <button
-                key={n.id}
-                onClick={() => setScreen(n.id)}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
-                  screen === n.id
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-                }`}
-              >
-                {n.text}
-              </button>
-            ))}
+          <nav className="hidden sm:flex items-center gap-1">
+            {nav.map(n => {
+              const active = screen === n.id;
+              return (
+                <button
+                  key={n.id}
+                  onClick={() => setScreen(n.id)}
+                  className={`relative px-4 py-2 text-sm font-medium transition ${
+                    active ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {n.text}
+                  {active && (
+                    <span className="absolute left-3 right-3 -bottom-px h-px bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
+                  )}
+                </button>
+              );
+            })}
           </nav>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <div className="hidden sm:flex flex-col items-center px-3 py-1 rounded-full border border-primary/30 bg-primary/5">
+              <span className="text-[9px] tracking-widest text-primary/80 leading-none">NETWORK</span>
+              <span className="num text-[11px] text-primary leading-tight">{blockInfo.remaining}s</span>
+            </div>
+
             <Dialog>
               <DialogTrigger asChild>
                 <button
-                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition"
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium border border-border hover:border-primary/40 hover:text-primary transition"
                   aria-label="Quick send"
                 >
                   <Send className="w-3.5 h-3.5" />
@@ -1244,22 +1419,47 @@ export default function BlobChainApp() {
               </DialogContent>
             </Dialog>
 
-            <div className="hidden md:flex items-center gap-2 text-xs">
-              <div className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
-              <span className="text-muted-foreground">{wallet.username}</span>
-              <span className="num text-primary">{balance.toFixed(4)}</span>
-            </div>
-            <div className={`num text-xs px-2 py-1 rounded-md border border-border ${blockInfo.remaining < 20 ? "text-destructive border-destructive/40" : "text-muted-foreground"}`}>
-              {blockInfo.remaining}s
-            </div>
+            <button
+              onClick={() => setScreen("wallet")}
+              className="flex items-center gap-2 px-3 py-2 rounded-full border border-border hover:border-primary/40 transition text-xs"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
+              <span className="hidden md:inline text-muted-foreground">{wallet.username}</span>
+              <span className="num text-primary">{balance.toFixed(2)}</span>
+            </button>
           </div>
         </div>
+
+        {/* Mobile nav */}
+        <nav className="sm:hidden flex items-center justify-around border-t border-border/60">
+          {nav.map(n => {
+            const active = screen === n.id;
+            return (
+              <button
+                key={n.id}
+                onClick={() => setScreen(n.id)}
+                className={`relative py-2.5 text-xs font-medium transition flex-1 ${
+                  active ? "text-primary" : "text-muted-foreground"
+                }`}
+              >
+                {n.text}
+                {active && (
+                  <span className="absolute left-1/4 right-1/4 -bottom-px h-px bg-primary" />
+                )}
+              </button>
+            );
+          })}
+        </nav>
       </header>
 
-      <main className="max-w-6xl mx-auto px-5 py-6 relative z-10">
+      <main className="max-w-6xl mx-auto px-5 py-6 sm:py-8 relative z-10">
         {screen === "mine" && (
-          <div className="space-y-5">
-            <BlobRunGame wallet={wallet} blockInfo={blockInfo} onEntrySubmit={onEntrySubmit} myEntry={myEntry} />
+          <div className="space-y-6">
+            {!gameLaunched ? (
+              <MineHero blockInfo={blockInfo} onLaunch={() => setGameLaunched(true)} />
+            ) : (
+              <BlobRunGame wallet={wallet} blockInfo={blockInfo} onEntrySubmit={onEntrySubmit} myEntry={myEntry} />
+            )}
             <MiningPanel blockInfo={blockInfo} entries={entries} myEntry={myEntry} chain={chain} />
           </div>
         )}

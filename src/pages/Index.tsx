@@ -6,7 +6,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import * as Relay from "@/lib/blobP2P";
+import * as Relay from "@/lib/blobRelay";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Send } from "lucide-react";
 
@@ -954,34 +954,6 @@ function NetworkView({ nodeCount, chain, blockInfo }: any) {
           <div>Level seed: derived from block height — identical for all miners</div>
         </div>
       </div>
-
-      <div className="glass p-5 space-y-3">
-        <div className="label-eyebrow">My peer ID</div>
-        <div className="num text-xs break-all text-foreground/80">
-          {Relay.getMyPeerId?.() || "initializing…"}
-        </div>
-        <div className="label-eyebrow pt-2">Manual peer connect (testing)</div>
-        <div className="flex gap-2">
-          <input
-            id="peerIdInput"
-            placeholder="blob-0x1234abcd…"
-            className="flex-1 px-3 py-2 rounded-md bg-secondary text-secondary-foreground text-sm font-mono outline-none focus:ring-2 focus:ring-ring"
-          />
-          <button
-            onClick={() => {
-              const el = document.getElementById("peerIdInput") as HTMLInputElement | null;
-              const id = el?.value.trim();
-              if (id) { Relay.connectToPeer(id); if (el) el.value = ""; }
-            }}
-            className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition"
-          >
-            Connect
-          </button>
-        </div>
-        <div className="text-[11px] text-muted-foreground">
-          Paste a friend's peer ID to gossip blocks, txs, orders & escrows directly.
-        </div>
-      </div>
     </div>
   );
 }
@@ -1006,11 +978,7 @@ export default function BlobChainApp() {
   useEffect(() => {
     try {
       const saved = localStorage.getItem("blob_wallet_v2");
-      if (saved) {
-        const w = JSON.parse(saved);
-        setWallet(w);
-        Relay.initP2P(w.address).catch((e) => console.warn("[p2p] init failed", e));
-      }
+      if (saved) setWallet(JSON.parse(saved));
     } catch {}
     document.title = "⬡ BLOB CHAIN — Proof-of-Gaming";
   }, []);
@@ -1022,7 +990,6 @@ export default function BlobChainApp() {
     w.username = nameIn.trim().slice(0, 24);
     try { localStorage.setItem("blob_wallet_v2", JSON.stringify(w)); } catch {}
     setWallet(w);
-    await Relay.initP2P(w.address).catch((e) => console.warn("[p2p] init failed", e));
     setCreating(false);
   }
 

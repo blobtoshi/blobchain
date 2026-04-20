@@ -1133,6 +1133,7 @@ export default function BlobChainApp() {
   const [nodeCount] = useState(1);
   const [newBlock, setNewBlock] = useState<any>(null);
   const [screen, setScreen] = useState("mine");
+  const [gameLaunched, setGameLaunched] = useState(false);
 
   useEffect(() => {
     try {

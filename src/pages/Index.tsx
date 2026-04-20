@@ -1362,33 +1362,41 @@ export default function BlobChainApp() {
 
       {/* Header */}
       <header className="sticky top-0 z-50 backdrop-blur-xl bg-background/70 border-b border-border">
-        <div className="max-w-6xl mx-auto px-5 h-14 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <h1 className="text-base font-semibold tracking-[0.25em] text-primary drop-shadow-[0_0_12px_hsl(var(--primary)/0.4)]">⬡ BLOB</h1>
-            <span className="label-eyebrow hidden sm:inline">PoG</span>
-          </div>
+        <div className="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between gap-4">
+          <h1 className="text-base font-semibold tracking-[0.35em] text-primary drop-shadow-[0_0_12px_hsl(var(--primary)/0.4)]">
+            BLOB
+          </h1>
 
-          <nav className="flex items-center gap-1">
-            {nav.map(n => (
-              <button
-                key={n.id}
-                onClick={() => setScreen(n.id)}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
-                  screen === n.id
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-                }`}
-              >
-                {n.text}
-              </button>
-            ))}
+          <nav className="hidden sm:flex items-center gap-1">
+            {nav.map(n => {
+              const active = screen === n.id;
+              return (
+                <button
+                  key={n.id}
+                  onClick={() => setScreen(n.id)}
+                  className={`relative px-4 py-2 text-sm font-medium transition ${
+                    active ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {n.text}
+                  {active && (
+                    <span className="absolute left-3 right-3 -bottom-px h-px bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
+                  )}
+                </button>
+              );
+            })}
           </nav>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <div className="hidden sm:flex flex-col items-center px-3 py-1 rounded-full border border-primary/30 bg-primary/5">
+              <span className="text-[9px] tracking-widest text-primary/80 leading-none">NETWORK</span>
+              <span className="num text-[11px] text-primary leading-tight">{blockInfo.remaining}s</span>
+            </div>
+
             <Dialog>
               <DialogTrigger asChild>
                 <button
-                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition"
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium border border-border hover:border-primary/40 hover:text-primary transition"
                   aria-label="Quick send"
                 >
                   <Send className="w-3.5 h-3.5" />
@@ -1403,22 +1411,47 @@ export default function BlobChainApp() {
               </DialogContent>
             </Dialog>
 
-            <div className="hidden md:flex items-center gap-2 text-xs">
-              <div className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
-              <span className="text-muted-foreground">{wallet.username}</span>
-              <span className="num text-primary">{balance.toFixed(4)}</span>
-            </div>
-            <div className={`num text-xs px-2 py-1 rounded-md border border-border ${blockInfo.remaining < 20 ? "text-destructive border-destructive/40" : "text-muted-foreground"}`}>
-              {blockInfo.remaining}s
-            </div>
+            <button
+              onClick={() => setScreen("wallet")}
+              className="flex items-center gap-2 px-3 py-2 rounded-full border border-border hover:border-primary/40 transition text-xs"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
+              <span className="hidden md:inline text-muted-foreground">{wallet.username}</span>
+              <span className="num text-primary">{balance.toFixed(2)}</span>
+            </button>
           </div>
         </div>
+
+        {/* Mobile nav */}
+        <nav className="sm:hidden flex items-center justify-around border-t border-border/60">
+          {nav.map(n => {
+            const active = screen === n.id;
+            return (
+              <button
+                key={n.id}
+                onClick={() => setScreen(n.id)}
+                className={`relative py-2.5 text-xs font-medium transition flex-1 ${
+                  active ? "text-primary" : "text-muted-foreground"
+                }`}
+              >
+                {n.text}
+                {active && (
+                  <span className="absolute left-1/4 right-1/4 -bottom-px h-px bg-primary" />
+                )}
+              </button>
+            );
+          })}
+        </nav>
       </header>
 
-      <main className="max-w-6xl mx-auto px-5 py-6 relative z-10">
+      <main className="max-w-6xl mx-auto px-5 py-6 sm:py-8 relative z-10">
         {screen === "mine" && (
-          <div className="space-y-5">
-            <BlobRunGame wallet={wallet} blockInfo={blockInfo} onEntrySubmit={onEntrySubmit} myEntry={myEntry} />
+          <div className="space-y-6">
+            {!gameLaunched ? (
+              <MineHero blockInfo={blockInfo} onLaunch={() => setGameLaunched(true)} />
+            ) : (
+              <BlobRunGame wallet={wallet} blockInfo={blockInfo} onEntrySubmit={onEntrySubmit} myEntry={myEntry} />
+            )}
             <MiningPanel blockInfo={blockInfo} entries={entries} myEntry={myEntry} chain={chain} />
           </div>
         )}

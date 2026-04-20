@@ -8,7 +8,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import * as Relay from "@/lib/blobRelay";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Send, Play } from "lucide-react";
+import { Send, Play, Wallet, Plus, Download, Lock } from "lucide-react";
 import runnerArt from "@/assets/runner.png";
 
 // 1. CONFIG ────────────────────────────────────────────────────────────────────

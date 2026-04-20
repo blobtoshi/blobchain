@@ -175,43 +175,93 @@ const TYMAP = { low: GY - 52, mid: GY - 94, high: GY - 140 };
 
 // 7. CANVAS DRAW HELPERS ───────────────────────────────────────────────────────
 function drawBG(ctx, frame, nodes) {
-  ctx.fillStyle = "#05070f";
-  ctx.fillRect(0, 0, CW, CH);
-  for (let i = 0; i < 8; i++) {
-    const t = i / 8;
-    const x = ((CW * t + frame * (1.2 + t * 3.5)) % CW);
-    ctx.strokeStyle = `rgba(0,255,180,${0.02 + t * 0.035})`;
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(x, GY); ctx.lineTo(x - 90, CH); ctx.stroke();
-  }
+  // Deep gradient sky
+  const sky = ctx.createLinearGradient(0, 0, 0, GY);
+  sky.addColorStop(0, "#070b18");
+  sky.addColorStop(1, "#0a1828");
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, CW, GY);
+
+  // Soft glow horizon
+  const halo = ctx.createRadialGradient(CW / 2, GY, 10, CW / 2, GY, CW * 0.7);
+  halo.addColorStop(0, "rgba(0, 255, 204, 0.10)");
+  halo.addColorStop(1, "rgba(0, 255, 204, 0)");
+  ctx.fillStyle = halo;
+  ctx.fillRect(0, 0, CW, GY);
+
+  // Distant parallax dots / nodes
   nodes.forEach(n => {
-    ctx.save(); ctx.globalAlpha = n.a;
-    ctx.strokeStyle = "#00ffcc"; ctx.lineWidth = .8;
-    ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2); ctx.stroke();
+    ctx.save();
+    ctx.globalAlpha = n.a;
+    ctx.fillStyle = "#7ad9c5";
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, n.r * 0.4, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
   });
-  const g = ctx.createLinearGradient(0, GY, 0, CH);
-  g.addColorStop(0, "#091a30"); g.addColorStop(1, "#030810");
-  ctx.fillStyle = g; ctx.fillRect(0, GY, CW, CH - GY);
-  ctx.save(); ctx.shadowColor = "#00ffcc"; ctx.shadowBlur = 10;
-  ctx.strokeStyle = "#00ffcc"; ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.moveTo(0, GY); ctx.lineTo(CW, GY); ctx.stroke();
+
+  // Subtle parallax grid lines on ground
+  const gg = ctx.createLinearGradient(0, GY, 0, CH);
+  gg.addColorStop(0, "#0d2233");
+  gg.addColorStop(1, "#04080f");
+  ctx.fillStyle = gg;
+  ctx.fillRect(0, GY, CW, CH - GY);
+
+  ctx.save();
+  ctx.strokeStyle = "rgba(0, 255, 204, 0.08)";
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 6; i++) {
+    const yy = GY + ((i * 14 + frame * 1.5) % (CH - GY));
+    ctx.beginPath();
+    ctx.moveTo(0, yy);
+    ctx.lineTo(CW, yy);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Crisp horizon line
+  ctx.save();
+  ctx.shadowColor = "#00ffcc";
+  ctx.shadowBlur = 8;
+  ctx.strokeStyle = "rgba(0, 255, 204, 0.55)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, GY);
+  ctx.lineTo(CW, GY);
+  ctx.stroke();
   ctx.restore();
 }
 
 function drawBlob(ctx, x, y, action, wob, sq, blink) {
   const duck = action === "duck";
-  const rx = duck ? 32 : 20, ry = duck ? 15 : 26;
+  const rx = duck ? 32 : 22, ry = duck ? 16 : 28;
   const wb = Math.sin(wob * .12) * (duck ? 1.5 : 2.5);
-  ctx.save(); ctx.translate(x, y); ctx.scale(1, sq);
-  ctx.shadowColor = "#00ffcc"; ctx.shadowBlur = 20;
-  ctx.beginPath(); ctx.fillStyle = "#00ffcc";
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(1, sq);
+
+  // Soft outer glow
+  ctx.shadowColor = "#00ffcc";
+  ctx.shadowBlur = 24;
+
+  // Body gradient
+  const bodyGrad = ctx.createRadialGradient(-4, -6, 2, 0, 0, rx + 6);
+  bodyGrad.addColorStop(0, "#7dffe0");
+  bodyGrad.addColorStop(1, "#00d6a8");
+  ctx.fillStyle = bodyGrad;
+  ctx.beginPath();
   ctx.moveTo(0, -ry);
   ctx.bezierCurveTo(rx + wb, -ry * .7, rx + wb, ry * .7, 0, ry);
   ctx.bezierCurveTo(-rx - wb, ry * .7, -rx - wb, -ry * .7, 0, -ry);
   ctx.fill();
-  ctx.shadowBlur = 0; ctx.fillStyle = "rgba(160,255,230,.18)";
-  ctx.beginPath(); ctx.ellipse(-5, -7, rx * .36, ry * .3, -.3, 0, Math.PI * 2); ctx.fill();
+
+  ctx.shadowBlur = 0;
+  // Highlight
+  ctx.fillStyle = "rgba(255,255,255,.22)";
+  ctx.beginPath();
+  ctx.ellipse(-5, -9, rx * .42, ry * .28, -.3, 0, Math.PI * 2);
+  ctx.fill();
+
   if (!duck) {
     if (!blink) {
       ctx.fillStyle = "#001510";
@@ -225,10 +275,6 @@ function drawBlob(ctx, x, y, action, wob, sq, blink) {
       ctx.beginPath(); ctx.moveTo(-12, -8); ctx.lineTo(-4, -8); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(4, -8); ctx.lineTo(12, -8); ctx.stroke();
     }
-    const sw = Math.sin(wob * .24) * 10;
-    ctx.shadowBlur = 0; ctx.fillStyle = "#009966";
-    ctx.beginPath(); ctx.ellipse(-7, ry - 3, 5, 8, sw * .07, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(7, ry - 3, 5, 8, -sw * .07, 0, Math.PI * 2); ctx.fill();
   } else {
     ctx.fillStyle = "#001510";
     ctx.beginPath(); ctx.ellipse(-8, 0, 4.5, 2.5, 0, 0, Math.PI * 2); ctx.fill();
@@ -238,32 +284,61 @@ function drawBlob(ctx, x, y, action, wob, sq, blink) {
 }
 
 function drawFork(ctx, o) {
+  // Modern minimal obstacle: glowing vertical bar with cap
+  ctx.save();
   const cx = o.x + o.w / 2;
-  ctx.save(); ctx.shadowColor = "#ff2244"; ctx.shadowBlur = 16;
-  ctx.fillStyle = "#bb1133";
-  ctx.fillRect(cx - 4, o.y + o.h * .46, 8, o.h * .54);
+  // Soft glow halo
+  const grad = ctx.createLinearGradient(cx, o.y, cx, o.y + o.h);
+  grad.addColorStop(0, "rgba(255, 90, 110, 0.95)");
+  grad.addColorStop(1, "rgba(255, 90, 110, 0.55)");
+  ctx.shadowColor = "#ff5a6e";
+  ctx.shadowBlur = 18;
+  ctx.fillStyle = grad;
+  // Pill shape
+  const r = 6;
+  const x = cx - 7, y = o.y, w = 14, h = o.h;
   ctx.beginPath();
-  ctx.moveTo(cx, o.y + o.h * .49);
-  ctx.lineTo(o.x + 3, o.y + 7); ctx.lineTo(o.x + 13, o.y + 7);
-  ctx.lineTo(cx, o.y + o.h * .27);
-  ctx.lineTo(o.x + o.w - 13, o.y + 7); ctx.lineTo(o.x + o.w - 3, o.y + 7);
-  ctx.closePath(); ctx.fillStyle = "#ff2244"; ctx.fill();
-  ctx.shadowBlur = 0; ctx.fillStyle = "#ff5566";
-  ctx.font = "bold 7px monospace"; ctx.textAlign = "center";
-  ctx.fillText("FORK", cx, o.y - 4);
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+  ctx.fill();
+  // Inner highlight
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "rgba(255,255,255,0.18)";
+  ctx.fillRect(x + 2, y + 4, 2, h - 8);
   ctx.restore();
 }
 
 function drawToken(ctx, tx, ty, frame) {
   const p = Math.sin(frame * .08 + tx * .009) * 2.5;
-  ctx.save(); ctx.translate(tx, ty + p);
-  ctx.shadowColor = "#00aaff"; ctx.shadowBlur = 20;
-  ctx.strokeStyle = "#00aaff"; ctx.lineWidth = 1.8;
-  ctx.beginPath(); ctx.arc(0, 0, 13, 0, Math.PI * 2); ctx.stroke();
-  ctx.fillStyle = "rgba(0,170,255,.1)"; ctx.fill();
-  ctx.fillStyle = "#00aaff"; ctx.font = "bold 11px monospace";
+  ctx.save();
+  ctx.translate(tx, ty + p);
+  // Outer halo
+  const grad = ctx.createRadialGradient(0, 0, 2, 0, 0, 18);
+  grad.addColorStop(0, "rgba(120, 200, 255, 0.6)");
+  grad.addColorStop(1, "rgba(120, 200, 255, 0)");
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI * 2); ctx.fill();
+  // Coin
+  ctx.shadowColor = "#5fb8ff";
+  ctx.shadowBlur = 14;
+  const coin = ctx.createLinearGradient(0, -12, 0, 12);
+  coin.addColorStop(0, "#a9dcff");
+  coin.addColorStop(1, "#3a96e6");
+  ctx.fillStyle = coin;
+  ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "#062338";
+  ctx.font = "bold 11px ui-sans-serif, system-ui, sans-serif";
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.shadowBlur = 6; ctx.fillText("Ƀ", 0, 1);
+  ctx.fillText("Ƀ", 0, 1);
   ctx.restore();
 }
 

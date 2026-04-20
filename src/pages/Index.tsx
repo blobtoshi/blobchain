@@ -1532,32 +1532,44 @@ export default function BlobChainApp() {
               <span className="num text-[11px] text-primary leading-tight">{blockInfo.remaining}s</span>
             </div>
 
-            <Dialog>
-              <DialogTrigger asChild>
-                <button
-                  className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium border border-border hover:border-primary/40 hover:text-primary transition"
-                  aria-label="Quick send"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  Send
-                </button>
-              </DialogTrigger>
-              <DialogContent className="glass-hi border-border max-w-md">
-                <DialogHeader>
-                  <DialogTitle className="text-sm font-medium">Send $BLOB</DialogTitle>
-                </DialogHeader>
-                <SendTxForm wallet={wallet} chain={chain} onBroadcast={onTxBroadcast} />
-              </DialogContent>
-            </Dialog>
+            {wallet && (
+              <Dialog>
+                <DialogTrigger asChild>
+                  <button
+                    className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium border border-border hover:border-primary/40 hover:text-primary transition"
+                    aria-label="Quick send"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    Send
+                  </button>
+                </DialogTrigger>
+                <DialogContent className="glass-hi border-border max-w-md">
+                  <DialogHeader>
+                    <DialogTitle className="text-sm font-medium">Send $BLOB</DialogTitle>
+                  </DialogHeader>
+                  <SendTxForm wallet={wallet} chain={chain} onBroadcast={onTxBroadcast} />
+                </DialogContent>
+              </Dialog>
+            )}
 
-            <button
-              onClick={() => setScreen("wallet")}
-              className="flex items-center gap-2 px-3 py-2 rounded-full border border-border hover:border-primary/40 transition text-xs"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
-              <span className="hidden md:inline text-muted-foreground">{wallet.username}</span>
-              <span className="num text-primary">{balance.toFixed(2)}</span>
-            </button>
+            {wallet ? (
+              <button
+                onClick={() => setScreen("wallet")}
+                className="flex items-center gap-2 px-3 py-2 rounded-full border border-border hover:border-primary/40 transition text-xs"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
+                <span className="hidden md:inline text-muted-foreground">{wallet.username}</span>
+                <span className="num text-primary">{balance.toFixed(2)}</span>
+              </button>
+            ) : (
+              <button
+                onClick={openConnect}
+                className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary text-primary-foreground text-xs font-semibold tracking-wide hover:bg-primary/90 transition shadow-[0_0_24px_hsl(var(--primary)/0.35)]"
+              >
+                <Wallet className="w-3.5 h-3.5" />
+                Connect wallet
+              </button>
+            )}
           </div>
         </div>
 

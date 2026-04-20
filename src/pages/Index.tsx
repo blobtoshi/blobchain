@@ -603,7 +603,7 @@ function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry }) {
 
   return (
     <div className="space-y-2">
-      <div className="relative rounded-2xl overflow-hidden border border-glass-border" style={{ lineHeight: 0, boxShadow: "0 20px 60px hsl(220 50% 2% / 0.6)" }}>
+      <div className="relative rounded-2xl overflow-hidden border border-border/50" style={{ lineHeight: 0, boxShadow: "0 20px 60px hsl(220 50% 2% / 0.6)" }}>
         <canvas ref={cvs} width={CW} height={CH}
           style={{ display: "block", width: "100%", height: "auto" }}
           onTouchStart={onTap} onTouchEnd={() => { jRef.current = false; }}
@@ -754,7 +754,7 @@ function MineHero({ blockInfo, onLaunch }: any) {
         <div className="text-4xl sm:text-5xl font-light text-primary/90 mb-6 num">
           {time} remaining
         </div>
-        <div className="inline-flex items-center gap-3 px-5 py-2 rounded-full border border-glass-border bg-card/40 text-[10px] sm:text-xs tracking-[0.18em] text-muted-foreground uppercase mb-3 num">
+        <div className="inline-flex items-center gap-3 px-5 py-2 rounded-full border border-border/50 bg-card/40 text-[10px] sm:text-xs tracking-[0.18em] text-muted-foreground uppercase mb-3 num">
           <span>Space / Jump</span>
           <span className="text-border">·</span>
           <span>↓ Duck</span>

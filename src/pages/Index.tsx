@@ -1129,7 +1129,11 @@ export default function BlobChainApp() {
   const F = '"Courier New",monospace';
 
   const [wallet, setWallet] = useState<any>(null);
+  const [connectOpen, setConnectOpen] = useState(false);
+  const [connectMode, setConnectMode] = useState<"choose" | "create" | "import">("choose");
   const [nameIn, setNameIn] = useState("");
+  const [importJson, setImportJson] = useState("");
+  const [connectErr, setConnectErr] = useState("");
   const [creating, setCreating] = useState(false);
 
   const [chain, setChain] = useState<any[]>([GENESIS]);
@@ -1150,14 +1154,57 @@ export default function BlobChainApp() {
     document.title = "⬡ BLOB CHAIN — Proof-of-Gaming";
   }, []);
 
+  function resetConnect() {
+    setConnectMode("choose");
+    setNameIn("");
+    setImportJson("");
+    setConnectErr("");
+  }
+
   async function createWallet() {
     if (!nameIn.trim()) return;
     setCreating(true);
-    const w: any = await generateWallet();
-    w.username = nameIn.trim().slice(0, 24);
+    setConnectErr("");
+    try {
+      const w: any = await generateWallet();
+      w.username = nameIn.trim().slice(0, 24);
+      try { localStorage.setItem("blob_wallet_v2", JSON.stringify(w)); } catch {}
+      setWallet(w);
+      setConnectOpen(false);
+      resetConnect();
+    } catch (e: any) {
+      setConnectErr(String(e?.message || e));
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function importWallet() {
+    setConnectErr("");
+    if (!nameIn.trim()) { setConnectErr("Enter a miner name"); return; }
+    let parsed: any;
+    try { parsed = JSON.parse(importJson.trim()); }
+    catch { setConnectErr("Invalid JSON"); return; }
+    if (!parsed.address || !parsed.publicKey || !parsed.privateKey) {
+      setConnectErr("Missing address / publicKey / privateKey");
+      return;
+    }
+    const w: any = {
+      address: parsed.address,
+      publicKey: parsed.publicKey,
+      privateKey: parsed.privateKey,
+      username: nameIn.trim().slice(0, 24),
+    };
     try { localStorage.setItem("blob_wallet_v2", JSON.stringify(w)); } catch {}
     setWallet(w);
-    setCreating(false);
+    setConnectOpen(false);
+    resetConnect();
+  }
+
+  function disconnectWallet() {
+    try { localStorage.removeItem("blob_wallet_v2"); } catch {}
+    setWallet(null);
+    setGameLaunched(false);
   }
 
   useEffect(() => {

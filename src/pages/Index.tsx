@@ -8,7 +8,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import * as Relay from "@/lib/blobRelay";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Send, Play } from "lucide-react";
+import { Send, Play, Wallet, Plus, Download, Lock } from "lucide-react";
 import runnerArt from "@/assets/runner.png";
 
 // 1. CONFIG ────────────────────────────────────────────────────────────────────
@@ -1129,7 +1129,11 @@ export default function BlobChainApp() {
   const F = '"Courier New",monospace';
 
   const [wallet, setWallet] = useState<any>(null);
+  const [connectOpen, setConnectOpen] = useState(false);
+  const [connectMode, setConnectMode] = useState<"choose" | "create" | "import">("choose");
   const [nameIn, setNameIn] = useState("");
+  const [importJson, setImportJson] = useState("");
+  const [connectErr, setConnectErr] = useState("");
   const [creating, setCreating] = useState(false);
 
   const [chain, setChain] = useState<any[]>([GENESIS]);
@@ -1150,14 +1154,57 @@ export default function BlobChainApp() {
     document.title = "⬡ BLOB CHAIN — Proof-of-Gaming";
   }, []);
 
+  function resetConnect() {
+    setConnectMode("choose");
+    setNameIn("");
+    setImportJson("");
+    setConnectErr("");
+  }
+
   async function createWallet() {
     if (!nameIn.trim()) return;
     setCreating(true);
-    const w: any = await generateWallet();
-    w.username = nameIn.trim().slice(0, 24);
+    setConnectErr("");
+    try {
+      const w: any = await generateWallet();
+      w.username = nameIn.trim().slice(0, 24);
+      try { localStorage.setItem("blob_wallet_v2", JSON.stringify(w)); } catch {}
+      setWallet(w);
+      setConnectOpen(false);
+      resetConnect();
+    } catch (e: any) {
+      setConnectErr(String(e?.message || e));
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function importWallet() {
+    setConnectErr("");
+    if (!nameIn.trim()) { setConnectErr("Enter a miner name"); return; }
+    let parsed: any;
+    try { parsed = JSON.parse(importJson.trim()); }
+    catch { setConnectErr("Invalid JSON"); return; }
+    if (!parsed.address || !parsed.publicKey || !parsed.privateKey) {
+      setConnectErr("Missing address / publicKey / privateKey");
+      return;
+    }
+    const w: any = {
+      address: parsed.address,
+      publicKey: parsed.publicKey,
+      privateKey: parsed.privateKey,
+      username: nameIn.trim().slice(0, 24),
+    };
     try { localStorage.setItem("blob_wallet_v2", JSON.stringify(w)); } catch {}
     setWallet(w);
-    setCreating(false);
+    setConnectOpen(false);
+    resetConnect();
+  }
+
+  function disconnectWallet() {
+    try { localStorage.removeItem("blob_wallet_v2"); } catch {}
+    setWallet(null);
+    setGameLaunched(false);
   }
 
   useEffect(() => {
@@ -1299,19 +1346,63 @@ export default function BlobChainApp() {
     setMempool(m => [...m, tx]);
   }, []);
 
-  if (!wallet) {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-6 relative">
-        <div className="w-full max-w-md text-center relative z-10">
-          <div className="num text-5xl font-semibold tracking-[0.3em] text-primary mb-2 drop-shadow-[0_0_24px_hsl(var(--primary)/0.5)]">
-            ⬡ BLOB
-          </div>
-          <div className="label-eyebrow mb-3">Proof-of-Gaming Blockchain</div>
-          <div className="text-xs text-muted-foreground mb-10 leading-relaxed">
-            Bitcoin clone · $BLOB token · 0 premine · Gameplay-mined
-          </div>
+  const balance = wallet ? calcBalance(wallet.address, chain) : 0;
+  const nav = [
+    { id: "mine", text: "Mine" },
+    { id: "wallet", text: "Wallet" },
+    { id: "mempool", text: "Mempool" },
+    { id: "chain", text: "Explorer" },
+    { id: "network", text: "Network" },
+  ];
 
-          <div className="glass-hi p-6 text-left space-y-4">
+  const openConnect = () => {
+    resetConnect();
+    setConnectOpen(true);
+  };
+
+  const ConnectWalletDialog = (
+    <Dialog open={connectOpen} onOpenChange={(o) => { setConnectOpen(o); if (!o) resetConnect(); }}>
+      <DialogContent className="glass-hi border-border max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-sm font-medium tracking-wide">
+            {connectMode === "choose" ? "Connect wallet" : connectMode === "create" ? "Create new wallet" : "Import wallet"}
+          </DialogTitle>
+        </DialogHeader>
+
+        {connectMode === "choose" && (
+          <div className="space-y-3 pt-1">
+            <button
+              onClick={() => { setConnectErr(""); setConnectMode("create"); }}
+              className="w-full glass hover:ring-1 hover:ring-primary/40 transition p-4 flex items-center gap-4 text-left"
+            >
+              <div className="w-10 h-10 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center text-primary">
+                <Plus className="w-4 h-4" />
+              </div>
+              <div className="flex-1">
+                <div className="text-sm font-medium text-foreground">Create new wallet</div>
+                <div className="text-xs text-muted-foreground">Generate a fresh ECDSA P-256 keypair in your browser</div>
+              </div>
+            </button>
+            <button
+              onClick={() => { setConnectErr(""); setConnectMode("import"); }}
+              className="w-full glass hover:ring-1 hover:ring-primary/40 transition p-4 flex items-center gap-4 text-left"
+            >
+              <div className="w-10 h-10 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center text-primary">
+                <Download className="w-4 h-4" />
+              </div>
+              <div className="flex-1">
+                <div className="text-sm font-medium text-foreground">Import wallet</div>
+                <div className="text-xs text-muted-foreground">Restore from an exported wallet JSON</div>
+              </div>
+            </button>
+            <div className="text-[11px] text-muted-foreground/70 text-center pt-1">
+              Keys never leave your device · Stored only in this browser
+            </div>
+          </div>
+        )}
+
+        {connectMode === "create" && (
+          <div className="space-y-3 pt-1">
             <div>
               <label className="label-eyebrow block mb-2">Miner name</label>
               <input
@@ -1320,34 +1411,74 @@ export default function BlobChainApp() {
                 onKeyDown={e => e.key === "Enter" && !creating && createWallet()}
                 placeholder="SatoshiBlob…"
                 maxLength={24}
+                autoFocus
                 className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm"
               />
             </div>
-            <button
-              onClick={createWallet}
-              disabled={creating || !nameIn.trim()}
-              className="w-full py-3 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition"
-            >
-              {creating ? "Generating keypair…" : "Generate wallet & join network"}
-            </button>
-            <div className="text-[11px] text-muted-foreground/80 leading-relaxed text-center pt-2">
-              ECDSA P-256 keypair generated in your browser<br />
-              Private key stored locally · Never leaves your device
+            {connectErr && <div className="text-xs text-destructive">{connectErr}</div>}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConnectMode("choose")}
+                className="px-4 py-3 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition"
+              >
+                Back
+              </button>
+              <button
+                onClick={createWallet}
+                disabled={creating || !nameIn.trim()}
+                className="flex-1 py-3 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                {creating ? "Generating keypair…" : "Generate wallet"}
+              </button>
+            </div>
+            <div className="text-[11px] text-muted-foreground/70 text-center pt-1">
+              ECDSA P-256 keypair generated in your browser
             </div>
           </div>
-        </div>
-      </div>
-    );
-  }
+        )}
 
-  const balance = calcBalance(wallet.address, chain);
-  const nav = [
-    { id: "mine", text: "Mine" },
-    { id: "wallet", text: "Wallet" },
-    { id: "mempool", text: "Mempool" },
-    { id: "chain", text: "Explorer" },
-    { id: "network", text: "Network" },
-  ];
+        {connectMode === "import" && (
+          <div className="space-y-3 pt-1">
+            <div>
+              <label className="label-eyebrow block mb-2">Miner name</label>
+              <input
+                value={nameIn}
+                onChange={e => setNameIn(e.target.value)}
+                placeholder="SatoshiBlob…"
+                maxLength={24}
+                className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm"
+              />
+            </div>
+            <div>
+              <label className="label-eyebrow block mb-2">Wallet JSON</label>
+              <textarea
+                value={importJson}
+                onChange={e => setImportJson(e.target.value)}
+                placeholder='{"address":"0x…","publicKey":"…","privateKey":"…"}'
+                rows={5}
+                className="num w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-[11px] leading-relaxed resize-none"
+              />
+            </div>
+            {connectErr && <div className="text-xs text-destructive">{connectErr}</div>}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConnectMode("choose")}
+                className="px-4 py-3 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition"
+              >
+                Back
+              </button>
+              <button
+                onClick={importWallet}
+                className="flex-1 py-3 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition"
+              >
+                Import wallet
+              </button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
 
   return (
     <div className="min-h-screen pb-16 relative">
@@ -1401,32 +1532,44 @@ export default function BlobChainApp() {
               <span className="num text-[11px] text-primary leading-tight">{blockInfo.remaining}s</span>
             </div>
 
-            <Dialog>
-              <DialogTrigger asChild>
-                <button
-                  className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium border border-border hover:border-primary/40 hover:text-primary transition"
-                  aria-label="Quick send"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  Send
-                </button>
-              </DialogTrigger>
-              <DialogContent className="glass-hi border-border max-w-md">
-                <DialogHeader>
-                  <DialogTitle className="text-sm font-medium">Send $BLOB</DialogTitle>
-                </DialogHeader>
-                <SendTxForm wallet={wallet} chain={chain} onBroadcast={onTxBroadcast} />
-              </DialogContent>
-            </Dialog>
+            {wallet && (
+              <Dialog>
+                <DialogTrigger asChild>
+                  <button
+                    className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium border border-border hover:border-primary/40 hover:text-primary transition"
+                    aria-label="Quick send"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    Send
+                  </button>
+                </DialogTrigger>
+                <DialogContent className="glass-hi border-border max-w-md">
+                  <DialogHeader>
+                    <DialogTitle className="text-sm font-medium">Send $BLOB</DialogTitle>
+                  </DialogHeader>
+                  <SendTxForm wallet={wallet} chain={chain} onBroadcast={onTxBroadcast} />
+                </DialogContent>
+              </Dialog>
+            )}
 
-            <button
-              onClick={() => setScreen("wallet")}
-              className="flex items-center gap-2 px-3 py-2 rounded-full border border-border hover:border-primary/40 transition text-xs"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
-              <span className="hidden md:inline text-muted-foreground">{wallet.username}</span>
-              <span className="num text-primary">{balance.toFixed(2)}</span>
-            </button>
+            {wallet ? (
+              <button
+                onClick={() => setScreen("wallet")}
+                className="flex items-center gap-2 px-3 py-2 rounded-full border border-border hover:border-primary/40 transition text-xs"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
+                <span className="hidden md:inline text-muted-foreground">{wallet.username}</span>
+                <span className="num text-primary">{balance.toFixed(2)}</span>
+              </button>
+            ) : (
+              <button
+                onClick={openConnect}
+                className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary text-primary-foreground text-xs font-semibold tracking-wide hover:bg-primary/90 transition shadow-[0_0_24px_hsl(var(--primary)/0.35)]"
+              >
+                <Wallet className="w-3.5 h-3.5" />
+                Connect wallet
+              </button>
+            )}
           </div>
         </div>
 
@@ -1455,7 +1598,30 @@ export default function BlobChainApp() {
       <main className="max-w-6xl mx-auto px-5 py-6 sm:py-8 relative z-10">
         {screen === "mine" && (
           <div className="space-y-6">
-            {!gameLaunched ? (
+            {!wallet ? (
+              <div className="relative overflow-hidden rounded-3xl glass-hi px-6 py-16 sm:py-20 text-center">
+                <div className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[480px] h-[480px] rounded-full bg-primary/10 blur-3xl" />
+                <div className="relative">
+                  <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-primary/10 border border-primary/30 text-primary mb-5">
+                    <Lock className="w-5 h-5" />
+                  </div>
+                  <h1 className="text-3xl sm:text-5xl font-semibold tracking-tight mb-3">
+                    <span className="text-foreground">Connect to mine </span>
+                    <span className="text-primary drop-shadow-[0_0_24px_hsl(var(--primary)/0.5)]">$BLOB</span>
+                  </h1>
+                  <div className="text-sm text-muted-foreground mb-8 max-w-md mx-auto leading-relaxed">
+                    Blob Run requires a wallet to sign your score and receive block rewards.
+                  </div>
+                  <button
+                    onClick={openConnect}
+                    className="inline-flex items-center gap-2 px-8 py-4 rounded-full bg-primary text-primary-foreground font-semibold text-sm tracking-wide hover:bg-primary/90 transition shadow-[0_0_40px_hsl(var(--primary)/0.4)]"
+                  >
+                    <Wallet className="w-4 h-4" />
+                    Connect wallet
+                  </button>
+                </div>
+              </div>
+            ) : !gameLaunched ? (
               <MineHero blockInfo={blockInfo} onLaunch={() => setGameLaunched(true)} />
             ) : (
               <BlobRunGame wallet={wallet} blockInfo={blockInfo} onEntrySubmit={onEntrySubmit} myEntry={myEntry} />
@@ -1463,11 +1629,28 @@ export default function BlobChainApp() {
             <MiningPanel blockInfo={blockInfo} entries={entries} myEntry={myEntry} chain={chain} />
           </div>
         )}
-        {screen === "wallet" && <WalletScreen wallet={wallet} chain={chain} mempool={mempool} onBroadcast={onTxBroadcast} />}
-        {screen === "mempool" && <Mempool mempool={mempool} wallet={wallet} />}
+        {screen === "wallet" && (
+          wallet ? (
+            <WalletScreen wallet={wallet} chain={chain} mempool={mempool} onBroadcast={onTxBroadcast} />
+          ) : (
+            <div className="glass-hi p-10 text-center space-y-4">
+              <div className="text-sm text-muted-foreground">No wallet connected</div>
+              <button
+                onClick={openConnect}
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition"
+              >
+                <Wallet className="w-4 h-4" />
+                Connect wallet
+              </button>
+            </div>
+          )
+        )}
+        {screen === "mempool" && <Mempool mempool={mempool} wallet={wallet || { address: "" }} />}
         {screen === "chain" && <BlockExplorer chain={chain} blockInfo={blockInfo} />}
         {screen === "network" && <NetworkView nodeCount={nodeCount} chain={chain} blockInfo={blockInfo} />}
       </main>
+
+      {ConnectWalletDialog}
 
       <footer className="fixed bottom-0 left-0 right-0 backdrop-blur-xl bg-background/70 border-t border-border px-5 py-2 flex justify-between items-center text-[10px] text-muted-foreground/70 num">
         <span className="hidden sm:inline">⬡ BLOB CHAIN · Proof-of-Gaming</span>

@@ -1598,7 +1598,30 @@ export default function BlobChainApp() {
       <main className="max-w-6xl mx-auto px-5 py-6 sm:py-8 relative z-10">
         {screen === "mine" && (
           <div className="space-y-6">
-            {!gameLaunched ? (
+            {!wallet ? (
+              <div className="relative overflow-hidden rounded-3xl glass-hi px-6 py-16 sm:py-20 text-center">
+                <div className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[480px] h-[480px] rounded-full bg-primary/10 blur-3xl" />
+                <div className="relative">
+                  <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-primary/10 border border-primary/30 text-primary mb-5">
+                    <Lock className="w-5 h-5" />
+                  </div>
+                  <h1 className="text-3xl sm:text-5xl font-semibold tracking-tight mb-3">
+                    <span className="text-foreground">Connect to mine </span>
+                    <span className="text-primary drop-shadow-[0_0_24px_hsl(var(--primary)/0.5)]">$BLOB</span>
+                  </h1>
+                  <div className="text-sm text-muted-foreground mb-8 max-w-md mx-auto leading-relaxed">
+                    Blob Run requires a wallet to sign your score and receive block rewards.
+                  </div>
+                  <button
+                    onClick={openConnect}
+                    className="inline-flex items-center gap-2 px-8 py-4 rounded-full bg-primary text-primary-foreground font-semibold text-sm tracking-wide hover:bg-primary/90 transition shadow-[0_0_40px_hsl(var(--primary)/0.4)]"
+                  >
+                    <Wallet className="w-4 h-4" />
+                    Connect wallet
+                  </button>
+                </div>
+              </div>
+            ) : !gameLaunched ? (
               <MineHero blockInfo={blockInfo} onLaunch={() => setGameLaunched(true)} />
             ) : (
               <BlobRunGame wallet={wallet} blockInfo={blockInfo} onEntrySubmit={onEntrySubmit} myEntry={myEntry} />
@@ -1606,11 +1629,28 @@ export default function BlobChainApp() {
             <MiningPanel blockInfo={blockInfo} entries={entries} myEntry={myEntry} chain={chain} />
           </div>
         )}
-        {screen === "wallet" && <WalletScreen wallet={wallet} chain={chain} mempool={mempool} onBroadcast={onTxBroadcast} />}
-        {screen === "mempool" && <Mempool mempool={mempool} wallet={wallet} />}
+        {screen === "wallet" && (
+          wallet ? (
+            <WalletScreen wallet={wallet} chain={chain} mempool={mempool} onBroadcast={onTxBroadcast} />
+          ) : (
+            <div className="glass-hi p-10 text-center space-y-4">
+              <div className="text-sm text-muted-foreground">No wallet connected</div>
+              <button
+                onClick={openConnect}
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition"
+              >
+                <Wallet className="w-4 h-4" />
+                Connect wallet
+              </button>
+            </div>
+          )
+        )}
+        {screen === "mempool" && <Mempool mempool={mempool} wallet={wallet || { address: "" }} />}
         {screen === "chain" && <BlockExplorer chain={chain} blockInfo={blockInfo} />}
         {screen === "network" && <NetworkView nodeCount={nodeCount} chain={chain} blockInfo={blockInfo} />}
       </main>
+
+      {ConnectWalletDialog}
 
       <footer className="fixed bottom-0 left-0 right-0 backdrop-blur-xl bg-background/70 border-t border-border px-5 py-2 flex justify-between items-center text-[10px] text-muted-foreground/70 num">
         <span className="hidden sm:inline">⬡ BLOB CHAIN · Proof-of-Gaming</span>

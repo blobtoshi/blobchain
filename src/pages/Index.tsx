@@ -587,6 +587,13 @@ function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry }) {
     raf.current = requestAnimationFrame(loop);
   }, [blockInfo, wallet, onEntrySubmit, myEntry]);
 
+  // Auto-start when mounted
+  useEffect(() => {
+    startRun();
+    return () => cancelAnimationFrame(raf.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const onTap = e => {
     e.preventDefault();
     if (gs.status === "idle" || gs.status === "dead") { startRun(); return; }

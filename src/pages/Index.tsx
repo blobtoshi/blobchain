@@ -593,8 +593,6 @@ function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry }) {
     jRef.current = true; setTimeout(() => { jRef.current = false; }, 120);
   };
 
-  // Expose start to parent via ref-like prop
-  (BlobRunGame as any).__startRun = startRun;
 
   return (
     <div className="space-y-2">

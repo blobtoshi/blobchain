@@ -1307,23 +1307,22 @@ export default function BlobChainApp() {
     if (!nameIn.trim()) { setConnectErr("Enter a miner name"); return; }
     if (pass1.length < 6) { setConnectErr("Passphrase must be at least 6 characters"); return; }
     if (pass1 !== pass2) { setConnectErr("Passphrases do not match"); return; }
-    let parsed: any;
-    try { parsed = JSON.parse(importJson.trim()); }
-    catch { setConnectErr("Invalid JSON"); return; }
-    if (!parsed.address || !parsed.publicKey || !parsed.privateKey) {
-      setConnectErr("Missing address / publicKey / privateKey");
+    const priv = importJson.trim().toLowerCase().replace(/^0x/, "");
+    if (!/^[0-9a-f]{64}$/.test(priv)) {
+      setConnectErr("Private key must be 64 hex characters (32 bytes)");
       return;
     }
-    if (!/^[0-9a-fA-F]{64}$/.test(parsed.privateKey)) { setConnectErr("privateKey must be 64 hex chars"); return; }
-    if (!/^[0-9a-fA-F]{66}$/.test(parsed.publicKey)) { setConnectErr("publicKey must be 66 hex chars (compressed)"); return; }
+    let publicKey: string, address: string;
     try {
-      const derived = pubKeyToAddress(parsed.publicKey.toLowerCase());
-      if (derived !== parsed.address) { setConnectErr("address does not match publicKey"); return; }
-    } catch { setConnectErr("Invalid public key"); return; }
+      publicKey = bytesToHex(secp.getPublicKey(hexToBytes(priv), true));
+      address = pubKeyToAddress(publicKey);
+    } catch (e: any) {
+      setConnectErr("Invalid private key"); return;
+    }
     const w: any = {
-      address: parsed.address,
-      publicKey: parsed.publicKey.toLowerCase(),
-      privateKey: parsed.privateKey.toLowerCase(),
+      address,
+      publicKey,
+      privateKey: priv,
       username: nameIn.trim().slice(0, 24),
     };
     try {
@@ -1589,12 +1588,16 @@ export default function BlobChainApp() {
               />
             </div>
             <div>
-              <label className="label-eyebrow block mb-2">Wallet JSON</label>
+              <label className="label-eyebrow block mb-2">Private key (64 hex characters)</label>
               <textarea
                 value={importJson}
                 onChange={e => setImportJson(e.target.value)}
-                placeholder='{"address":"1…","publicKey":"02… (66 hex)","privateKey":"… (64 hex)"}'
-                rows={5}
+                placeholder="e.g. 1e99423a4ed27608a15a2616a2b0e9e52ced330ac530edcc32c8ffc6a526aedd"
+                rows={3}
+                spellCheck={false}
+                autoCapitalize="off"
+                autoCorrect="off"
+                className="num w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-[12px] leading-relaxed resize-none break-all"
                 className="num w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-[11px] leading-relaxed resize-none"
               />
             </div>

@@ -1336,7 +1336,7 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
           <div className="grid grid-cols-[50px_1fr_60px_70px_40px] sm:grid-cols-[60px_1fr_80px_100px_50px] gap-2 px-3 py-1">
             {["Height", "Winner", "Score", "Reward", "Tx"].map(h => <div key={h} className="label-eyebrow">{h}</div>)}
           </div>
-          {[...chain].reverse().map((b: any) => (
+          {[...chain].reverse().slice(pBlocks * PAGE_SIZE, (pBlocks + 1) * PAGE_SIZE).map((b: any) => (
             <div key={b.height}>
               <div onClick={() => setSelBlock(selBlock === b.height ? null : b.height)}
                 className="glass px-3 py-2.5 cursor-pointer hover:bg-secondary/30 transition grid grid-cols-[50px_1fr_60px_70px_40px] sm:grid-cols-[60px_1fr_80px_100px_50px] gap-2 items-center text-xs">
@@ -1372,6 +1372,7 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
               )}
             </div>
           ))}
+          <Pager page={pBlocks} setPage={setPBlocks} total={chain.length} label="blocks" />
           {chain.length === 0 && (
             <div className="glass text-center py-10 text-sm text-muted-foreground">Chain starts at genesis</div>
           )}
@@ -1386,7 +1387,7 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
           {[...memTxs, ...allTxs].length === 0 && (
             <div className="glass text-center py-10 text-sm text-muted-foreground">No transactions yet</div>
           )}
-          {[...memTxs, ...allTxs].slice(0, 100).map(t => (
+          {[...memTxs, ...allTxs].slice(pTxs * PAGE_SIZE, (pTxs + 1) * PAGE_SIZE).map(t => (
             <div key={t.id}>
               <div onClick={() => setSelTx(selTx === t.id ? null : t.id)}
                 className="glass px-3 py-2.5 cursor-pointer hover:bg-secondary/30 transition grid grid-cols-[18px_1fr_70px_60px_60px] sm:grid-cols-[18px_1fr_1fr_80px_70px_80px] gap-2 items-center text-xs">

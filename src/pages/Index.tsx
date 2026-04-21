@@ -2974,7 +2974,7 @@ export default function BlobChainApp() {
   );
 
   return (
-    <div className="min-h-screen pb-16 relative">
+    <div className="min-h-screen relative">
       {newBlock && (
         <div
           className={`fixed top-16 left-0 right-0 z-[1000] px-6 py-3 backdrop-blur-xl border-b text-center flex justify-center items-center gap-5 ${

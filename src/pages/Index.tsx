@@ -2185,6 +2185,7 @@ function WalletScreen({ wallet, chain, mempool, onBroadcast }: any) {
             ts: tx.timestamp,
             status: "confirmed",
             id: tx.id,
+            memo: tx.memo || "",
           });
         }
       }
@@ -2199,6 +2200,7 @@ function WalletScreen({ wallet, chain, mempool, onBroadcast }: any) {
           ts: tx.timestamp,
           status: "pending",
           id: tx.id,
+          memo: tx.memo || "",
         });
       }
     }
@@ -2299,6 +2301,11 @@ function WalletScreen({ wallet, chain, mempool, onBroadcast }: any) {
                       <div className="num text-xs text-muted-foreground truncate">
                         {isReward ? h.counterparty : (isOut ? "to " : "from ") + h.counterparty}
                       </div>
+                      {h.memo && (
+                        <div className="text-[11px] text-foreground/70 italic truncate mt-0.5">
+                          “{h.memo}”
+                        </div>
+                      )}
                     </div>
                     <div className="text-right shrink-0">
                       <div className={`num text-sm font-semibold ${color}`}>

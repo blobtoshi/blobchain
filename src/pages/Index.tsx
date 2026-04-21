@@ -138,12 +138,19 @@ async function computeBlockHash(b) {
   return sha256hex(header);
 }
 
-function calcBalance(address, chain) {
+function calcBalance(address, chain, mempool?: any[]) {
   let bal = 0;
   for (const block of chain) {
     if (block.winner === address) bal += (block.reward || 0);
     for (const tx of (block.transactions || [])) {
       if (tx.to === address) bal += tx.amount;
+      if (tx.from === address) bal -= (tx.amount + (tx.fee || TX_FEE));
+    }
+  }
+  // Subtract pending outgoing transactions still sitting in the mempool
+  // so the UI reflects spendable balance immediately after sending.
+  if (mempool && mempool.length) {
+    for (const tx of mempool) {
       if (tx.from === address) bal -= (tx.amount + (tx.fee || TX_FEE));
     }
   }
@@ -671,14 +678,14 @@ function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry }) {
 }
 
 // 9. SEND TX FORM ──────────────────────────────────────────────────────────────
-function SendTxForm({ wallet, chain, onBroadcast, onSent }: any) {
+function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent }: any) {
   const [to, setTo] = useState("");
   const [amt, setAmt] = useState("");
   const [st, setSt] = useState("idle");
   const [err, setErr] = useState("");
   const [resolved, setResolved] = useState<{ address: string; username?: string } | null>(null);
   const [resolving, setResolving] = useState(false);
-  const balance = calcBalance(wallet.address, chain);
+  const balance = calcBalance(wallet.address, chain, mempool);
 
   const ADDR_RE = /^[1][1-9A-HJ-NP-Za-km-z]{25,34}$/;
   const USER_RE = /^[A-Za-z0-9_]{3,24}$/;
@@ -1951,7 +1958,7 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
 
 function WalletScreen({ wallet, chain, mempool, onBroadcast }: any) {
   const [copied, setCopied] = useState(false);
-  const balance = calcBalance(wallet.address, chain);
+  const balance = calcBalance(wallet.address, chain, mempool);
   const pending = mempool
     .filter((tx: any) => tx.to === wallet.address)
     .reduce((s: number, tx: any) => s + tx.amount, 0);
@@ -2061,7 +2068,7 @@ function WalletScreen({ wallet, chain, mempool, onBroadcast }: any) {
         <div className="lg:col-span-1 order-1 lg:order-2">
           <div className="glass-hi p-5 sm:p-6 lg:sticky lg:top-20">
             <div className="label-eyebrow mb-4">Send $BLOB</div>
-            <SendTxForm wallet={wallet} chain={chain} onBroadcast={onBroadcast} />
+            <SendTxForm wallet={wallet} chain={chain} mempool={mempool} onBroadcast={onBroadcast} />
           </div>
         </div>
 
@@ -2435,7 +2442,7 @@ export default function BlobChainApp() {
     setMempool(m => [...m, tx]);
   }, []);
 
-  const balance = wallet ? calcBalance(wallet.address, chain) : 0;
+  const balance = wallet ? calcBalance(wallet.address, chain, mempool) : 0;
   const nav = [
     { id: "mine", text: "Mine" },
     { id: "wallet", text: "Wallet" },
@@ -2680,7 +2687,7 @@ export default function BlobChainApp() {
                   <DialogHeader>
                     <DialogTitle className="text-sm font-medium">Send $BLOB</DialogTitle>
                   </DialogHeader>
-                  <SendTxForm wallet={wallet} chain={chain} onBroadcast={onTxBroadcast} />
+                  <SendTxForm wallet={wallet} chain={chain} mempool={mempool} onBroadcast={onTxBroadcast} />
                 </DialogContent>
               </Dialog>
             )}

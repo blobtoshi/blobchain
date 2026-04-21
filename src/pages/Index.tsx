@@ -1712,14 +1712,39 @@ export default function BlobChainApp() {
             )}
 
             {wallet ? (
-              <button
-                onClick={() => setScreen("wallet")}
-                className="flex items-center gap-2 px-3 py-2 rounded-full border border-border hover:border-primary/40 transition text-xs"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
-                <span className="hidden md:inline text-muted-foreground">{wallet.username}</span>
-                <span className="num text-primary">{balance.toFixed(2)}</span>
-              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="flex items-center gap-2 px-3 py-2 rounded-full border border-border hover:border-primary/40 transition text-xs group">
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
+                    <span className="hidden md:inline text-muted-foreground max-w-[100px] truncate">{wallet.username}</span>
+                    <span className="num text-primary">{balance.toFixed(2)}</span>
+                    <ChevronDown className="w-3 h-3 text-muted-foreground group-hover:text-primary transition" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="glass-hi border-border w-56">
+                  <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-muted-foreground font-normal">
+                    Connected as
+                  </DropdownMenuLabel>
+                  <div className="px-2 pb-2">
+                    <div className="text-sm font-medium truncate">{wallet.username}</div>
+                    <div className="num text-[10px] text-muted-foreground truncate">{wallet.address}</div>
+                  </div>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setScreen("wallet")} className="cursor-pointer">
+                    <Wallet className="w-4 h-4 mr-2" /> Open wallet
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => { setShowPriv(false); setSettingsOpen(true); }} className="cursor-pointer">
+                    <SettingsIcon className="w-4 h-4 mr-2" /> Settings
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={disconnectWallet}
+                    className="cursor-pointer text-destructive focus:text-destructive focus:bg-destructive/10"
+                  >
+                    <LogOut className="w-4 h-4 mr-2" /> Disconnect
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             ) : vaultPub ? (
               <button
                 onClick={() => { setUnlockErr(""); setUnlockPass(""); setUnlockOpen(true); }}

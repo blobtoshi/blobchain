@@ -3183,7 +3183,7 @@ export default function BlobChainApp() {
           )
         )}
         {screen === "chain" && <BlockExplorer chain={chain} blockInfo={blockInfo} mempool={mempool} />}
-        {screen === "network" && <NetworkView nodeCount={nodeCount} chain={chain} blockInfo={blockInfo} />}
+        {screen === "network" && <NetworkView nodeCount={nodeCount} chain={chain} blockInfo={blockInfo} mempool={mempool} />}
       </main>
 
       {ConnectWalletDialog}

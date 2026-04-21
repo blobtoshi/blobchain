@@ -1638,9 +1638,11 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
               )}
             </div>
           ))}
-          <Pager page={pBlocks} setPage={setPBlocks} total={chain.length} label="blocks" />
-          {chain.length === 0 && (
+          <Pager page={pBlocks} setPage={setPBlocks} total={blocksFiltered.length} label="blocks" />
+          {chain.length === 0 ? (
             <div className="glass text-center py-10 text-sm text-muted-foreground">Chain starts at genesis</div>
+          ) : blocksFiltered.length === 0 && (
+            <div className="glass text-center py-10 text-xs text-muted-foreground">No blocks match these filters</div>
           )}
         </div>
       )}

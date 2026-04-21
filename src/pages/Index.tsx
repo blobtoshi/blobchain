@@ -1705,6 +1705,44 @@ export default function BlobChainApp() {
 
       {ConnectWalletDialog}
 
+      <Dialog open={unlockOpen} onOpenChange={(o) => { setUnlockOpen(o); if (!o) { setUnlockPass(""); setUnlockErr(""); } }}>
+        <DialogContent className="glass-hi border-border max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-medium tracking-wide">Unlock wallet</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-1">
+            <div className="text-xs text-muted-foreground">
+              {vaultPub?.username ? <>Welcome back, <span className="text-foreground">{vaultPub.username}</span></> : "Enter your passphrase to decrypt your wallet"}
+            </div>
+            <input
+              type="password"
+              value={unlockPass}
+              onChange={e => setUnlockPass(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && !unlocking && unlockExisting()}
+              placeholder="Passphrase"
+              autoFocus
+              className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm"
+            />
+            {unlockErr && <div className="text-xs text-destructive">{unlockErr}</div>}
+            <div className="flex gap-2">
+              <button
+                onClick={() => { disconnectWallet(); setUnlockOpen(false); }}
+                className="px-4 py-3 rounded-lg border border-destructive/30 text-xs text-destructive hover:bg-destructive/10 transition"
+              >
+                Forget wallet
+              </button>
+              <button
+                onClick={unlockExisting}
+                disabled={unlocking || !unlockPass}
+                className="flex-1 py-3 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                {unlocking ? "Decrypting…" : "Unlock"}
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <footer className="fixed bottom-0 left-0 right-0 backdrop-blur-xl bg-background/70 border-t border-border px-5 py-2 flex justify-between items-center text-[10px] text-muted-foreground/70 num">
         <span className="hidden sm:inline">⬡ BLOB CHAIN · Proof-of-Gaming</span>
         <span>Block #{blockInfo.height} · {blockInfo.remaining}s</span>

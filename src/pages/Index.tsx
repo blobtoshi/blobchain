@@ -1337,6 +1337,65 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
     return Array.from(m.values()).sort((a, b) => (b.mined + b.received) - (a.mined + a.received));
   }, [allTxs, players]);
 
+  // Filtered lists
+  const txsAll = useMemo(() => [...memTxs, ...allTxs], [memTxs, allTxs]);
+  const txsFiltered = useMemo(() => applyTxFilters(txsAll, txF), [txsAll, txF]);
+  const memFiltered = useMemo(() => applyTxFilters(memTxs, memF), [memTxs, memF]);
+
+  const blocksFiltered = useMemo(() => {
+    const winner = blkF.winner.trim().toLowerCase();
+    const minH = blkF.minHeight === "" ? null : Number(blkF.minHeight);
+    const maxH = blkF.maxHeight === "" ? null : Number(blkF.maxHeight);
+    const from = dateToTs(blkF.dateFrom);
+    const to = dateToTs(blkF.dateTo, true);
+    const out = (chain as any[]).filter(b => {
+      if (winner) {
+        const ok = (b.winner || "").toLowerCase().includes(winner) ||
+                   (b.winnerUsername || "").toLowerCase().includes(winner);
+        if (!ok) return false;
+      }
+      if (minH !== null && b.height < minH) return false;
+      if (maxH !== null && b.height > maxH) return false;
+      if (from !== null && b.timestamp < from) return false;
+      if (to !== null && b.timestamp > to) return false;
+      const txCount = (b.transactions || []).length;
+      if (blkF.hasTxs === "yes" && txCount === 0) return false;
+      if (blkF.hasTxs === "no" && txCount > 0) return false;
+      return true;
+    });
+    switch (blkF.sort) {
+      case "oldest": out.sort((a, b) => a.height - b.height); break;
+      case "reward-desc": out.sort((a, b) => Number(b.reward || 0) - Number(a.reward || 0)); break;
+      case "score-desc": out.sort((a, b) => (b.winnerScore || 0) - (a.winnerScore || 0)); break;
+      default: out.sort((a, b) => b.height - a.height);
+    }
+    return out;
+  }, [chain, blkF]);
+
+  const addrFiltered = useMemo(() => {
+    const q = addrF.q.trim().toLowerCase();
+    const minB = addrF.minBalance === "" ? null : Number(addrF.minBalance);
+    const out = addressBook.filter(a => {
+      if (q && !a.address.toLowerCase().includes(q) && !(a.username || "").toLowerCase().includes(q)) return false;
+      const bal = a.received + a.mined - a.sent;
+      if (minB !== null && bal < minB) return false;
+      if (addrF.hasMined === "yes" && a.mined <= 0) return false;
+      if (addrF.hasMined === "no" && a.mined > 0) return false;
+      if (addrF.hasTxs === "yes" && a.txCount === 0) return false;
+      if (addrF.hasTxs === "no" && a.txCount > 0) return false;
+      return true;
+    });
+    switch (addrF.sort) {
+      case "balance-asc": out.sort((a, b) => (a.received + a.mined - a.sent) - (b.received + b.mined - b.sent)); break;
+      case "mined-desc": out.sort((a, b) => b.mined - a.mined); break;
+      case "tx-desc": out.sort((a, b) => b.txCount - a.txCount); break;
+      case "recent": out.sort((a, b) => b.lastSeen - a.lastSeen); break;
+      case "username": out.sort((a, b) => (a.username || "~").localeCompare(b.username || "~")); break;
+      default: out.sort((a, b) => (b.received + b.mined - b.sent) - (a.received + a.mined - a.sent));
+    }
+    return out;
+  }, [addressBook, addrF]);
+
   // Search: returns matches across blocks, txs, addresses
   const q = query.trim().toLowerCase();
   const searchResults = useMemo(() => {

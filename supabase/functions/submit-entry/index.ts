@@ -35,7 +35,7 @@ function verifySig(pubHex: string, sigHex: string, data: string): boolean {
 
 const BLOCK_TIME = 120;
 const GENESIS_TIME_MS = 1776731760000;
-function currentHeight() {
+function timeBasedHeight() {
   const now = Math.floor(Date.now() / 1000);
   const genesis = Math.floor(GENESIS_TIME_MS / 1000);
   return Math.floor(Math.max(0, now - genesis) / BLOCK_TIME) + 1;

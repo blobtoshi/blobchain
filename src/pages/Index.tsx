@@ -26,15 +26,41 @@ const HALVING_BLOCKS = 1_000_000;   // halves every 1M blocks
 const MAX_SUPPLY = 20_000_000;       // 10 × 1M × Σ(1/2^n) = 20M $BLOB
 const MAX_BLOCK_SIZE = 1_000_000;   // ~1 MB, Bitcoin-style
 const MAX_TX_SIZE = 100_000;        // ~100 KB, Bitcoin standard tx limit
-const TX_FEE = 0.001;
+const TX_FEE = 0.001;                // legacy fallback for old chain entries
 const BLOB_DECIMALS = 8;             // $BLOB is divisible to 8 decimal places
 const BLOB_UNIT = 1e8;               // 1 $BLOB = 100,000,000 base units (satoshis)
+const BASE_FEE_RATE = 10;            // sat/byte at zero congestion
+const MIN_FEE_RATE = 1;              // absolute floor (sat/byte)
+const MAX_MEMO_BYTES = 80;           // OP_RETURN-style memo limit
 // Round a $BLOB amount to 8-decimal precision (banker-safe via integer base units).
 const to8 = (n: number) => Math.round(Number(n) * BLOB_UNIT) / BLOB_UNIT;
-const GENESIS_TIME_MS = 1776731760000;
+// Canonical tx bytes — must match the server. fee is derived, not part of canon.
+function canonicalTxBytes(tx: {
+  from: string; to: string; amount: number; timestamp: number;
+  feeRate: number; memo: string; publicKey: string; signature: string;
+}): number {
+  const canonical = JSON.stringify({
+    from: tx.from, to: tx.to, amount: tx.amount, timestamp: tx.timestamp,
+    feeRate: tx.feeRate, memo: tx.memo, publicKey: tx.publicKey, signature: tx.signature,
+  });
+  return new TextEncoder().encode(canonical).length;
+}
+const memoBytes = (m: string) => new TextEncoder().encode(m).length;
+// Estimate fee for the UI (signature is 128 hex chars; pubkey 66; address ~34).
+// Yields a stable byte count so the displayed fee matches what the server charges.
+function estimateTxBytes(from: string, to: string, amount: number, ts: number, feeRate: number, memo: string) {
+  const fakeSig = "00".repeat(64);
+  const fakePub = "02" + "00".repeat(32);
+  return canonicalTxBytes({
+    from, to, amount, timestamp: ts, feeRate, memo,
+    publicKey: fakePub, signature: fakeSig,
+  });
+}
+const feeFromRate = (feeRate: number, bytes: number) => Math.ceil(feeRate * bytes) / BLOB_UNIT;
 
 const SB_URL: string | undefined = (import.meta as any)?.env?.VITE_SUPABASE_URL;
 const SB_KEY: string | undefined = (import.meta as any)?.env?.VITE_SUPABASE_ANON_KEY;
+const GENESIS_TIME_MS = 1776731760000;
 
 const CW = 780, CH = 360, GY = 290, PX = 130;
 const GRAVITY = 0.66, JUMP_V = -14.5;
@@ -696,14 +722,42 @@ function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry }) {
 function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent }: any) {
   const [to, setTo] = useState("");
   const [amt, setAmt] = useState("");
+  const [memo, setMemo] = useState("");
   const [st, setSt] = useState("idle");
   const [err, setErr] = useState("");
   const [resolved, setResolved] = useState<{ address: string; username?: string } | null>(null);
   const [resolving, setResolving] = useState(false);
+  const [feeInfo, setFeeInfo] = useState<{ recommendedFeeRate: number; minFeeRate: number; baseFeeRate: number } | null>(null);
+  // Gas preset: 'slow' = 0.5×, 'normal' = 1×, 'fast' = 2×, 'custom' = manual
+  const [preset, setPreset] = useState<"slow" | "normal" | "fast" | "custom">("normal");
+  const [customRate, setCustomRate] = useState<string>("");
   const balance = calcBalance(wallet.address, chain, mempool);
 
   const ADDR_RE = /^[1][1-9A-HJ-NP-Za-km-z]{25,34}$/;
   const USER_RE = /^[A-Za-z0-9_]{3,24}$/;
+
+  // Fetch network fee info on mount, then refresh every 20s while the form is open.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const info = await Relay.fetchFeeInfo();
+      if (!cancelled && info) setFeeInfo(info);
+    };
+    load();
+    const id = setInterval(load, 20_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
+  const recRate = feeInfo?.recommendedFeeRate ?? BASE_FEE_RATE;
+  const presetRates = useMemo(() => ({
+    slow: Math.max(MIN_FEE_RATE, Math.floor(recRate * 0.5)),
+    normal: Math.max(MIN_FEE_RATE, recRate),
+    fast: Math.max(MIN_FEE_RATE, Math.ceil(recRate * 2)),
+  }), [recRate]);
+
+  const activeFeeRate = preset === "custom"
+    ? Math.max(MIN_FEE_RATE, Math.floor(Number(customRate) || 0))
+    : presetRates[preset];
 
   // Live recipient resolution: username → address (case-insensitive),
   // or pass-through if the user typed a valid address.
@@ -732,30 +786,55 @@ function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent }: any) {
     return () => { cancelled = true; };
   }, [to]);
 
+  // Live fee preview (matches what the server will charge).
+  const parsedAmt = (() => { const n = parseFloat(amt); return Number.isFinite(n) && n > 0 ? to8(n) : 0; })();
+  const previewToAddress = resolved?.address || (ADDR_RE.test(to.trim().replace(/^@/, "")) ? to.trim().replace(/^@/, "") : "");
+  const memoLen = memoBytes(memo);
+  const memoOver = memoLen > MAX_MEMO_BYTES;
+  const previewBytes = previewToAddress && parsedAmt > 0 && activeFeeRate >= MIN_FEE_RATE && !memoOver
+    ? estimateTxBytes(wallet.address, previewToAddress, parsedAmt, Date.now(), activeFeeRate, memo)
+    : 0;
+  const previewFee = previewBytes ? feeFromRate(activeFeeRate, previewBytes) : 0;
+  const previewTotal = parsedAmt + previewFee;
+
   async function send() {
     setErr("");
     const parsed = parseFloat(amt);
     const raw = to.trim().replace(/^@/, "");
     if (!raw) { setErr("Enter a recipient (address or @username)"); return; }
     let toAddress = "";
-    if (raw.startsWith("1") && raw.length >= 26) toAddress = raw;
-    else if ((window as any).__resolveUsername) toAddress = await (window as any).__resolveUsername(raw);
+    if (ADDR_RE.test(raw)) toAddress = raw;
+    else if (resolved?.address) toAddress = resolved.address;
     else { setErr("Recipient not found"); return; }
     if (toAddress === wallet.address) { setErr("Cannot send to yourself"); return; }
     if (!Number.isFinite(parsed) || parsed <= 0) { setErr("Invalid amount"); return; }
     const amount = to8(parsed);
     if (amount <= 0) { setErr(`Minimum amount is ${(1 / BLOB_UNIT).toFixed(BLOB_DECIMALS)} $BLOB`); return; }
-    if (amount + TX_FEE > balance) { setErr(`Insufficient balance (need ${(amount + TX_FEE).toFixed(BLOB_DECIMALS)})`); return; }
+    if (memoOver) { setErr(`Memo too long (${memoLen}/${MAX_MEMO_BYTES} bytes)`); return; }
+    if (!Number.isFinite(activeFeeRate) || activeFeeRate < MIN_FEE_RATE) {
+      setErr(`Fee rate must be at least ${MIN_FEE_RATE} sat/byte`); return;
+    }
     setSt("signing");
     try {
       const ts = Date.now();
-      const txid = await sha256hex(`${wallet.address}${toAddress}${amount}${ts}`);
-      const data = `${wallet.address}→${toAddress}:${amount}@${ts}`;
+      const txid = await sha256hex(`${wallet.address}${toAddress}${amount}${ts}${activeFeeRate}${memo}`);
+      // Sign payload v2 — must match server: from→to:amount@ts|fr=feeRate|m=memo
+      const data = `${wallet.address}→${toAddress}:${amount}@${ts}|fr=${activeFeeRate}|m=${memo}`;
       const sig = await signData(wallet.privateKey, data);
+      const bytes = canonicalTxBytes({
+        from: wallet.address, to: toAddress, amount, timestamp: ts,
+        feeRate: activeFeeRate, memo, publicKey: wallet.publicKey, signature: sig,
+      });
+      const fee = feeFromRate(activeFeeRate, bytes);
+      if (amount + fee > balance) {
+        setErr(`Insufficient balance (need ${(amount + fee).toFixed(BLOB_DECIMALS)})`);
+        setSt("idle"); return;
+      }
       const tx = {
         id: txid.slice(0, 40),
         from: wallet.address, fromUsername: wallet.username,
-        to: toAddress, amount, fee: TX_FEE,
+        to: toAddress, amount, fee,
+        feeRate: activeFeeRate, memo,
         signature: sig, publicKey: wallet.publicKey,
         timestamp: ts,
         status: "pending",
@@ -764,7 +843,7 @@ function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent }: any) {
       const res = await Relay.pushTx(tx);
       if (!res.ok) { setErr(res.error || "Broadcast failed"); setSt("idle"); return; }
       onBroadcast(tx);
-      setSt("sent"); setTo(""); setAmt(""); setResolved(null);
+      setSt("sent"); setTo(""); setAmt(""); setMemo(""); setResolved(null);
       setTimeout(() => { setSt("idle"); onSent?.(); }, 1500);
     } catch (e) { setErr(String(e)); setSt("idle"); }
   }
@@ -779,6 +858,24 @@ function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent }: any) {
   const looksLikeUser = trimmed && !ADDR_RE.test(trimmed) && USER_RE.test(trimmed);
   const looksLikeAddr = trimmed && ADDR_RE.test(trimmed);
   const unknownInput = trimmed && !looksLikeUser && !looksLikeAddr;
+
+  const PresetButton = ({ id, title, sub }: { id: "slow" | "normal" | "fast"; title: string; sub: string }) => {
+    const active = preset === id;
+    return (
+      <button
+        type="button"
+        onClick={() => setPreset(id)}
+        className={`flex flex-col items-start px-3 py-2 rounded-lg border text-left transition ${
+          active
+            ? "border-primary/70 bg-primary/10 text-primary"
+            : "border-border bg-secondary/40 text-foreground hover:border-primary/40"
+        }`}
+      >
+        <span className="text-[11px] font-medium tracking-wide">{title}</span>
+        <span className="text-[10px] text-muted-foreground num mt-0.5">{sub}</span>
+      </button>
+    );
+  };
 
   return (
     <div className="space-y-3">
@@ -829,15 +926,85 @@ function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent }: any) {
           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$BLOB</span>
         </div>
       </div>
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>Network fee</span>
-        <span className="num">{TX_FEE} $BLOB → miner</span>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <label className="label-eyebrow block">Memo <span className="text-muted-foreground/60">(optional)</span></label>
+          <span className={`text-[10px] num ${memoOver ? "text-destructive" : "text-muted-foreground"}`}>
+            {memoLen}/{MAX_MEMO_BYTES}B
+          </span>
+        </div>
+        <input
+          value={memo}
+          onChange={e => setMemo(e.target.value)}
+          placeholder="Note attached on-chain (e.g. invoice #1234)"
+          className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm placeholder:text-muted-foreground/60"
+        />
       </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <label className="label-eyebrow block">Gas (network fee rate)</label>
+          <span className="text-[10px] text-muted-foreground num">
+            recommended <span className="text-primary">{recRate}</span> sat/B
+          </span>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <PresetButton id="slow"   title="Slow"   sub={`${presetRates.slow} sat/B`} />
+          <PresetButton id="normal" title="Normal" sub={`${presetRates.normal} sat/B`} />
+          <PresetButton id="fast"   title="Fast"   sub={`${presetRates.fast} sat/B`} />
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => { setPreset("custom"); if (!customRate) setCustomRate(String(recRate)); }}
+            className={`text-[10px] tracking-wide px-2 py-1 rounded border ${
+              preset === "custom" ? "border-primary/60 text-primary" : "border-border text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Custom
+          </button>
+          {preset === "custom" && (
+            <div className="relative flex-1">
+              <input
+                value={customRate}
+                onChange={e => setCustomRate(e.target.value)}
+                type="number"
+                min={MIN_FEE_RATE}
+                step="1"
+                placeholder={String(recRate)}
+                className="w-full px-3 py-1.5 pr-14 rounded bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-xs num"
+              />
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">sat/B</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-border/60 bg-secondary/30 px-3 py-2 text-xs space-y-1">
+        <div className="flex items-center justify-between text-muted-foreground">
+          <span>Fee rate</span>
+          <span className="num">{activeFeeRate} sat/B</span>
+        </div>
+        <div className="flex items-center justify-between text-muted-foreground">
+          <span>Tx size (est.)</span>
+          <span className="num">{previewBytes || "—"} B</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground">Network fee</span>
+          <span className="num text-foreground">{previewFee.toFixed(BLOB_DECIMALS)} $BLOB</span>
+        </div>
+        <div className="flex items-center justify-between border-t border-border/60 pt-1 mt-1">
+          <span className="text-muted-foreground">Total</span>
+          <span className="num text-primary">{previewTotal.toFixed(BLOB_DECIMALS)} $BLOB</span>
+        </div>
+      </div>
+
       {err && <div className="text-xs text-destructive">{err}</div>}
       {st === "sent" && <div className="text-xs text-primary">✓ Broadcast to mempool</div>}
       <button
         onClick={send}
-        disabled={disabled}
+        disabled={disabled || memoOver}
         className="w-full py-3 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition"
       >
         {label}
@@ -999,6 +1166,8 @@ type ExplorerTx = {
   toUsername?: string;
   amount: number;
   fee: number;
+  feeRate?: number;
+  memo?: string;
   timestamp: number;
   status: "confirmed" | "pending";
   block?: number;
@@ -1032,6 +1201,8 @@ function flattenChainTxs(chain: any[]): ExplorerTx[] {
         toUsername: tx.toUsername,
         amount: Number(tx.amount),
         fee: Number(tx.fee || 0),
+        feeRate: tx.feeRate != null ? Number(tx.feeRate) : undefined,
+        memo: tx.memo || "",
         timestamp: tx.timestamp || b.timestamp,
         status: "confirmed",
         block: b.height,
@@ -1052,6 +1223,8 @@ function mempoolToTxs(mempool: any[]): ExplorerTx[] {
     fromUsername: tx.fromUsername,
     amount: Number(tx.amount),
     fee: Number(tx.fee || 0),
+    feeRate: tx.feeRate != null ? Number(tx.feeRate) : undefined,
+    memo: tx.memo || "",
     timestamp: tx.timestamp,
     status: "pending" as const,
     signature: tx.signature,
@@ -2012,6 +2185,7 @@ function WalletScreen({ wallet, chain, mempool, onBroadcast }: any) {
             ts: tx.timestamp,
             status: "confirmed",
             id: tx.id,
+            memo: tx.memo || "",
           });
         }
       }
@@ -2026,6 +2200,7 @@ function WalletScreen({ wallet, chain, mempool, onBroadcast }: any) {
           ts: tx.timestamp,
           status: "pending",
           id: tx.id,
+          memo: tx.memo || "",
         });
       }
     }
@@ -2126,6 +2301,11 @@ function WalletScreen({ wallet, chain, mempool, onBroadcast }: any) {
                       <div className="num text-xs text-muted-foreground truncate">
                         {isReward ? h.counterparty : (isOut ? "to " : "from ") + h.counterparty}
                       </div>
+                      {h.memo && (
+                        <div className="text-[11px] text-foreground/70 italic truncate mt-0.5">
+                          “{h.memo}”
+                        </div>
+                      )}
                     </div>
                     <div className="text-right shrink-0">
                       <div className={`num text-sm font-semibold ${color}`}>

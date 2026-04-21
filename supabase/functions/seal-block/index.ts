@@ -92,16 +92,22 @@ Deno.serve(async (req) => {
       .eq("block_height", targetHeight);
     const entries = entriesRaw ?? [];
 
-    // Pull mempool txs to include (oldest first), then pack under MAX_BLOCK_SIZE
+    // Pull mempool txs to include. Order by fee_rate DESC (highest priority
+    // first) — Bitcoin-style block-template construction.
     const { data: txRows } = await supa
-      .from("blob_mempool").select("*").order("timestamp", { ascending: true }).limit(5000);
+      .from("blob_mempool").select("*")
+      .order("fee_rate", { ascending: false })
+      .order("timestamp", { ascending: true })
+      .limit(5000);
     const allTxs = (txRows ?? []).map(r => ({
       id: r.id,
       from: r.from_address,
       fromUsername: r.from_username,
       to: r.to_address,
       amount: Number(r.amount),
-      fee: Number(r.fee ?? TX_FEE),
+      fee: Number(r.fee ?? 0),
+      feeRate: Number(r.fee_rate ?? 10),
+      memo: r.memo ?? "",
       signature: r.signature,
       publicKey: r.public_key,
       timestamp: Number(r.timestamp),

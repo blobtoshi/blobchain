@@ -179,6 +179,48 @@ export type Database = {
         }
         Relationships: []
       }
+      bridge_requests: {
+        Row: {
+          amount: number
+          blob_tx_id: string
+          confirmed_at: string | null
+          created_at: string
+          error: string | null
+          from_address: string
+          from_username: string | null
+          minted_at: string | null
+          sol_address: string
+          sol_signature: string | null
+          status: string
+        }
+        Insert: {
+          amount: number
+          blob_tx_id: string
+          confirmed_at?: string | null
+          created_at?: string
+          error?: string | null
+          from_address: string
+          from_username?: string | null
+          minted_at?: string | null
+          sol_address: string
+          sol_signature?: string | null
+          status?: string
+        }
+        Update: {
+          amount?: number
+          blob_tx_id?: string
+          confirmed_at?: string | null
+          created_at?: string
+          error?: string | null
+          from_address?: string
+          from_username?: string | null
+          minted_at?: string | null
+          sol_address?: string
+          sol_signature?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

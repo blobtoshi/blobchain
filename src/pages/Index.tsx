@@ -280,22 +280,9 @@ function drawBlob(ctx, x, y, action, wob, sq, _blink) {
   const t = wob * 0.08;
   const floatY = duck ? 0 : Math.sin(t) * 5;
   const floatX = duck ? 0 : Math.sin(t * 0.7) * 1.5;
-  // Pulsing aura
-  const auraPulse = 0.85 + Math.sin(t * 1.3) * 0.15;
-
   ctx.save();
   ctx.translate(x + floatX, y + floatY - (duck ? 0 : 4));
   ctx.scale(1, sq);
-
-  // Soft pulsing outer aura
-  ctx.save();
-  ctx.shadowColor = "#00d8ff";
-  ctx.shadowBlur = 28 * auraPulse;
-  ctx.fillStyle = `rgba(0, 200, 255, ${0.18 * auraPulse})`;
-  ctx.beginPath();
-  ctx.ellipse(0, 0, baseW * 0.5 * auraPulse, baseH * 0.5 * auraPulse, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
 
   // Tiny shadow on the ground beneath the floating sprite
   if (!duck) {

@@ -187,6 +187,8 @@ export async function registerPlayer(p: {
   if ((data as any)?.error) return { ok: false, error: (data as any).error };
   return { ok: true };
 }
+
+// ── PLAYERS ─────────────────────────────────────────────────────────────
 export type Player = {
   address: string;
   username: string;

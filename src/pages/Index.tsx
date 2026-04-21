@@ -1104,6 +1104,164 @@ function Pager({ page, setPage, total, label }: { page: number; setPage: (n: num
   );
 }
 
+// ---------- Explorer filters ----------
+type TxFilters = {
+  addr: string;
+  addrSide: "any" | "from" | "to";
+  minAmount: string;
+  maxAmount: string;
+  dateFrom: string;
+  dateTo: string;
+  status: "all" | "confirmed" | "pending";
+  kind: "all" | "transfer" | "reward";
+  sort: "newest" | "oldest" | "amount-desc" | "amount-asc";
+};
+const emptyTxFilters: TxFilters = {
+  addr: "", addrSide: "any", minAmount: "", maxAmount: "",
+  dateFrom: "", dateTo: "", status: "all", kind: "all", sort: "newest",
+};
+
+type BlockFilters = {
+  winner: string;
+  minHeight: string;
+  maxHeight: string;
+  dateFrom: string;
+  dateTo: string;
+  hasTxs: "all" | "yes" | "no";
+  sort: "newest" | "oldest" | "reward-desc" | "score-desc";
+};
+const emptyBlockFilters: BlockFilters = {
+  winner: "", minHeight: "", maxHeight: "", dateFrom: "", dateTo: "", hasTxs: "all", sort: "newest",
+};
+
+type AddrFilters = {
+  q: string;
+  minBalance: string;
+  hasMined: "all" | "yes" | "no";
+  hasTxs: "all" | "yes" | "no";
+  sort: "balance-desc" | "balance-asc" | "mined-desc" | "tx-desc" | "recent" | "username";
+};
+const emptyAddrFilters: AddrFilters = {
+  q: "", minBalance: "", hasMined: "all", hasTxs: "all", sort: "balance-desc",
+};
+
+function dateToTs(d: string, end = false): number | null {
+  if (!d) return null;
+  const t = new Date(d + (end ? "T23:59:59.999" : "T00:00:00")).getTime();
+  return Number.isFinite(t) ? t : null;
+}
+function applyTxFilters(list: ExplorerTx[], f: TxFilters): ExplorerTx[] {
+  const addr = f.addr.trim().toLowerCase();
+  const min = f.minAmount === "" ? null : Number(f.minAmount);
+  const max = f.maxAmount === "" ? null : Number(f.maxAmount);
+  const from = dateToTs(f.dateFrom);
+  const to = dateToTs(f.dateTo, true);
+  const matchAddr = (val?: string, uname?: string) =>
+    !!val && (val.toLowerCase().includes(addr) || (uname || "").toLowerCase().includes(addr));
+  const out = list.filter(t => {
+    if (f.kind !== "all" && t.kind !== f.kind) return false;
+    if (f.status !== "all" && t.status !== f.status) return false;
+    if (min !== null && t.amount < min) return false;
+    if (max !== null && t.amount > max) return false;
+    if (from !== null && t.timestamp < from) return false;
+    if (to !== null && t.timestamp > to) return false;
+    if (addr) {
+      const inFrom = matchAddr(t.from, t.fromUsername);
+      const inTo = matchAddr(t.to, t.toUsername);
+      if (f.addrSide === "from" && !inFrom) return false;
+      if (f.addrSide === "to" && !inTo) return false;
+      if (f.addrSide === "any" && !inFrom && !inTo) return false;
+    }
+    return true;
+  });
+  switch (f.sort) {
+    case "oldest": out.sort((a, b) => a.timestamp - b.timestamp); break;
+    case "amount-desc": out.sort((a, b) => b.amount - a.amount); break;
+    case "amount-asc": out.sort((a, b) => a.amount - b.amount); break;
+    default: out.sort((a, b) => b.timestamp - a.timestamp);
+  }
+  return out;
+}
+function txFiltersActive(f: TxFilters): number {
+  let n = 0;
+  if (f.addr) n++;
+  if (f.minAmount) n++;
+  if (f.maxAmount) n++;
+  if (f.dateFrom) n++;
+  if (f.dateTo) n++;
+  if (f.status !== "all") n++;
+  if (f.kind !== "all") n++;
+  if (f.sort !== "newest") n++;
+  return n;
+}
+function blockFiltersActive(f: BlockFilters): number {
+  let n = 0;
+  if (f.winner) n++;
+  if (f.minHeight) n++;
+  if (f.maxHeight) n++;
+  if (f.dateFrom) n++;
+  if (f.dateTo) n++;
+  if (f.hasTxs !== "all") n++;
+  if (f.sort !== "newest") n++;
+  return n;
+}
+function addrFiltersActive(f: AddrFilters): number {
+  let n = 0;
+  if (f.q) n++;
+  if (f.minBalance) n++;
+  if (f.hasMined !== "all") n++;
+  if (f.hasTxs !== "all") n++;
+  if (f.sort !== "balance-desc") n++;
+  return n;
+}
+
+function FInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      className={`w-full bg-background/40 border border-border px-2 py-1.5 text-xs num focus:outline-none focus:border-[hsl(var(--warning))] placeholder:text-muted-foreground/60 placeholder:font-sans ${props.className || ""}`}
+    />
+  );
+}
+function FSelect({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: { v: string; l: string }[] }) {
+  return (
+    <select value={value} onChange={e => onChange(e.target.value)}
+      className="w-full bg-background/40 border border-border px-2 py-1.5 text-xs focus:outline-none focus:border-[hsl(var(--warning))]">
+      {options.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+    </select>
+  );
+}
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return <div className="label-eyebrow mb-1">{children}</div>;
+}
+function FilterPanel({ activeCount, onClear, defaultOpen = false, children }: { activeCount: number; onClear: () => void; defaultOpen?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="glass">
+      <div className="flex items-center justify-between px-3 py-2">
+        <button onClick={() => setOpen(o => !o)}
+          className="flex items-center gap-2 text-xs text-foreground/80 hover:text-foreground transition">
+          <SlidersHorizontal className="w-3.5 h-3.5" />
+          <span className="label-eyebrow !mb-0">Filters</span>
+          {activeCount > 0 && (
+            <span className="num text-[10px] px-1.5 py-0.5 bg-[hsl(var(--warning)/0.15)] text-[hsl(var(--warning))]">
+              {activeCount}
+            </span>
+          )}
+          <ChevronDown className={`w-3 h-3 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+        </button>
+        {activeCount > 0 && (
+          <button onClick={onClear}
+            className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition">
+            <X className="w-3 h-3" /> clear all
+          </button>
+        )}
+      </div>
+      {open && <div className="border-t border-border/60 p-3">{children}</div>}
+    </div>
+  );
+}
+
 function BlockExplorer({ chain, blockInfo, mempool }: any) {
   const [tab, setTab] = useState<"overview" | "blocks" | "txs" | "mempool" | "addresses">("overview");
   const [query, setQuery] = useState("");

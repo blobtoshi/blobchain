@@ -5,10 +5,12 @@ import { createClient } from "npm:@supabase/supabase-js@2.95.0";
 import { corsHeaders } from "npm:@supabase/supabase-js@2.95.0/cors";
 
 const BLOCK_TIME = 120;
-const INITIAL_REWARD = 50;
+const INITIAL_REWARD = 10;
 const HALVING_BLOCKS = 210000;
-const GENESIS_TIME_MS = 1745000000000;
+const GENESIS_TIME_MS = 1776731760000;
 const TX_FEE = 0.001;
+const MAX_BLOCK_SIZE = 1_000_000;   // 1 MB, Bitcoin-style
+const MAX_TX_SIZE = 100_000;        // 100 KB, Bitcoin standard tx limit
 
 const GENESIS_HASH =
   "genesis00000000000000000000000000000000000000000000000000000000blob";
@@ -87,10 +89,10 @@ Deno.serve(async (req) => {
       .eq("block_height", targetHeight);
     const entries = entriesRaw ?? [];
 
-    // Pull mempool txs to include (cap 50, oldest first)
+    // Pull mempool txs to include (oldest first), then pack under MAX_BLOCK_SIZE
     const { data: txRows } = await supa
-      .from("blob_mempool").select("*").order("timestamp", { ascending: true }).limit(50);
-    const txs = (txRows ?? []).map(r => ({
+      .from("blob_mempool").select("*").order("timestamp", { ascending: true }).limit(5000);
+    const allTxs = (txRows ?? []).map(r => ({
       id: r.id,
       from: r.from_address,
       fromUsername: r.from_username,
@@ -101,6 +103,17 @@ Deno.serve(async (req) => {
       publicKey: r.public_key,
       timestamp: Number(r.timestamp),
     }));
+    // Reserve ~10 KB of header/coinbase overhead, then greedily pack txs
+    const HEADER_OVERHEAD = 10_000;
+    const txs: typeof allTxs = [];
+    let used = HEADER_OVERHEAD;
+    for (const t of allTxs) {
+      const sz = JSON.stringify(t).length;
+      if (sz > MAX_TX_SIZE) continue; // drop oversize tx
+      if (used + sz > MAX_BLOCK_SIZE) break;
+      txs.push(t);
+      used += sz;
+    }
 
     const seedNum = targetHeight * 6364136223846793 + 1442695040888963407;
     const seed = Math.abs(seedNum % 2147483647);

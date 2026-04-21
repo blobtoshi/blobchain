@@ -8,6 +8,7 @@ import { ripemd160 } from "npm:@noble/hashes@1.5.0/ripemd160";
 import { base58check } from "npm:@scure/base@1.1.9";
 
 const TX_FEE = 0.001;
+const MAX_TX_SIZE = 100_000; // 100 KB, Bitcoin standard tx limit
 const enc = new TextEncoder();
 const b58check = base58check(sha256);
 
@@ -62,7 +63,9 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const body = await req.json();
+    const raw = await req.text();
+    if (raw.length > MAX_TX_SIZE) return bad(`tx too large (max ${MAX_TX_SIZE} bytes)`);
+    const body = JSON.parse(raw);
     const { id, from, fromUsername, to, amount, signature, publicKey, timestamp } = body ?? {};
 
     if (typeof id !== "string" || !ID_RE.test(id)) return bad("invalid id");

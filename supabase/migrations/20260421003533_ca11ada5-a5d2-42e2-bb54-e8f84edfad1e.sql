@@ -1,0 +1,1 @@
+TRUNCATE TABLE public.blob_chain, public.blob_entries, public.blob_mempool, public.blob_players;

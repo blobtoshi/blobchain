@@ -1750,7 +1750,7 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
               )}
             </div>
           ))}
-          <Pager page={pTxs} setPage={setPTxs} total={memTxs.length + allTxs.length} label="transactions" />
+          <Pager page={pTxs} setPage={setPTxs} total={txsFiltered.length} label="transactions" />
         </div>
       )}
 

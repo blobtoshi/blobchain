@@ -138,12 +138,19 @@ async function computeBlockHash(b) {
   return sha256hex(header);
 }
 
-function calcBalance(address, chain) {
+function calcBalance(address, chain, mempool?: any[]) {
   let bal = 0;
   for (const block of chain) {
     if (block.winner === address) bal += (block.reward || 0);
     for (const tx of (block.transactions || [])) {
       if (tx.to === address) bal += tx.amount;
+      if (tx.from === address) bal -= (tx.amount + (tx.fee || TX_FEE));
+    }
+  }
+  // Subtract pending outgoing transactions still sitting in the mempool
+  // so the UI reflects spendable balance immediately after sending.
+  if (mempool && mempool.length) {
+    for (const tx of mempool) {
       if (tx.from === address) bal -= (tx.amount + (tx.fee || TX_FEE));
     }
   }

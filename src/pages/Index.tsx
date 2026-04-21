@@ -677,7 +677,9 @@ function SendTxForm({ wallet, chain, onBroadcast, onSent }: any) {
   async function send() {
     setErr("");
     const amount = parseFloat(amt);
-    if (!to.startsWith("0x") || to.length < 10) { setErr("Invalid address"); return; }
+    if (!to || to.length < 26 || to.length > 35 || !/^[1][1-9A-HJ-NP-Za-km-z]+$/.test(to)) {
+      setErr("Invalid address"); return;
+    }
     if (!amount || amount <= 0) { setErr("Invalid amount"); return; }
     if (amount + TX_FEE > balance) { setErr(`Insufficient balance (need ${(amount + TX_FEE).toFixed(6)})`); return; }
     setSt("signing");
@@ -687,7 +689,7 @@ function SendTxForm({ wallet, chain, onBroadcast, onSent }: any) {
       const data = `${wallet.address}→${to}:${amount}@${ts}`;
       const sig = await signData(wallet.privateKey, data);
       const tx = {
-        id: `0x${txid.slice(0, 40)}`,
+        id: txid.slice(0, 40),
         from: wallet.address, fromUsername: wallet.username,
         to, amount, fee: TX_FEE,
         signature: sig, publicKey: wallet.publicKey,

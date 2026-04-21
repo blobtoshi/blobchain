@@ -1893,7 +1893,6 @@ export default function BlobChainApp() {
   const nav = [
     { id: "mine", text: "Mine" },
     { id: "wallet", text: "Wallet" },
-    { id: "mempool", text: "Mempool" },
     { id: "chain", text: "Explorer" },
     { id: "network", text: "Network" },
   ];
@@ -2266,8 +2265,7 @@ export default function BlobChainApp() {
             </div>
           )
         )}
-        {screen === "mempool" && <Mempool mempool={mempool} wallet={wallet || { address: "" }} />}
-        {screen === "chain" && <BlockExplorer chain={chain} blockInfo={blockInfo} />}
+        {screen === "chain" && <BlockExplorer chain={chain} blockInfo={blockInfo} mempool={mempool} />}
         {screen === "network" && <NetworkView nodeCount={nodeCount} chain={chain} blockInfo={blockInfo} />}
       </main>
 

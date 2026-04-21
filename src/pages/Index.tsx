@@ -1606,6 +1606,14 @@ export default function BlobChainApp() {
                 <span className="hidden md:inline text-muted-foreground">{wallet.username}</span>
                 <span className="num text-primary">{balance.toFixed(2)}</span>
               </button>
+            ) : vaultPub ? (
+              <button
+                onClick={() => { setUnlockErr(""); setUnlockPass(""); setUnlockOpen(true); }}
+                className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary text-primary-foreground text-xs font-semibold tracking-wide hover:bg-primary/90 transition shadow-[0_0_24px_hsl(var(--primary)/0.35)]"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                Unlock wallet
+              </button>
             ) : (
               <button
                 onClick={openConnect}

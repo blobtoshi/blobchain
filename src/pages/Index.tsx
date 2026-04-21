@@ -21,7 +21,7 @@ import runnerArt from "@/assets/runner.png";
 const BLOCK_TIME = 120;
 const INITIAL_REWARD = 10;
 const HALVING_BLOCKS = 210000;
-const MAX_SUPPLY = 21000000;
+const MAX_SUPPLY = 20000000;
 const MAX_BLOCK_SIZE = 1_000_000;   // ~1 MB, Bitcoin-style
 const MAX_TX_SIZE = 100_000;        // ~100 KB, Bitcoin standard tx limit
 const TX_FEE = 0.001;

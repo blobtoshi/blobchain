@@ -1958,7 +1958,7 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
 
 function WalletScreen({ wallet, chain, mempool, onBroadcast }: any) {
   const [copied, setCopied] = useState(false);
-  const balance = calcBalance(wallet.address, chain);
+  const balance = calcBalance(wallet.address, chain, mempool);
   const pending = mempool
     .filter((tx: any) => tx.to === wallet.address)
     .reduce((s: number, tx: any) => s + tx.amount, 0);

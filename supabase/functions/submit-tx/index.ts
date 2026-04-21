@@ -63,7 +63,9 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const body = await req.json();
+    const raw = await req.text();
+    if (raw.length > MAX_TX_SIZE) return bad(`tx too large (max ${MAX_TX_SIZE} bytes)`);
+    const body = JSON.parse(raw);
     const { id, from, fromUsername, to, amount, signature, publicKey, timestamp } = body ?? {};
 
     if (typeof id !== "string" || !ID_RE.test(id)) return bad("invalid id");

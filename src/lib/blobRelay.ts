@@ -246,6 +246,72 @@ export async function fetchPlayers(): Promise<Player[]> {
   }));
 }
 
+// ── BRIDGE (Solana) ────────────────────────────────────────────────────
+export type BridgeRequest = {
+  blob_tx_id: string;
+  from_address: string;
+  from_username: string | null;
+  sol_address: string;
+  amount: number;
+  status: "pending" | "confirmed" | "minting" | "minted" | "failed";
+  sol_signature: string | null;
+  error: string | null;
+  created_at: string;
+  confirmed_at: string | null;
+  minted_at: string | null;
+};
+
+export type BridgeConfig = {
+  bridgeAddress: string;
+  splMintAddress: string | null;
+};
+
+export async function fetchBridgeConfig(): Promise<BridgeConfig | null> {
+  try {
+    const url = `${(import.meta as any).env.VITE_SUPABASE_URL}/functions/v1/bridge-mint/config`;
+    const res = await fetch(url, {
+      headers: { apikey: (import.meta as any).env.VITE_SUPABASE_PUBLISHABLE_KEY },
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as BridgeConfig;
+  } catch (e) {
+    console.error("[relay] fetchBridgeConfig", e);
+    return null;
+  }
+}
+
+export async function registerBridgeRequest(p: {
+  blob_tx_id: string;
+  sol_address: string;
+  amount: number;
+  from_address: string;
+  from_username?: string;
+}): Promise<{ ok: boolean; error?: string; data?: BridgeRequest }> {
+  const { data, error } = await supabase.functions.invoke("bridge-mint", { body: p });
+  if (error) return { ok: false, error: error.message };
+  if ((data as any)?.error) return { ok: false, error: (data as any).error };
+  return { ok: true, data: data as BridgeRequest };
+}
+
+export async function pollBridgeRequest(blob_tx_id: string): Promise<BridgeRequest | null> {
+  try {
+    const url = `${(import.meta as any).env.VITE_SUPABASE_URL}/functions/v1/bridge-mint?blob_tx_id=${encodeURIComponent(blob_tx_id)}`;
+    const res = await fetch(url, {
+      headers: { apikey: (import.meta as any).env.VITE_SUPABASE_PUBLISHABLE_KEY },
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as BridgeRequest;
+  } catch { return null; }
+}
+
+export async function fetchBridgeHistory(address?: string): Promise<BridgeRequest[]> {
+  let q = supabase.from("bridge_requests").select("*").order("created_at", { ascending: false }).limit(50);
+  if (address) q = q.eq("from_address", address);
+  const { data, error } = await q;
+  if (error) { console.error("[relay] fetchBridgeHistory", error); return []; }
+  return (data ?? []) as BridgeRequest[];
+}
+
 // ── REALTIME ────────────────────────────────────────────────────────────
 export type RelayHandlers = {
   onBlock?: (b: Block) => void;

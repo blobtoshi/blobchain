@@ -16,7 +16,7 @@ import { base58check } from "@scure/base";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Send, Play, Wallet, Plus, Download, Lock, Settings as SettingsIcon, LogOut, ChevronDown, ArrowDownLeft, ArrowUpRight, Trophy, Eye, EyeOff, Search, SlidersHorizontal, X, Zap } from "lucide-react";
+import { Send, Play, Wallet, Plus, Download, Lock, Settings as SettingsIcon, LogOut, ChevronDown, ArrowDownLeft, ArrowUpRight, Trophy, Eye, EyeOff, Search, SlidersHorizontal, X, Zap, ArrowLeftRight, ExternalLink, Loader2, CheckCircle2, AlertCircle, Copy } from "lucide-react";
 import runnerArt from "@/assets/blob-sprite.png";
 import blobSprite from "@/assets/blob-sprite.png";
 
@@ -2822,6 +2822,7 @@ export default function BlobChainApp() {
   const nav = [
     { id: "mine", text: "Mine" },
     { id: "wallet", text: "Wallet" },
+    { id: "bridge", text: "Bridge" },
     { id: "chain", text: "Explorer" },
     { id: "network", text: "Network" },
   ];
@@ -3181,6 +3182,21 @@ export default function BlobChainApp() {
         {screen === "wallet" && (
           wallet ? (
             <WalletScreen wallet={wallet} chain={chain} mempool={mempool} onBroadcast={onTxBroadcast} />
+          ) : (
+            <div className="glass-hi p-10 text-center space-y-4">
+              <div className="text-sm text-muted-foreground">{vaultPub ? "Wallet locked" : "No wallet connected"}</div>
+              <button
+                onClick={vaultPub ? () => { setUnlockErr(""); setUnlockPass(""); setUnlockOpen(true); } : openConnect}
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition"
+              >
+                {vaultPub ? <><Lock className="w-4 h-4" /> Unlock wallet</> : <><Wallet className="w-4 h-4" /> Connect wallet</>}
+              </button>
+            </div>
+          )
+        )}
+        {screen === "bridge" && (
+          wallet ? (
+            <BridgeScreen wallet={wallet} chain={chain} mempool={mempool} onBroadcast={onTxBroadcast} />
           ) : (
             <div className="glass-hi p-10 text-center space-y-4">
               <div className="text-sm text-muted-foreground">{vaultPub ? "Wallet locked" : "No wallet connected"}</div>

@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import * as Relay from "@/lib/blobRelay";
+import * as Vault from "@/lib/walletVault";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Send, Play, Wallet, Plus, Download, Lock } from "lucide-react";
 import runnerArt from "@/assets/runner.png";

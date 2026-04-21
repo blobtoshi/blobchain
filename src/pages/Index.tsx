@@ -1227,10 +1227,16 @@ export default function BlobChainApp() {
       setConnectErr("Missing address / publicKey / privateKey");
       return;
     }
+    if (!/^[0-9a-fA-F]{64}$/.test(parsed.privateKey)) { setConnectErr("privateKey must be 64 hex chars"); return; }
+    if (!/^[0-9a-fA-F]{66}$/.test(parsed.publicKey)) { setConnectErr("publicKey must be 66 hex chars (compressed)"); return; }
+    try {
+      const derived = pubKeyToAddress(parsed.publicKey.toLowerCase());
+      if (derived !== parsed.address) { setConnectErr("address does not match publicKey"); return; }
+    } catch { setConnectErr("Invalid public key"); return; }
     const w: any = {
       address: parsed.address,
-      publicKey: parsed.publicKey,
-      privateKey: parsed.privateKey,
+      publicKey: parsed.publicKey.toLowerCase(),
+      privateKey: parsed.privateKey.toLowerCase(),
       username: nameIn.trim().slice(0, 24),
     };
     try {

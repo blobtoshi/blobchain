@@ -19,14 +19,14 @@ import {
   PublicKey,
   sendAndConfirmTransaction,
   Transaction,
-} from "npm:@solana/web3.js@1.95.4";
+} from "https://esm.sh/@solana/web3.js@1.95.4?target=denonext";
 import {
   createAssociatedTokenAccountIdempotentInstruction,
   createMintToInstruction,
   getAssociatedTokenAddress,
   getMint,
-} from "npm:@solana/spl-token@0.4.9";
-import bs58 from "npm:bs58@5.0.0";
+} from "https://esm.sh/@solana/spl-token@0.4.9?target=denonext&deps=@solana/web3.js@1.95.4";
+import bs58 from "https://esm.sh/bs58@5.0.0?target=denonext";
 
 // Placeholder bridge deposit address on Blob Chain. Swap with the real one later.
 const BRIDGE_ADDRESS = "1BridgePlaceholder111111111111111111";

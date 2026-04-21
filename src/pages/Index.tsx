@@ -15,7 +15,7 @@ import { ripemd160 } from "@noble/hashes/ripemd160";
 import { base58check } from "@scure/base";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Send, Play, Wallet, Plus, Download, Lock, Settings as SettingsIcon, LogOut, ChevronDown, ArrowDownLeft, ArrowUpRight, Trophy, Eye, EyeOff, Search } from "lucide-react";
+import { Send, Play, Wallet, Plus, Download, Lock, Settings as SettingsIcon, LogOut, ChevronDown, ArrowDownLeft, ArrowUpRight, Trophy, Eye, EyeOff, Search, SlidersHorizontal, X } from "lucide-react";
 import runnerArt from "@/assets/runner.png";
 
 // 1. CONFIG ────────────────────────────────────────────────────────────────────
@@ -1104,6 +1104,164 @@ function Pager({ page, setPage, total, label }: { page: number; setPage: (n: num
   );
 }
 
+// ---------- Explorer filters ----------
+type TxFilters = {
+  addr: string;
+  addrSide: "any" | "from" | "to";
+  minAmount: string;
+  maxAmount: string;
+  dateFrom: string;
+  dateTo: string;
+  status: "all" | "confirmed" | "pending";
+  kind: "all" | "transfer" | "reward";
+  sort: "newest" | "oldest" | "amount-desc" | "amount-asc";
+};
+const emptyTxFilters: TxFilters = {
+  addr: "", addrSide: "any", minAmount: "", maxAmount: "",
+  dateFrom: "", dateTo: "", status: "all", kind: "all", sort: "newest",
+};
+
+type BlockFilters = {
+  winner: string;
+  minHeight: string;
+  maxHeight: string;
+  dateFrom: string;
+  dateTo: string;
+  hasTxs: "all" | "yes" | "no";
+  sort: "newest" | "oldest" | "reward-desc" | "score-desc";
+};
+const emptyBlockFilters: BlockFilters = {
+  winner: "", minHeight: "", maxHeight: "", dateFrom: "", dateTo: "", hasTxs: "all", sort: "newest",
+};
+
+type AddrFilters = {
+  q: string;
+  minBalance: string;
+  hasMined: "all" | "yes" | "no";
+  hasTxs: "all" | "yes" | "no";
+  sort: "balance-desc" | "balance-asc" | "mined-desc" | "tx-desc" | "recent" | "username";
+};
+const emptyAddrFilters: AddrFilters = {
+  q: "", minBalance: "", hasMined: "all", hasTxs: "all", sort: "balance-desc",
+};
+
+function dateToTs(d: string, end = false): number | null {
+  if (!d) return null;
+  const t = new Date(d + (end ? "T23:59:59.999" : "T00:00:00")).getTime();
+  return Number.isFinite(t) ? t : null;
+}
+function applyTxFilters(list: ExplorerTx[], f: TxFilters): ExplorerTx[] {
+  const addr = f.addr.trim().toLowerCase();
+  const min = f.minAmount === "" ? null : Number(f.minAmount);
+  const max = f.maxAmount === "" ? null : Number(f.maxAmount);
+  const from = dateToTs(f.dateFrom);
+  const to = dateToTs(f.dateTo, true);
+  const matchAddr = (val?: string, uname?: string) =>
+    !!val && (val.toLowerCase().includes(addr) || (uname || "").toLowerCase().includes(addr));
+  const out = list.filter(t => {
+    if (f.kind !== "all" && t.kind !== f.kind) return false;
+    if (f.status !== "all" && t.status !== f.status) return false;
+    if (min !== null && t.amount < min) return false;
+    if (max !== null && t.amount > max) return false;
+    if (from !== null && t.timestamp < from) return false;
+    if (to !== null && t.timestamp > to) return false;
+    if (addr) {
+      const inFrom = matchAddr(t.from, t.fromUsername);
+      const inTo = matchAddr(t.to, t.toUsername);
+      if (f.addrSide === "from" && !inFrom) return false;
+      if (f.addrSide === "to" && !inTo) return false;
+      if (f.addrSide === "any" && !inFrom && !inTo) return false;
+    }
+    return true;
+  });
+  switch (f.sort) {
+    case "oldest": out.sort((a, b) => a.timestamp - b.timestamp); break;
+    case "amount-desc": out.sort((a, b) => b.amount - a.amount); break;
+    case "amount-asc": out.sort((a, b) => a.amount - b.amount); break;
+    default: out.sort((a, b) => b.timestamp - a.timestamp);
+  }
+  return out;
+}
+function txFiltersActive(f: TxFilters): number {
+  let n = 0;
+  if (f.addr) n++;
+  if (f.minAmount) n++;
+  if (f.maxAmount) n++;
+  if (f.dateFrom) n++;
+  if (f.dateTo) n++;
+  if (f.status !== "all") n++;
+  if (f.kind !== "all") n++;
+  if (f.sort !== "newest") n++;
+  return n;
+}
+function blockFiltersActive(f: BlockFilters): number {
+  let n = 0;
+  if (f.winner) n++;
+  if (f.minHeight) n++;
+  if (f.maxHeight) n++;
+  if (f.dateFrom) n++;
+  if (f.dateTo) n++;
+  if (f.hasTxs !== "all") n++;
+  if (f.sort !== "newest") n++;
+  return n;
+}
+function addrFiltersActive(f: AddrFilters): number {
+  let n = 0;
+  if (f.q) n++;
+  if (f.minBalance) n++;
+  if (f.hasMined !== "all") n++;
+  if (f.hasTxs !== "all") n++;
+  if (f.sort !== "balance-desc") n++;
+  return n;
+}
+
+function FInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      className={`w-full bg-background/40 border border-border px-2 py-1.5 text-xs num focus:outline-none focus:border-[hsl(var(--warning))] placeholder:text-muted-foreground/60 placeholder:font-sans ${props.className || ""}`}
+    />
+  );
+}
+function FSelect({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: { v: string; l: string }[] }) {
+  return (
+    <select value={value} onChange={e => onChange(e.target.value)}
+      className="w-full bg-background/40 border border-border px-2 py-1.5 text-xs focus:outline-none focus:border-[hsl(var(--warning))]">
+      {options.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+    </select>
+  );
+}
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return <div className="label-eyebrow mb-1">{children}</div>;
+}
+function FilterPanel({ activeCount, onClear, defaultOpen = false, children }: { activeCount: number; onClear: () => void; defaultOpen?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="glass">
+      <div className="flex items-center justify-between px-3 py-2">
+        <button onClick={() => setOpen(o => !o)}
+          className="flex items-center gap-2 text-xs text-foreground/80 hover:text-foreground transition">
+          <SlidersHorizontal className="w-3.5 h-3.5" />
+          <span className="label-eyebrow !mb-0">Filters</span>
+          {activeCount > 0 && (
+            <span className="num text-[10px] px-1.5 py-0.5 bg-[hsl(var(--warning)/0.15)] text-[hsl(var(--warning))]">
+              {activeCount}
+            </span>
+          )}
+          <ChevronDown className={`w-3 h-3 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+        </button>
+        {activeCount > 0 && (
+          <button onClick={onClear}
+            className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition">
+            <X className="w-3 h-3" /> clear all
+          </button>
+        )}
+      </div>
+      {open && <div className="border-t border-border/60 p-3">{children}</div>}
+    </div>
+  );
+}
+
 function BlockExplorer({ chain, blockInfo, mempool }: any) {
   const [tab, setTab] = useState<"overview" | "blocks" | "txs" | "mempool" | "addresses">("overview");
   const [query, setQuery] = useState("");
@@ -1117,8 +1275,19 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
   const [pTxs, setPTxs] = useState(0);
   const [pMem, setPMem] = useState(0);
   const [pAddr, setPAddr] = useState(0);
-  // Reset page when switching tabs or when an address detail opens
+
+  // Filters per tab
+  const [txF, setTxF] = useState<TxFilters>(emptyTxFilters);
+  const [memF, setMemF] = useState<TxFilters>(emptyTxFilters);
+  const [blkF, setBlkF] = useState<BlockFilters>(emptyBlockFilters);
+  const [addrF, setAddrF] = useState<AddrFilters>(emptyAddrFilters);
+
+  // Reset page when switching tabs or when filters change
   useEffect(() => { setPBlocks(0); setPTxs(0); setPMem(0); setPAddr(0); }, [tab]);
+  useEffect(() => { setPTxs(0); }, [txF]);
+  useEffect(() => { setPMem(0); }, [memF]);
+  useEffect(() => { setPBlocks(0); }, [blkF]);
+  useEffect(() => { setPAddr(0); }, [addrF]);
 
   // Pull every registered player so addresses without any tx history still
   // appear in the explorer (e.g. freshly-created wallets that haven't mined
@@ -1167,6 +1336,65 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
     }
     return Array.from(m.values()).sort((a, b) => (b.mined + b.received) - (a.mined + a.received));
   }, [allTxs, players]);
+
+  // Filtered lists
+  const txsAll = useMemo(() => [...memTxs, ...allTxs], [memTxs, allTxs]);
+  const txsFiltered = useMemo(() => applyTxFilters(txsAll, txF), [txsAll, txF]);
+  const memFiltered = useMemo(() => applyTxFilters(memTxs, memF), [memTxs, memF]);
+
+  const blocksFiltered = useMemo(() => {
+    const winner = blkF.winner.trim().toLowerCase();
+    const minH = blkF.minHeight === "" ? null : Number(blkF.minHeight);
+    const maxH = blkF.maxHeight === "" ? null : Number(blkF.maxHeight);
+    const from = dateToTs(blkF.dateFrom);
+    const to = dateToTs(blkF.dateTo, true);
+    const out = (chain as any[]).filter(b => {
+      if (winner) {
+        const ok = (b.winner || "").toLowerCase().includes(winner) ||
+                   (b.winnerUsername || "").toLowerCase().includes(winner);
+        if (!ok) return false;
+      }
+      if (minH !== null && b.height < minH) return false;
+      if (maxH !== null && b.height > maxH) return false;
+      if (from !== null && b.timestamp < from) return false;
+      if (to !== null && b.timestamp > to) return false;
+      const txCount = (b.transactions || []).length;
+      if (blkF.hasTxs === "yes" && txCount === 0) return false;
+      if (blkF.hasTxs === "no" && txCount > 0) return false;
+      return true;
+    });
+    switch (blkF.sort) {
+      case "oldest": out.sort((a, b) => a.height - b.height); break;
+      case "reward-desc": out.sort((a, b) => Number(b.reward || 0) - Number(a.reward || 0)); break;
+      case "score-desc": out.sort((a, b) => (b.winnerScore || 0) - (a.winnerScore || 0)); break;
+      default: out.sort((a, b) => b.height - a.height);
+    }
+    return out;
+  }, [chain, blkF]);
+
+  const addrFiltered = useMemo(() => {
+    const q = addrF.q.trim().toLowerCase();
+    const minB = addrF.minBalance === "" ? null : Number(addrF.minBalance);
+    const out = addressBook.filter(a => {
+      if (q && !a.address.toLowerCase().includes(q) && !(a.username || "").toLowerCase().includes(q)) return false;
+      const bal = a.received + a.mined - a.sent;
+      if (minB !== null && bal < minB) return false;
+      if (addrF.hasMined === "yes" && a.mined <= 0) return false;
+      if (addrF.hasMined === "no" && a.mined > 0) return false;
+      if (addrF.hasTxs === "yes" && a.txCount === 0) return false;
+      if (addrF.hasTxs === "no" && a.txCount > 0) return false;
+      return true;
+    });
+    switch (addrF.sort) {
+      case "balance-asc": out.sort((a, b) => (a.received + a.mined - a.sent) - (b.received + b.mined - b.sent)); break;
+      case "mined-desc": out.sort((a, b) => b.mined - a.mined); break;
+      case "tx-desc": out.sort((a, b) => b.txCount - a.txCount); break;
+      case "recent": out.sort((a, b) => b.lastSeen - a.lastSeen); break;
+      case "username": out.sort((a, b) => (a.username || "~").localeCompare(b.username || "~")); break;
+      default: out.sort((a, b) => (b.received + b.mined - b.sent) - (a.received + a.mined - a.sent));
+    }
+    return out;
+  }, [addressBook, addrF]);
 
   // Search: returns matches across blocks, txs, addresses
   const q = query.trim().toLowerCase();
@@ -1327,6 +1555,43 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
 
       {tab === "blocks" && (
         <div className="space-y-1.5">
+          <FilterPanel activeCount={blockFiltersActive(blkF)} onClear={() => setBlkF(emptyBlockFilters)}>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              <div className="col-span-2 sm:col-span-3 lg:col-span-2">
+                <FieldLabel>Winner (address or username)</FieldLabel>
+                <FInput value={blkF.winner} onChange={e => setBlkF({ ...blkF, winner: e.target.value })} placeholder="address or @username" />
+              </div>
+              <div>
+                <FieldLabel>Min height</FieldLabel>
+                <FInput type="number" value={blkF.minHeight} onChange={e => setBlkF({ ...blkF, minHeight: e.target.value })} placeholder="0" />
+              </div>
+              <div>
+                <FieldLabel>Max height</FieldLabel>
+                <FInput type="number" value={blkF.maxHeight} onChange={e => setBlkF({ ...blkF, maxHeight: e.target.value })} placeholder="∞" />
+              </div>
+              <div>
+                <FieldLabel>From date</FieldLabel>
+                <FInput type="date" value={blkF.dateFrom} onChange={e => setBlkF({ ...blkF, dateFrom: e.target.value })} />
+              </div>
+              <div>
+                <FieldLabel>To date</FieldLabel>
+                <FInput type="date" value={blkF.dateTo} onChange={e => setBlkF({ ...blkF, dateTo: e.target.value })} />
+              </div>
+              <div>
+                <FieldLabel>Has transactions</FieldLabel>
+                <FSelect value={blkF.hasTxs} onChange={v => setBlkF({ ...blkF, hasTxs: v as any })}
+                  options={[{ v: "all", l: "Any" }, { v: "yes", l: "With txs" }, { v: "no", l: "Empty blocks" }]} />
+              </div>
+              <div>
+                <FieldLabel>Sort by</FieldLabel>
+                <FSelect value={blkF.sort} onChange={v => setBlkF({ ...blkF, sort: v as any })}
+                  options={[{ v: "newest", l: "Newest" }, { v: "oldest", l: "Oldest" }, { v: "reward-desc", l: "Highest reward" }, { v: "score-desc", l: "Highest score" }]} />
+              </div>
+            </div>
+          </FilterPanel>
+          <div className="flex items-center justify-between px-1 text-[10px] text-muted-foreground num">
+            <span>{blocksFiltered.length} of {chain.length} blocks</span>
+          </div>
           <div className="glass-hi px-3 py-2.5 ring-1 ring-[hsl(var(--warning)/0.2)] grid grid-cols-[50px_1fr_60px_70px_40px] sm:grid-cols-[60px_1fr_80px_100px_50px] gap-2 items-center text-xs">
             <span className="num text-[hsl(var(--warning))]">#{blockInfo.height}</span>
             <span className="text-muted-foreground">⏳ mining · {blockInfo.remaining}s</span>
@@ -1337,7 +1602,7 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
           <div className="grid grid-cols-[50px_1fr_60px_70px_40px] sm:grid-cols-[60px_1fr_80px_100px_50px] gap-2 px-3 py-1">
             {["Height", "Winner", "Score", "Reward", "Tx"].map(h => <div key={h} className="label-eyebrow">{h}</div>)}
           </div>
-          {[...chain].reverse().slice(pBlocks * PAGE_SIZE, (pBlocks + 1) * PAGE_SIZE).map((b: any) => (
+          {blocksFiltered.slice(pBlocks * PAGE_SIZE, (pBlocks + 1) * PAGE_SIZE).map((b: any) => (
             <div key={b.height}>
               <div onClick={() => setSelBlock(selBlock === b.height ? null : b.height)}
                 className="glass px-3 py-2.5 cursor-pointer hover:bg-secondary/30 transition grid grid-cols-[50px_1fr_60px_70px_40px] sm:grid-cols-[60px_1fr_80px_100px_50px] gap-2 items-center text-xs">
@@ -1373,22 +1638,76 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
               )}
             </div>
           ))}
-          <Pager page={pBlocks} setPage={setPBlocks} total={chain.length} label="blocks" />
-          {chain.length === 0 && (
+          <Pager page={pBlocks} setPage={setPBlocks} total={blocksFiltered.length} label="blocks" />
+          {chain.length === 0 ? (
             <div className="glass text-center py-10 text-sm text-muted-foreground">Chain starts at genesis</div>
+          ) : blocksFiltered.length === 0 && (
+            <div className="glass text-center py-10 text-xs text-muted-foreground">No blocks match these filters</div>
           )}
         </div>
       )}
 
       {tab === "txs" && (
         <div className="space-y-1.5">
+          <FilterPanel activeCount={txFiltersActive(txF)} onClear={() => setTxF(emptyTxFilters)}>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              <div className="col-span-2 sm:col-span-2">
+                <FieldLabel>Address (from / to)</FieldLabel>
+                <FInput value={txF.addr} onChange={e => setTxF({ ...txF, addr: e.target.value })} placeholder="address or @username" />
+              </div>
+              <div>
+                <FieldLabel>Side</FieldLabel>
+                <FSelect value={txF.addrSide} onChange={v => setTxF({ ...txF, addrSide: v as any })}
+                  options={[{ v: "any", l: "Either" }, { v: "from", l: "Sender (from)" }, { v: "to", l: "Recipient (to)" }]} />
+              </div>
+              <div>
+                <FieldLabel>Type</FieldLabel>
+                <FSelect value={txF.kind} onChange={v => setTxF({ ...txF, kind: v as any })}
+                  options={[{ v: "all", l: "All" }, { v: "transfer", l: "Transfers" }, { v: "reward", l: "Block rewards" }]} />
+              </div>
+              <div>
+                <FieldLabel>Min amount ⬡</FieldLabel>
+                <FInput type="number" value={txF.minAmount} onChange={e => setTxF({ ...txF, minAmount: e.target.value })} placeholder="0" />
+              </div>
+              <div>
+                <FieldLabel>Max amount ⬡</FieldLabel>
+                <FInput type="number" value={txF.maxAmount} onChange={e => setTxF({ ...txF, maxAmount: e.target.value })} placeholder="∞" />
+              </div>
+              <div>
+                <FieldLabel>From date</FieldLabel>
+                <FInput type="date" value={txF.dateFrom} onChange={e => setTxF({ ...txF, dateFrom: e.target.value })} />
+              </div>
+              <div>
+                <FieldLabel>To date</FieldLabel>
+                <FInput type="date" value={txF.dateTo} onChange={e => setTxF({ ...txF, dateTo: e.target.value })} />
+              </div>
+              <div>
+                <FieldLabel>Status</FieldLabel>
+                <FSelect value={txF.status} onChange={v => setTxF({ ...txF, status: v as any })}
+                  options={[{ v: "all", l: "All" }, { v: "confirmed", l: "Confirmed" }, { v: "pending", l: "Pending" }]} />
+              </div>
+              <div>
+                <FieldLabel>Sort by</FieldLabel>
+                <FSelect value={txF.sort} onChange={v => setTxF({ ...txF, sort: v as any })}
+                  options={[{ v: "newest", l: "Newest" }, { v: "oldest", l: "Oldest" }, { v: "amount-desc", l: "Largest amount" }, { v: "amount-asc", l: "Smallest amount" }]} />
+              </div>
+            </div>
+          </FilterPanel>
+          <div className="flex items-center justify-between px-1 text-[10px] text-muted-foreground num">
+            <span>{txsFiltered.length} of {txsAll.length} transactions</span>
+            {txsFiltered.length > 0 && (
+              <span>volume {txsFiltered.reduce((s, t) => s + t.amount, 0).toFixed(2)} ⬡</span>
+            )}
+          </div>
           <div className="grid grid-cols-[18px_1fr_70px_60px_60px] sm:grid-cols-[18px_1fr_1fr_80px_70px_80px] gap-2 px-3 py-1">
             {["", "From", "To", "Amount", "Block", "Time"].slice(0, window.innerWidth < 640 ? 5 : 6).map(h => <div key={h} className="label-eyebrow">{h}</div>)}
           </div>
-          {[...memTxs, ...allTxs].length === 0 && (
-            <div className="glass text-center py-10 text-sm text-muted-foreground">No transactions yet</div>
+          {txsFiltered.length === 0 && (
+            <div className="glass text-center py-10 text-sm text-muted-foreground">
+              {txsAll.length === 0 ? "No transactions yet" : "No transactions match these filters"}
+            </div>
           )}
-          {[...memTxs, ...allTxs].slice(pTxs * PAGE_SIZE, (pTxs + 1) * PAGE_SIZE).map(t => (
+          {txsFiltered.slice(pTxs * PAGE_SIZE, (pTxs + 1) * PAGE_SIZE).map(t => (
             <div key={t.id}>
               <div onClick={() => setSelTx(selTx === t.id ? null : t.id)}
                 className="glass px-3 py-2.5 cursor-pointer hover:bg-secondary/30 transition grid grid-cols-[18px_1fr_70px_60px_60px] sm:grid-cols-[18px_1fr_1fr_80px_70px_80px] gap-2 items-center text-xs">
@@ -1431,21 +1750,59 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
               )}
             </div>
           ))}
-          <Pager page={pTxs} setPage={setPTxs} total={memTxs.length + allTxs.length} label="transactions" />
+          <Pager page={pTxs} setPage={setPTxs} total={txsFiltered.length} label="transactions" />
         </div>
       )}
 
       {tab === "mempool" && (
         <div className="space-y-2">
+          <FilterPanel activeCount={txFiltersActive(memF)} onClear={() => setMemF(emptyTxFilters)}>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              <div className="col-span-2 sm:col-span-2">
+                <FieldLabel>Address (from / to)</FieldLabel>
+                <FInput value={memF.addr} onChange={e => setMemF({ ...memF, addr: e.target.value })} placeholder="address or @username" />
+              </div>
+              <div>
+                <FieldLabel>Side</FieldLabel>
+                <FSelect value={memF.addrSide} onChange={v => setMemF({ ...memF, addrSide: v as any })}
+                  options={[{ v: "any", l: "Either" }, { v: "from", l: "Sender (from)" }, { v: "to", l: "Recipient (to)" }]} />
+              </div>
+              <div>
+                <FieldLabel>Min amount ⬡</FieldLabel>
+                <FInput type="number" value={memF.minAmount} onChange={e => setMemF({ ...memF, minAmount: e.target.value })} placeholder="0" />
+              </div>
+              <div>
+                <FieldLabel>Max amount ⬡</FieldLabel>
+                <FInput type="number" value={memF.maxAmount} onChange={e => setMemF({ ...memF, maxAmount: e.target.value })} placeholder="∞" />
+              </div>
+              <div>
+                <FieldLabel>From date</FieldLabel>
+                <FInput type="date" value={memF.dateFrom} onChange={e => setMemF({ ...memF, dateFrom: e.target.value })} />
+              </div>
+              <div>
+                <FieldLabel>To date</FieldLabel>
+                <FInput type="date" value={memF.dateTo} onChange={e => setMemF({ ...memF, dateTo: e.target.value })} />
+              </div>
+              <div>
+                <FieldLabel>Sort by</FieldLabel>
+                <FSelect value={memF.sort} onChange={v => setMemF({ ...memF, sort: v as any })}
+                  options={[{ v: "newest", l: "Newest" }, { v: "oldest", l: "Oldest" }, { v: "amount-desc", l: "Largest amount" }, { v: "amount-asc", l: "Smallest amount" }]} />
+              </div>
+            </div>
+          </FilterPanel>
           <div className="glass-hi px-3 py-2.5 flex items-center justify-between text-xs">
             <span className="label-eyebrow">Pending pool</span>
-            <span className="num text-muted-foreground">{memTxs.length} unconfirmed · {memTxs.reduce((s, t) => s + t.amount, 0).toFixed(2)} ⬡ queued</span>
+            <span className="num text-muted-foreground">
+              {memFiltered.length}{memFiltered.length !== memTxs.length && ` of ${memTxs.length}`} unconfirmed · {memFiltered.reduce((s, t) => s + t.amount, 0).toFixed(2)} ⬡ queued
+            </span>
           </div>
           {memTxs.length === 0 ? (
             <div className="glass text-center py-10 text-xs text-muted-foreground">Mempool is empty · all transactions confirmed</div>
+          ) : memFiltered.length === 0 ? (
+            <div className="glass text-center py-10 text-xs text-muted-foreground">No pending transactions match these filters</div>
           ) : (
             <>
-              {memTxs.slice(pMem * PAGE_SIZE, (pMem + 1) * PAGE_SIZE).map(t => (
+              {memFiltered.slice(pMem * PAGE_SIZE, (pMem + 1) * PAGE_SIZE).map(t => (
                 <button key={t.id} onClick={() => { setTab("txs"); setSelTx(t.id); }}
                   className="w-full text-left glass px-3 py-2.5 hover:bg-secondary/30 transition border-l-2 border-l-[hsl(var(--warning))]">
                   <div className="flex items-center justify-between mb-1 text-xs">
@@ -1459,7 +1816,7 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
                   </div>
                 </button>
               ))}
-              <Pager page={pMem} setPage={setPMem} total={memTxs.length} label="pending" />
+              <Pager page={pMem} setPage={setPMem} total={memFiltered.length} label="pending" />
             </>
           )}
 
@@ -1525,13 +1882,52 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
             })()
           ) : (
             <>
+              <FilterPanel activeCount={addrFiltersActive(addrF)} onClear={() => setAddrF(emptyAddrFilters)}>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  <div className="col-span-2">
+                    <FieldLabel>Address or username</FieldLabel>
+                    <FInput value={addrF.q} onChange={e => setAddrF({ ...addrF, q: e.target.value })} placeholder="search…" />
+                  </div>
+                  <div>
+                    <FieldLabel>Min balance ⬡</FieldLabel>
+                    <FInput type="number" value={addrF.minBalance} onChange={e => setAddrF({ ...addrF, minBalance: e.target.value })} placeholder="0" />
+                  </div>
+                  <div>
+                    <FieldLabel>Has mined</FieldLabel>
+                    <FSelect value={addrF.hasMined} onChange={v => setAddrF({ ...addrF, hasMined: v as any })}
+                      options={[{ v: "all", l: "Any" }, { v: "yes", l: "Miners only" }, { v: "no", l: "Non-miners" }]} />
+                  </div>
+                  <div>
+                    <FieldLabel>Has transactions</FieldLabel>
+                    <FSelect value={addrF.hasTxs} onChange={v => setAddrF({ ...addrF, hasTxs: v as any })}
+                      options={[{ v: "all", l: "Any" }, { v: "yes", l: "Active" }, { v: "no", l: "Idle" }]} />
+                  </div>
+                  <div>
+                    <FieldLabel>Sort by</FieldLabel>
+                    <FSelect value={addrF.sort} onChange={v => setAddrF({ ...addrF, sort: v as any })}
+                      options={[
+                        { v: "balance-desc", l: "Highest balance" },
+                        { v: "balance-asc", l: "Lowest balance" },
+                        { v: "mined-desc", l: "Most mined" },
+                        { v: "tx-desc", l: "Most active" },
+                        { v: "recent", l: "Recently seen" },
+                        { v: "username", l: "Username A→Z" },
+                      ]} />
+                  </div>
+                </div>
+              </FilterPanel>
+              <div className="flex items-center justify-between px-1 text-[10px] text-muted-foreground num">
+                <span>{addrFiltered.length} of {addressBook.length} addresses</span>
+              </div>
               <div className="grid grid-cols-[1fr_80px_80px_60px] sm:grid-cols-[1fr_1fr_100px_100px_60px] gap-2 px-3 py-1">
                 {["Address", "Username", "Balance", "Mined", "Tx"].slice(0, window.innerWidth < 640 ? 4 : 5).map(h => <div key={h} className="label-eyebrow">{h}</div>)}
               </div>
-              {addressBook.length === 0 && (
+              {addressBook.length === 0 ? (
                 <div className="glass text-center py-10 text-xs text-muted-foreground">No addresses tracked yet</div>
+              ) : addrFiltered.length === 0 && (
+                <div className="glass text-center py-10 text-xs text-muted-foreground">No addresses match these filters</div>
               )}
-              {addressBook.slice(pAddr * PAGE_SIZE, (pAddr + 1) * PAGE_SIZE).map(a => {
+              {addrFiltered.slice(pAddr * PAGE_SIZE, (pAddr + 1) * PAGE_SIZE).map(a => {
                 const balance = a.received + a.mined - a.sent;
                 return (
                   <button key={a.address} onClick={() => setSelAddr(a.address)}
@@ -1544,7 +1940,7 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
                   </button>
                 );
               })}
-              <Pager page={pAddr} setPage={setPAddr} total={addressBook.length} label="addresses" />
+              <Pager page={pAddr} setPage={setPAddr} total={addrFiltered.length} label="addresses" />
             </>
           )}
         </div>

@@ -198,6 +198,13 @@ export type Database = {
           total_mined: number
         }[]
       }
+      resolve_username: {
+        Args: { p_username: string }
+        Returns: {
+          address: string
+          username: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

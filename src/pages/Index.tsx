@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import * as Relay from "@/lib/blobRelay";
+import { supabase } from "@/integrations/supabase/client";
 import * as Vault from "@/lib/walletVault";
 import * as secp from "@noble/secp256k1";
 import { sha256 } from "@noble/hashes/sha256";
@@ -675,26 +676,62 @@ function SendTxForm({ wallet, chain, onBroadcast, onSent }: any) {
   const [amt, setAmt] = useState("");
   const [st, setSt] = useState("idle");
   const [err, setErr] = useState("");
+  const [resolved, setResolved] = useState<{ address: string; username?: string } | null>(null);
+  const [resolving, setResolving] = useState(false);
   const balance = calcBalance(wallet.address, chain);
+
+  const ADDR_RE = /^[1][1-9A-HJ-NP-Za-km-z]{25,34}$/;
+  const USER_RE = /^[A-Za-z0-9_]{3,24}$/;
+
+  // Live recipient resolution: username → address (case-insensitive),
+  // or pass-through if the user typed a valid address.
+  useEffect(() => {
+    setErr("");
+    const raw = to.trim().replace(/^@/, "");
+    if (!raw) { setResolved(null); return; }
+    if (ADDR_RE.test(raw)) {
+      setResolved({ address: raw });
+      return;
+    }
+    if (!USER_RE.test(raw)) {
+      setResolved(null);
+      return;
+    }
+    let cancelled = false;
+    setResolving(true);
+    (async () => {
+      const { data, error } = await supabase.rpc("resolve_username", { p_username: raw });
+      if (cancelled) return;
+      setResolving(false);
+      const row = (data as any[])?.[0];
+      if (error || !row) { setResolved(null); return; }
+      setResolved({ address: row.address, username: row.username });
+    })();
+    return () => { cancelled = true; };
+  }, [to]);
 
   async function send() {
     setErr("");
     const amount = parseFloat(amt);
-    if (!to || to.length < 26 || to.length > 35 || !/^[1][1-9A-HJ-NP-Za-km-z]+$/.test(to)) {
-      setErr("Invalid address"); return;
-    }
+    const raw = to.trim().replace(/^@/, "");
+    if (!raw) { setErr("Enter a recipient (address or @username)"); return; }
+    let toAddress: string | null = null;
+    if (ADDR_RE.test(raw)) toAddress = raw;
+    else if (resolved?.address) toAddress = resolved.address;
+    else { setErr("Recipient not found"); return; }
+    if (toAddress === wallet.address) { setErr("Cannot send to yourself"); return; }
     if (!amount || amount <= 0) { setErr("Invalid amount"); return; }
     if (amount + TX_FEE > balance) { setErr(`Insufficient balance (need ${(amount + TX_FEE).toFixed(6)})`); return; }
     setSt("signing");
     try {
       const ts = Date.now();
-      const txid = await sha256hex(`${wallet.address}${to}${amount}${ts}`);
-      const data = `${wallet.address}→${to}:${amount}@${ts}`;
+      const txid = await sha256hex(`${wallet.address}${toAddress}${amount}${ts}`);
+      const data = `${wallet.address}→${toAddress}:${amount}@${ts}`;
       const sig = await signData(wallet.privateKey, data);
       const tx = {
         id: txid.slice(0, 40),
         from: wallet.address, fromUsername: wallet.username,
-        to, amount, fee: TX_FEE,
+        to: toAddress, amount, fee: TX_FEE,
         signature: sig, publicKey: wallet.publicKey,
         timestamp: ts,
         status: "pending",
@@ -703,7 +740,7 @@ function SendTxForm({ wallet, chain, onBroadcast, onSent }: any) {
       const res = await Relay.pushTx(tx);
       if (!res.ok) { setErr(res.error || "Broadcast failed"); setSt("idle"); return; }
       onBroadcast(tx);
-      setSt("sent"); setTo(""); setAmt("");
+      setSt("sent"); setTo(""); setAmt(""); setResolved(null);
       setTimeout(() => { setSt("idle"); onSent?.(); }, 1500);
     } catch (e) { setErr(String(e)); setSt("idle"); }
   }
@@ -713,6 +750,11 @@ function SendTxForm({ wallet, chain, onBroadcast, onSent }: any) {
               : st === "signing" ? "Signing…"
               : st === "broadcasting" ? "Broadcasting…"
               : "✓ Sent";
+
+  const trimmed = to.trim().replace(/^@/, "");
+  const looksLikeUser = trimmed && !ADDR_RE.test(trimmed) && USER_RE.test(trimmed);
+  const looksLikeAddr = trimmed && ADDR_RE.test(trimmed);
+  const unknownInput = trimmed && !looksLikeUser && !looksLikeAddr;
 
   return (
     <div className="space-y-3">
@@ -725,9 +767,28 @@ function SendTxForm({ wallet, chain, onBroadcast, onSent }: any) {
         <input
           value={to}
           onChange={e => setTo(e.target.value)}
-          placeholder="0x…"
-          className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm num placeholder:text-muted-foreground/60"
+          placeholder="@username or address"
+          className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm num placeholder:text-muted-foreground/60 placeholder:font-sans"
         />
+        {trimmed && (
+          <div className="text-[11px] min-h-[14px]">
+            {resolving && <span className="text-muted-foreground">Resolving…</span>}
+            {!resolving && looksLikeUser && resolved && (
+              <span className="text-primary/80">
+                ✓ @{resolved.username} → <span className="num text-muted-foreground">{resolved.address.slice(0, 14)}…{resolved.address.slice(-6)}</span>
+              </span>
+            )}
+            {!resolving && looksLikeUser && !resolved && (
+              <span className="text-destructive">Username not registered</span>
+            )}
+            {!resolving && looksLikeAddr && (
+              <span className="text-muted-foreground">Sending to address</span>
+            )}
+            {unknownInput && (
+              <span className="text-destructive">Not a valid address or username</span>
+            )}
+          </div>
+        )}
       </div>
       <div className="space-y-2">
         <label className="label-eyebrow block">Amount</label>
@@ -1707,15 +1768,30 @@ export default function BlobChainApp() {
     setConnectErr("");
   }
 
+  // Username = global handle. Validate format & check the network for
+  // collisions before we commit so users get instant feedback.
+  const USERNAME_RE = /^[A-Za-z0-9_]{3,24}$/;
+  async function validateUsername(name: string, ownAddress?: string): Promise<string | null> {
+    const u = name.trim();
+    if (!USERNAME_RE.test(u)) return "Username must be 3–24 chars (letters, numbers, _)";
+    const { data } = await supabase.rpc("resolve_username", { p_username: u });
+    const row = (data as any[])?.[0];
+    if (row && row.address !== ownAddress) return `Username "${u}" is taken`;
+    return null;
+  }
+
   async function createWallet() {
-    if (!nameIn.trim()) return;
+    const name = nameIn.trim();
+    if (!name) return;
     if (pass1.length < 6) { setConnectErr("Passphrase must be at least 6 characters"); return; }
     if (pass1 !== pass2) { setConnectErr("Passphrases do not match"); return; }
     setCreating(true);
     setConnectErr("");
     try {
+      const nameErr = await validateUsername(name);
+      if (nameErr) { setConnectErr(nameErr); return; }
       const w: any = await generateWallet();
-      w.username = nameIn.trim().slice(0, 24);
+      w.username = name;
       await Vault.saveEncryptedWallet(w, pass1);
       setVaultPub({ address: w.address, publicKey: w.publicKey, username: w.username });
       setWallet(w);
@@ -1730,7 +1806,8 @@ export default function BlobChainApp() {
 
   async function importWallet() {
     setConnectErr("");
-    if (!nameIn.trim()) { setConnectErr("Enter a miner name"); return; }
+    const name = nameIn.trim();
+    if (!name) { setConnectErr("Enter a miner name"); return; }
     if (pass1.length < 6) { setConnectErr("Passphrase must be at least 6 characters"); return; }
     if (pass1 !== pass2) { setConnectErr("Passphrases do not match"); return; }
     const priv = importJson.trim().toLowerCase().replace(/^0x/, "");
@@ -1745,12 +1822,10 @@ export default function BlobChainApp() {
     } catch (e: any) {
       setConnectErr("Invalid private key"); return;
     }
-    const w: any = {
-      address,
-      publicKey,
-      privateKey: priv,
-      username: nameIn.trim().slice(0, 24),
-    };
+    // Allow re-using the existing handle for THIS address; reject if taken by another.
+    const nameErr = await validateUsername(name, address);
+    if (nameErr) { setConnectErr(nameErr); return; }
+    const w: any = { address, publicKey, privateKey: priv, username: name };
     try {
       await Vault.saveEncryptedWallet(w, pass1);
       setVaultPub({ address: w.address, publicKey: w.publicKey, username: w.username });
@@ -1761,7 +1836,6 @@ export default function BlobChainApp() {
       setConnectErr(String(e?.message || e));
     }
   }
-
   async function unlockExisting() {
     setUnlockErr("");
     setUnlocking(true);

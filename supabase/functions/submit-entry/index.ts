@@ -44,6 +44,7 @@ function currentHeight() {
 const ADDR_RE = /^[1][1-9A-HJ-NP-Za-km-z]{25,34}$/;
 const PUB_RE = /^(02|03)[0-9a-fA-F]{64}$/;
 const SIG_RE = /^[0-9a-fA-F]{128}$/;
+const USERNAME_RE = /^[A-Za-z0-9_]{3,24}$/;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -58,7 +59,9 @@ Deno.serve(async (req) => {
     if (typeof block_height !== "number" || block_height < 1) return bad("invalid block_height");
     const sc = Number(score);
     if (!Number.isFinite(sc) || sc < 0 || sc > 10_000_000) return bad("invalid score");
-    if (username && typeof username === "string" && username.length > 24) return bad("username too long");
+    if (typeof username !== "string" || !USERNAME_RE.test(username)) {
+      return bad("username must be 3–24 chars, letters/numbers/underscore");
+    }
 
     // Address must match publicKey
     const derived = pubKeyToAddress(publicKey.toLowerCase());
@@ -77,6 +80,28 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
+    // Username uniqueness — usernames are global handles. If the name is
+    // already owned by a different address, reject.
+    const { data: nameOwner } = await supa
+      .from("blob_players")
+      .select("address")
+      .ilike("username", username)
+      .maybeSingle();
+    if (nameOwner && nameOwner.address !== address) {
+      return bad(`username "${username}" is taken`);
+    }
+
+    // Also reject if THIS address already has a different username on file
+    // (one address ↔ one handle).
+    const { data: addrOwner } = await supa
+      .from("blob_players")
+      .select("username")
+      .eq("address", address)
+      .maybeSingle();
+    if (addrOwner && addrOwner.username && addrOwner.username.toLowerCase() !== username.toLowerCase()) {
+      return bad(`address already registered as "${addrOwner.username}"`);
+    }
+
     const { data: existing } = await supa
       .from("blob_entries")
       .select("score")
@@ -88,7 +113,7 @@ Deno.serve(async (req) => {
 
     const { error } = await supa.from("blob_entries").upsert({
       address,
-      username: username?.toString().slice(0, 24) ?? null,
+      username,
       score: finalScore,
       block_height,
       block_seed: block_seed ? String(block_seed) : null,
@@ -97,12 +122,17 @@ Deno.serve(async (req) => {
 
     if (error) return bad(error.message, 500);
 
-    await supa.from("blob_players").upsert({
+    const { error: pErr } = await supa.from("blob_players").upsert({
       address,
-      username: username?.toString().slice(0, 24) ?? "anon",
+      username,
       public_key: publicKey,
       last_active: new Date().toISOString(),
     }, { onConflict: "address" });
+    if (pErr) {
+      // 23505 = unique violation on lower(username)
+      if ((pErr as any).code === "23505") return bad(`username "${username}" is taken`);
+      return bad(pErr.message, 500);
+    }
 
     return ok_({ address, block_height, score: finalScore });
   } catch (e) {

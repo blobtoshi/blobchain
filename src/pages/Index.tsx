@@ -2207,13 +2207,6 @@ function WalletScreen({ wallet, chain, mempool, onBroadcast }: any) {
     return items.sort((a, b) => b.ts - a.ts);
   })();
 
-  const Stat = ({ label, value, accent }: any) => (
-    <div className="px-1">
-      <div className="label-eyebrow mb-2">{label}</div>
-      <div className={`text-2xl sm:text-3xl font-semibold num ${accent || "text-foreground"}`}>{value}</div>
-    </div>
-  );
-
   return (
     <div className="space-y-5">
       {/* Hero balance + address */}
@@ -2222,7 +2215,11 @@ function WalletScreen({ wallet, chain, mempool, onBroadcast }: any) {
         <div className="relative flex flex-col gap-6">
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
             <div>
-              <div className="label-eyebrow mb-2">Balance</div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="label-eyebrow">Balance</span>
+                <span className="text-[10px] tracking-wider uppercase text-foreground/40">·</span>
+                <span className="text-xs font-medium text-foreground/80">@{wallet.username}</span>
+              </div>
               <div className="num text-4xl sm:text-6xl font-semibold leading-none text-primary drop-shadow-[0_0_24px_hsl(var(--primary)/0.4)]">
                 {balance.toFixed(BLOB_DECIMALS)}
                 <span className="text-base sm:text-lg text-muted-foreground ml-2 font-normal">$BLOB</span>
@@ -2245,14 +2242,6 @@ function WalletScreen({ wallet, chain, mempool, onBroadcast }: any) {
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Stats row — match Mine tab style */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 px-1">
-        <Stat label="Available" value={balance.toFixed(2)} accent="text-primary" />
-        <Stat label="Pending" value={pending.toFixed(2)} />
-        <Stat label="Sent" value={history.filter(h => h.kind === "send").length} />
-        <Stat label="Received" value={history.filter(h => h.kind !== "send").length} />
       </div>
 
       {/* Send + History */}

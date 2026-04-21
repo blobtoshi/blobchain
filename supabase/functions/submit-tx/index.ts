@@ -1,7 +1,7 @@
 // Verifies a secp256k1 (Bitcoin curve) signed transaction and inserts into the mempool.
 // Bitcoin-style fee model: fee = ceil(feeRate × tx_byte_size) / 1e8 $BLOB.
-// feeRate is sat/byte (1 sat = 1e-8 $BLOB). Server enforces a minimum feeRate
-// derived from current mempool congestion.
+// feeRate is drops/byte (1 drop = 1e-8 $BLOB, the smallest unit). Server enforces
+// a minimum feeRate derived from current mempool congestion.
 import { createClient } from "npm:@supabase/supabase-js@2.95.0";
 import { corsHeaders } from "npm:@supabase/supabase-js@2.95.0/cors";
 import * as secp from "npm:@noble/secp256k1@2.1.0";
@@ -12,7 +12,7 @@ import { base58check } from "npm:@scure/base@1.1.9";
 const MAX_TX_SIZE = 100_000;     // 100 KB, Bitcoin standard tx limit
 const MAX_BLOCK_SIZE = 1_000_000; // 1 MB
 const BLOB_UNIT = 1e8;            // $BLOB is divisible to 8 decimals
-const BASE_FEE_RATE = 10;         // sat/byte at zero congestion
+const BASE_FEE_RATE = 10;         // drops/byte at zero congestion
 const MIN_FEE_RATE = 1;           // absolute floor
 const MAX_FEE_RATE = 10_000;      // sanity cap
 const MAX_MEMO_BYTES = 80;        // OP_RETURN-style limit
@@ -57,9 +57,9 @@ function canonicalTxBytes(tx: {
 }
 
 function feeFromRate(feeRate: number, bytes: number): number {
-  // sat-precise: ceil so the network is never under-paid.
-  const sats = Math.ceil(feeRate * bytes);
-  return sats / BLOB_UNIT;
+  // drop-precise: ceil so the network is never under-paid.
+  const drops = Math.ceil(feeRate * bytes);
+  return drops / BLOB_UNIT;
 }
 
 async function pendingBytes(supa: ReturnType<typeof createClient>) {
@@ -156,7 +156,7 @@ Deno.serve(async (req) => {
 
     const feeRate = Math.floor(Number(feeRateRaw));
     if (!Number.isFinite(feeRate) || feeRate < MIN_FEE_RATE || feeRate > MAX_FEE_RATE) {
-      return bad(`invalid feeRate (must be ${MIN_FEE_RATE}–${MAX_FEE_RATE} sat/byte)`);
+      return bad(`invalid feeRate (must be ${MIN_FEE_RATE}–${MAX_FEE_RATE} drops/byte)`);
     }
 
     const derived = pubKeyToAddress(publicKey.toLowerCase());
@@ -179,7 +179,7 @@ Deno.serve(async (req) => {
     const recRate = await recommendedFeeRate(supa);
     const floorRate = Math.max(MIN_FEE_RATE, Math.floor(recRate * 0.5));
     if (feeRate < floorRate) {
-      return bad(`feeRate too low (network minimum ${floorRate} sat/byte, recommended ${recRate})`);
+      return bad(`feeRate too low (network minimum ${floorRate} drops/byte, recommended ${recRate})`);
     }
 
     const bytes = canonicalTxBytes({

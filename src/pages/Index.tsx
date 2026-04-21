@@ -1530,7 +1530,7 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
               {addressBook.length === 0 && (
                 <div className="glass text-center py-10 text-xs text-muted-foreground">No addresses tracked yet</div>
               )}
-              {addressBook.slice(0, 50).map(a => {
+              {addressBook.slice(pAddr * PAGE_SIZE, (pAddr + 1) * PAGE_SIZE).map(a => {
                 const balance = a.received + a.mined - a.sent;
                 return (
                   <button key={a.address} onClick={() => setSelAddr(a.address)}
@@ -1543,6 +1543,7 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
                   </button>
                 );
               })}
+              <Pager page={pAddr} setPage={setPAddr} total={addressBook.length} label="addresses" />
             </>
           )}
         </div>

@@ -1,6 +1,6 @@
 // Blob Chain P2P relay backed by Lovable Cloud (Supabase).
-// Maps the in-app block / tx / entry shapes to the DB schema and back,
-// and exposes realtime subscriptions so every browser tab acts as a node.
+// Reads are direct (RLS allows public SELECT); all writes go through
+// signature-verifying edge functions (entries, transactions, block sealing).
 
 import { supabase } from "@/integrations/supabase/client";
 
@@ -65,24 +65,6 @@ function blockFromRow(r: any): Block {
   };
 }
 
-function blockToRow(b: Block) {
-  return {
-    height: b.height,
-    previous_hash: b.previousHash,
-    hash: b.hash,
-    timestamp: b.timestamp,
-    winner: b.winner,
-    winner_username: b.winnerUsername ?? null,
-    winner_score: b.winnerScore ?? 0,
-    reward: b.reward ?? 0,
-    seed: b.seed,
-    transactions: JSON.stringify(b.transactions ?? []),
-    mining_entries: JSON.stringify(b.miningEntries ?? []),
-    node_count: b.nodeCount ?? 1,
-    total_supply: b.totalSupply ?? 0,
-  };
-}
-
 export async function fetchChain(): Promise<Block[]> {
   const { data, error } = await supabase
     .from("blob_chain").select("*").order("height", { ascending: true });
@@ -90,9 +72,18 @@ export async function fetchChain(): Promise<Block[]> {
   return (data ?? []).map(blockFromRow);
 }
 
-export async function pushBlock(b: Block) {
-  const { error } = await supabase.from("blob_chain").insert(blockToRow(b));
-  if (error && error.code !== "23505") console.error("[relay] pushBlock", error);
+// Block sealing happens on the server; trigger it for a closed height.
+// Idempotent: server returns { already: true } if already sealed.
+export async function sealBlock(height: number): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase.functions.invoke("seal-block", {
+    body: { height },
+  });
+  if (error) {
+    console.error("[relay] sealBlock", error);
+    return { ok: false, error: error.message };
+  }
+  if ((data as any)?.error) return { ok: false, error: (data as any).error };
+  return { ok: true };
 }
 
 // ── MEMPOOL ─────────────────────────────────────────────────────────────
@@ -117,26 +108,25 @@ export async function fetchMempool(): Promise<Tx[]> {
   return (data ?? []).map(txFromRow);
 }
 
-export async function pushTx(tx: Tx) {
-  const { error } = await supabase.from("blob_mempool").insert({
-    id: tx.id,
-    from_address: tx.from,
-    from_username: tx.fromUsername ?? null,
-    to_address: tx.to,
-    amount: tx.amount,
-    fee: tx.fee ?? 0.001,
-    signature: tx.signature,
-    public_key: tx.publicKey,
-    timestamp: tx.timestamp,
-    status: "pending",
+export async function pushTx(tx: Tx): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase.functions.invoke("submit-tx", {
+    body: {
+      id: tx.id,
+      from: tx.from,
+      fromUsername: tx.fromUsername,
+      to: tx.to,
+      amount: tx.amount,
+      signature: tx.signature,
+      publicKey: tx.publicKey,
+      timestamp: tx.timestamp,
+    },
   });
-  if (error && error.code !== "23505") console.error("[relay] pushTx", error);
-}
-
-export async function clearTxs(ids: string[]) {
-  if (!ids.length) return;
-  const { error } = await supabase.from("blob_mempool").delete().in("id", ids);
-  if (error) console.error("[relay] clearTxs", error);
+  if (error) {
+    console.error("[relay] pushTx", error);
+    return { ok: false, error: error.message };
+  }
+  if ((data as any)?.error) return { ok: false, error: (data as any).error };
+  return { ok: true };
 }
 
 // ── ENTRIES ─────────────────────────────────────────────────────────────
@@ -158,20 +148,26 @@ export async function fetchEntries(blockHeight: number): Promise<Entry[]> {
   return (data ?? []).map(entryFromRow);
 }
 
-export async function pushEntry(e: Entry) {
-  const row = {
-    address: e.address,
-    block_height: e.block_height,
-    block_seed: e.block_seed ?? null,
-    username: e.username ?? null,
-    score: e.score,
-    signature: e.signature,
-  };
-  // upsert: if a player improves their score within the same block, replace it
-  const { error } = await supabase
-    .from("blob_entries")
-    .upsert(row, { onConflict: "address,block_height" });
-  if (error) console.error("[relay] pushEntry", error);
+export async function pushEntry(
+  e: Entry & { publicKey: string }
+): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase.functions.invoke("submit-entry", {
+    body: {
+      address: e.address,
+      username: e.username,
+      score: e.score,
+      block_height: e.block_height,
+      block_seed: e.block_seed,
+      signature: e.signature,
+      publicKey: e.publicKey,
+    },
+  });
+  if (error) {
+    console.error("[relay] pushEntry", error);
+    return { ok: false, error: error.message };
+  }
+  if ((data as any)?.error) return { ok: false, error: (data as any).error };
+  return { ok: true };
 }
 
 // ── REALTIME ────────────────────────────────────────────────────────────

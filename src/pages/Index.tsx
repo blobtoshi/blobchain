@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import * as Relay from "@/lib/blobRelay";
+import * as Vault from "@/lib/walletVault";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Send, Play, Wallet, Plus, Download, Lock } from "lucide-react";
 import runnerArt from "@/assets/runner.png";
@@ -563,7 +564,7 @@ function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry }) {
               signature: sig,
               submitted_at: new Date().toISOString(),
             };
-            Relay.pushEntry(entry);
+            Relay.pushEntry({ ...entry, publicKey: wallet.publicKey });
             onEntrySubmit(entry);
             setGs(prev => ({ ...prev, status: "dead", score: finalScore }));
             draw(); return;
@@ -662,19 +663,21 @@ function SendTxForm({ wallet, chain, onBroadcast, onSent }: any) {
     if (amount + TX_FEE > balance) { setErr(`Insufficient balance (need ${(amount + TX_FEE).toFixed(6)})`); return; }
     setSt("signing");
     try {
-      const txid = await sha256hex(`${wallet.address}${to}${amount}${Date.now()}`);
-      const data = `${wallet.address}→${to}:${amount}@${Date.now()}`;
+      const ts = Date.now();
+      const txid = await sha256hex(`${wallet.address}${to}${amount}${ts}`);
+      const data = `${wallet.address}→${to}:${amount}@${ts}`;
       const sig = await signData(wallet.privateKey, data);
       const tx = {
         id: `0x${txid.slice(0, 40)}`,
         from: wallet.address, fromUsername: wallet.username,
         to, amount, fee: TX_FEE,
         signature: sig, publicKey: wallet.publicKey,
-        timestamp: Date.now(),
+        timestamp: ts,
         status: "pending",
       };
       setSt("broadcasting");
-      await Relay.pushTx(tx);
+      const res = await Relay.pushTx(tx);
+      if (!res.ok) { setErr(res.error || "Broadcast failed"); setSt("idle"); return; }
       onBroadcast(tx);
       setSt("sent"); setTo(""); setAmt("");
       setTimeout(() => { setSt("idle"); onSent?.(); }, 1500);
@@ -1129,9 +1132,17 @@ export default function BlobChainApp() {
   const F = '"Courier New",monospace';
 
   const [wallet, setWallet] = useState<any>(null);
+  const [vaultPub, setVaultPub] = useState<Vault.WalletPublic | null>(null);
+  const [unlockOpen, setUnlockOpen] = useState(false);
+  const [unlockPass, setUnlockPass] = useState("");
+  const [unlockErr, setUnlockErr] = useState("");
+  const [unlocking, setUnlocking] = useState(false);
+
   const [connectOpen, setConnectOpen] = useState(false);
   const [connectMode, setConnectMode] = useState<"choose" | "create" | "import">("choose");
   const [nameIn, setNameIn] = useState("");
+  const [pass1, setPass1] = useState("");
+  const [pass2, setPass2] = useState("");
   const [importJson, setImportJson] = useState("");
   const [connectErr, setConnectErr] = useState("");
   const [creating, setCreating] = useState(false);
@@ -1147,28 +1158,32 @@ export default function BlobChainApp() {
   const [gameLaunched, setGameLaunched] = useState(false);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem("blob_wallet_v2");
-      if (saved) setWallet(JSON.parse(saved));
-    } catch {}
+    // Force-purge any legacy plaintext wallet from previous versions of the app
+    Vault.purgeLegacyPlaintextWallet();
+    setVaultPub(Vault.getStoredWalletPublic());
     document.title = "⬡ BLOB CHAIN — Proof-of-Gaming";
   }, []);
 
   function resetConnect() {
     setConnectMode("choose");
     setNameIn("");
+    setPass1("");
+    setPass2("");
     setImportJson("");
     setConnectErr("");
   }
 
   async function createWallet() {
     if (!nameIn.trim()) return;
+    if (pass1.length < 6) { setConnectErr("Passphrase must be at least 6 characters"); return; }
+    if (pass1 !== pass2) { setConnectErr("Passphrases do not match"); return; }
     setCreating(true);
     setConnectErr("");
     try {
       const w: any = await generateWallet();
       w.username = nameIn.trim().slice(0, 24);
-      try { localStorage.setItem("blob_wallet_v2", JSON.stringify(w)); } catch {}
+      await Vault.saveEncryptedWallet(w, pass1);
+      setVaultPub({ address: w.address, publicKey: w.publicKey, username: w.username });
       setWallet(w);
       setConnectOpen(false);
       resetConnect();
@@ -1182,6 +1197,8 @@ export default function BlobChainApp() {
   async function importWallet() {
     setConnectErr("");
     if (!nameIn.trim()) { setConnectErr("Enter a miner name"); return; }
+    if (pass1.length < 6) { setConnectErr("Passphrase must be at least 6 characters"); return; }
+    if (pass1 !== pass2) { setConnectErr("Passphrases do not match"); return; }
     let parsed: any;
     try { parsed = JSON.parse(importJson.trim()); }
     catch { setConnectErr("Invalid JSON"); return; }
@@ -1195,15 +1212,36 @@ export default function BlobChainApp() {
       privateKey: parsed.privateKey,
       username: nameIn.trim().slice(0, 24),
     };
-    try { localStorage.setItem("blob_wallet_v2", JSON.stringify(w)); } catch {}
-    setWallet(w);
-    setConnectOpen(false);
-    resetConnect();
+    try {
+      await Vault.saveEncryptedWallet(w, pass1);
+      setVaultPub({ address: w.address, publicKey: w.publicKey, username: w.username });
+      setWallet(w);
+      setConnectOpen(false);
+      resetConnect();
+    } catch (e: any) {
+      setConnectErr(String(e?.message || e));
+    }
+  }
+
+  async function unlockExisting() {
+    setUnlockErr("");
+    setUnlocking(true);
+    try {
+      const w = await Vault.unlockWallet(unlockPass);
+      setWallet(w);
+      setUnlockOpen(false);
+      setUnlockPass("");
+    } catch (e: any) {
+      setUnlockErr(String(e?.message || e));
+    } finally {
+      setUnlocking(false);
+    }
   }
 
   function disconnectWallet() {
-    try { localStorage.removeItem("blob_wallet_v2"); } catch {}
+    Vault.clearWallet();
     setWallet(null);
+    setVaultPub(null);
     setGameLaunched(false);
   }
 
@@ -1280,60 +1318,26 @@ export default function BlobChainApp() {
     })();
   }, [blockInfo.height]);
 
-  // Block sealing — leader-elects locally, persists to relay (idempotent on PK)
+  // Block sealing — server-side only. We just trigger seal-block for the
+  // closed height; the realtime onBlock handler will deliver the new block.
   const prevHeightRef = useRef(blockInfo.height);
   useEffect(() => {
     const prevHeight = prevHeightRef.current;
     if (blockInfo.height === prevHeight) return;
     const closedHeight = blockInfo.height - 1;
     prevHeightRef.current = blockInfo.height;
+    if (closedHeight < 1) return;
 
     (async () => {
-      // Pull the authoritative entry set for the closed block from the relay
-      // so every node converges on the same winner.
-      const closedEntries = await Relay.fetchEntries(closedHeight);
-      const currentChain = chainRef.current;
-      const currentMempool = mempoolRef.current;
-      const currentWallet = walletRef.current;
-      if (currentChain.find(b => b.height === closedHeight)) return; // already sealed
-      const prevBlock = currentChain.find(b => b.height === closedHeight - 1)
-        || currentChain[currentChain.length - 1];
-      const seedNum = closedHeight * 6364136223846793 + 1442695040888963407;
-      const winner = pickWinner(closedEntries, Math.abs(seedNum % 2147483647));
-      const txsToInclude = currentMempool.slice(0, 50);
-      const baseReward = getRewardForHeight(closedHeight);
-      const feeTotal = txsToInclude.reduce((s, t) => s + (Number(t.fee) || 0), 0);
-      const reward = winner ? baseReward + feeTotal : 0;
-
-      const newB: any = {
-        height: closedHeight,
-        previousHash: prevBlock?.hash || GENESIS.hash,
-        timestamp: Date.now(),
-        transactions: txsToInclude,
-        miningEntries: closedEntries,
-        winner: winner?.address || null,
-        winnerUsername: winner?.username || null,
-        winnerScore: winner?.score || 0,
-        reward,
-        seed: String(closedHeight),
-        nodeCount,
-        totalSupply: calcTotalSupply(currentChain) + reward,
-      };
-      newB.hash = await computeBlockHash(newB);
-
-      setChain(c => {
-        if (c.find(b => b.height === closedHeight)) return c;
-        return [...c, newB].sort((a, b2) => a.height - b2.height);
-      });
-      setMempool(m => m.filter(t => !txsToInclude.find(x => x.id === t.id)));
-      setNewBlock({ ...newB, isMine: winner?.address === currentWallet?.address });
-      setTimeout(() => setNewBlock(null), 5000);
+      // Avoid hammering: only call seal if we don't already have it locally
+      if (chainRef.current.find(b => b.height === closedHeight)) return;
+      // Small jitter so multiple tabs don't all fire at the same instant
+      await new Promise(r => setTimeout(r, Math.random() * 1500));
+      if (chainRef.current.find(b => b.height === closedHeight)) return;
+      await Relay.sealBlock(closedHeight);
+      // Reset entries for the new round; the realtime feed will populate the new block
       setEntries([]);
       setMyEntry(null);
-
-      // Best-effort persistence; PK collision is fine (another node won the race).
-      Relay.pushBlock(newB);
-      if (txsToInclude.length) Relay.clearTxs(txsToInclude.map(t => t.id));
     })();
   }, [blockInfo.height]);
 
@@ -1415,6 +1419,27 @@ export default function BlobChainApp() {
                 className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm"
               />
             </div>
+            <div>
+              <label className="label-eyebrow block mb-2">Passphrase</label>
+              <input
+                type="password"
+                value={pass1}
+                onChange={e => setPass1(e.target.value)}
+                placeholder="At least 6 characters"
+                className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm"
+              />
+            </div>
+            <div>
+              <label className="label-eyebrow block mb-2">Confirm passphrase</label>
+              <input
+                type="password"
+                value={pass2}
+                onChange={e => setPass2(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && !creating && createWallet()}
+                placeholder="Repeat passphrase"
+                className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm"
+              />
+            </div>
             {connectErr && <div className="text-xs text-destructive">{connectErr}</div>}
             <div className="flex gap-2">
               <button
@@ -1425,7 +1450,7 @@ export default function BlobChainApp() {
               </button>
               <button
                 onClick={createWallet}
-                disabled={creating || !nameIn.trim()}
+                disabled={creating || !nameIn.trim() || !pass1 || !pass2}
                 className="flex-1 py-3 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition"
               >
                 {creating ? "Generating keypair…" : "Generate wallet"}
@@ -1457,6 +1482,26 @@ export default function BlobChainApp() {
                 placeholder='{"address":"0x…","publicKey":"…","privateKey":"…"}'
                 rows={5}
                 className="num w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-[11px] leading-relaxed resize-none"
+              />
+            </div>
+            <div>
+              <label className="label-eyebrow block mb-2">Passphrase</label>
+              <input
+                type="password"
+                value={pass1}
+                onChange={e => setPass1(e.target.value)}
+                placeholder="At least 6 characters"
+                className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm"
+              />
+            </div>
+            <div>
+              <label className="label-eyebrow block mb-2">Confirm passphrase</label>
+              <input
+                type="password"
+                value={pass2}
+                onChange={e => setPass2(e.target.value)}
+                placeholder="Repeat passphrase"
+                className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm"
               />
             </div>
             {connectErr && <div className="text-xs text-destructive">{connectErr}</div>}
@@ -1561,6 +1606,14 @@ export default function BlobChainApp() {
                 <span className="hidden md:inline text-muted-foreground">{wallet.username}</span>
                 <span className="num text-primary">{balance.toFixed(2)}</span>
               </button>
+            ) : vaultPub ? (
+              <button
+                onClick={() => { setUnlockErr(""); setUnlockPass(""); setUnlockOpen(true); }}
+                className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary text-primary-foreground text-xs font-semibold tracking-wide hover:bg-primary/90 transition shadow-[0_0_24px_hsl(var(--primary)/0.35)]"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                Unlock wallet
+              </button>
             ) : (
               <button
                 onClick={openConnect}
@@ -1651,6 +1704,44 @@ export default function BlobChainApp() {
       </main>
 
       {ConnectWalletDialog}
+
+      <Dialog open={unlockOpen} onOpenChange={(o) => { setUnlockOpen(o); if (!o) { setUnlockPass(""); setUnlockErr(""); } }}>
+        <DialogContent className="glass-hi border-border max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-medium tracking-wide">Unlock wallet</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-1">
+            <div className="text-xs text-muted-foreground">
+              {vaultPub?.username ? <>Welcome back, <span className="text-foreground">{vaultPub.username}</span></> : "Enter your passphrase to decrypt your wallet"}
+            </div>
+            <input
+              type="password"
+              value={unlockPass}
+              onChange={e => setUnlockPass(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && !unlocking && unlockExisting()}
+              placeholder="Passphrase"
+              autoFocus
+              className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm"
+            />
+            {unlockErr && <div className="text-xs text-destructive">{unlockErr}</div>}
+            <div className="flex gap-2">
+              <button
+                onClick={() => { disconnectWallet(); setUnlockOpen(false); }}
+                className="px-4 py-3 rounded-lg border border-destructive/30 text-xs text-destructive hover:bg-destructive/10 transition"
+              >
+                Forget wallet
+              </button>
+              <button
+                onClick={unlockExisting}
+                disabled={unlocking || !unlockPass}
+                className="flex-1 py-3 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                {unlocking ? "Decrypting…" : "Unlock"}
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <footer className="fixed bottom-0 left-0 right-0 backdrop-blur-xl bg-background/70 border-t border-border px-5 py-2 flex justify-between items-center text-[10px] text-muted-foreground/70 num">
         <span className="hidden sm:inline">⬡ BLOB CHAIN · Proof-of-Gaming</span>

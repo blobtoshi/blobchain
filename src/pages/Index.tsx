@@ -26,11 +26,40 @@ const HALVING_BLOCKS = 1_000_000;   // halves every 1M blocks
 const MAX_SUPPLY = 20_000_000;       // 10 × 1M × Σ(1/2^n) = 20M $BLOB
 const MAX_BLOCK_SIZE = 1_000_000;   // ~1 MB, Bitcoin-style
 const MAX_TX_SIZE = 100_000;        // ~100 KB, Bitcoin standard tx limit
-const TX_FEE = 0.001;
+const TX_FEE = 0.001;                // legacy fallback for old chain entries
 const BLOB_DECIMALS = 8;             // $BLOB is divisible to 8 decimal places
 const BLOB_UNIT = 1e8;               // 1 $BLOB = 100,000,000 base units (satoshis)
+const BASE_FEE_RATE = 10;            // sat/byte at zero congestion
+const MIN_FEE_RATE = 1;              // absolute floor (sat/byte)
+const MAX_MEMO_BYTES = 80;           // OP_RETURN-style memo limit
 // Round a $BLOB amount to 8-decimal precision (banker-safe via integer base units).
 const to8 = (n: number) => Math.round(Number(n) * BLOB_UNIT) / BLOB_UNIT;
+// Canonical tx bytes — must match the server. fee is derived, not part of canon.
+function canonicalTxBytes(tx: {
+  from: string; to: string; amount: number; timestamp: number;
+  feeRate: number; memo: string; publicKey: string; signature: string;
+}): number {
+  const canonical = JSON.stringify({
+    from: tx.from, to: tx.to, amount: tx.amount, timestamp: tx.timestamp,
+    feeRate: tx.feeRate, memo: tx.memo, publicKey: tx.publicKey, signature: tx.signature,
+  });
+  return new TextEncoder().encode(canonical).length;
+}
+const memoBytes = (m: string) => new TextEncoder().encode(m).length;
+// Estimate fee for the UI (signature is 128 hex chars; pubkey 66; address ~34).
+// Yields a stable byte count so the displayed fee matches what the server charges.
+function estimateTxBytes(from: string, to: string, amount: number, ts: number, feeRate: number, memo: string) {
+  const fakeSig = "00".repeat(64);
+  const fakePub = "02" + "00".repeat(32);
+  return canonicalTxBytes({
+    from, to, amount, timestamp: ts, feeRate, memo,
+    publicKey: fakePub, signature: fakeSig,
+  });
+}
+const feeFromRate = (feeRate: number, bytes: number) => Math.ceil(feeRate * bytes) / BLOB_UNIT;
+
+const SB_URL: string | undefined = (import.meta as any)?.env?.VITE_SUPABASE_URL;
+const SB_KEY: string | undefined = (import.meta as any)?.env?.VITE_SUPABASE_ANON_KEY;
 const GENESIS_TIME_MS = 1776731760000;
 
 const SB_URL: string | undefined = (import.meta as any)?.env?.VITE_SUPABASE_URL;

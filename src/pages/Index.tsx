@@ -945,41 +945,63 @@ function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent }: any) {
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <label className="label-eyebrow block">Gas (network fee rate)</label>
+          <label className="label-eyebrow block">Gas (network fee)</label>
           <span className="text-[10px] text-muted-foreground num">
             recommended <span className="text-primary">{recRate}</span> drops/B
           </span>
         </div>
-        <div className="grid grid-cols-3 gap-2">
-          <PresetButton id="slow"   title="Slow"   sub={`${presetRates.slow} drops/B`} />
-          <PresetButton id="normal" title="Normal" sub={`${presetRates.normal} drops/B`} />
-          <PresetButton id="fast"   title="Fast"   sub={`${presetRates.fast} drops/B`} />
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => { setPreset("custom"); if (!customRate) setCustomRate(String(recRate)); }}
-            className={`text-[10px] tracking-wide px-2 py-1 rounded border ${
-              preset === "custom" ? "border-primary/60 text-primary" : "border-border text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Custom
-          </button>
-          {preset === "custom" && (
-            <div className="relative flex-1">
-              <input
-                value={customRate}
-                onChange={e => setCustomRate(e.target.value)}
-                type="number"
-                min={MIN_FEE_RATE}
-                step="1"
-                placeholder={String(recRate)}
-                className="w-full px-3 py-1.5 pr-14 rounded bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-xs num"
-              />
-              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">drops/B</span>
+        <Select
+          value={preset}
+          onValueChange={(v) => setPreset(v as "slow" | "normal" | "fast" | "custom")}
+        >
+          <SelectTrigger className="w-full h-10 bg-secondary/60 border-border focus:border-primary/60">
+            <div className="flex items-center gap-2">
+              <Zap className="h-3.5 w-3.5 text-primary" />
+              <SelectValue placeholder="Select gas preset" />
             </div>
-          )}
-        </div>
+          </SelectTrigger>
+          <SelectContent className="bg-popover border-border">
+            <SelectItem value="slow" className="cursor-pointer">
+              <div className="flex flex-col py-0.5">
+                <span className="text-sm font-medium">Slow</span>
+                <span className="text-[10px] text-muted-foreground num">{presetRates.slow} drops/B · ~10 min</span>
+              </div>
+            </SelectItem>
+            <SelectItem value="normal" className="cursor-pointer">
+              <div className="flex flex-col py-0.5">
+                <span className="text-sm font-medium">Normal</span>
+                <span className="text-[10px] text-muted-foreground num">{presetRates.normal} drops/B · ~5 min</span>
+              </div>
+            </SelectItem>
+            <SelectItem value="fast" className="cursor-pointer">
+              <div className="flex flex-col py-0.5">
+                <span className="text-sm font-medium">Fast</span>
+                <span className="text-[10px] text-muted-foreground num">{presetRates.fast} drops/B · ~2 min</span>
+              </div>
+            </SelectItem>
+            <SelectItem value="custom" className="cursor-pointer">
+              <div className="flex flex-col py-0.5">
+                <span className="text-sm font-medium">Custom</span>
+                <span className="text-[10px] text-muted-foreground num">Set your own rate</span>
+              </div>
+            </SelectItem>
+          </SelectContent>
+        </Select>
+
+        {preset === "custom" && (
+          <div className="relative">
+            <input
+              value={customRate}
+              onChange={e => setCustomRate(e.target.value)}
+              type="number"
+              min={MIN_FEE_RATE}
+              step="1"
+              placeholder={String(recRate)}
+              className="w-full px-3 py-2 pr-16 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm num"
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">drops/B</span>
+          </div>
+        )}
       </div>
 
       <div className="rounded-lg border border-border/60 bg-secondary/30 px-3 py-2 text-xs space-y-1">

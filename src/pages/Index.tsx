@@ -5,7 +5,7 @@
 // Real ECDSA wallet · SHA-256 block hashing · Weighted lottery consensus
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import * as Relay from "@/lib/blobRelay";
 import * as Vault from "@/lib/walletVault";
 import * as secp from "@noble/secp256k1";
@@ -14,7 +14,7 @@ import { ripemd160 } from "@noble/hashes/ripemd160";
 import { base58check } from "@scure/base";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Send, Play, Wallet, Plus, Download, Lock, Settings as SettingsIcon, LogOut, ChevronDown, ArrowDownLeft, ArrowUpRight, Trophy, Eye, EyeOff } from "lucide-react";
+import { Send, Play, Wallet, Plus, Download, Lock, Settings as SettingsIcon, LogOut, ChevronDown, ArrowDownLeft, ArrowUpRight, Trophy, Eye, EyeOff, Search } from "lucide-react";
 import runnerArt from "@/assets/runner.png";
 
 // 1. CONFIG ────────────────────────────────────────────────────────────────────

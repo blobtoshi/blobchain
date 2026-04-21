@@ -1430,6 +1430,7 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
               )}
             </div>
           ))}
+          <Pager page={pTxs} setPage={setPTxs} total={memTxs.length + allTxs.length} label="transactions" />
         </div>
       )}
 
@@ -1442,20 +1443,23 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
           {memTxs.length === 0 ? (
             <div className="glass text-center py-10 text-xs text-muted-foreground">Mempool is empty · all transactions confirmed</div>
           ) : (
-            memTxs.map(t => (
-              <button key={t.id} onClick={() => { setTab("txs"); setSelTx(t.id); }}
-                className="w-full text-left glass px-3 py-2.5 hover:bg-secondary/30 transition border-l-2 border-l-[hsl(var(--warning))]">
-                <div className="flex items-center justify-between mb-1 text-xs">
-                  <span className="text-foreground/80">{t.fromUsername || shortHash(t.from, 8)} → {shortHash(t.to, 8)}</span>
-                  <span className="num text-primary/90">{t.amount} ⬡</span>
-                </div>
-                <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                  <span className="num">fee {t.fee}</span>
-                  <span className="num">{shortHash(t.id, 8)}</span>
-                  <span className="text-[hsl(var(--warning))]">⧗ {timeAgo(t.timestamp)}</span>
-                </div>
-              </button>
-            ))
+            <>
+              {memTxs.slice(pMem * PAGE_SIZE, (pMem + 1) * PAGE_SIZE).map(t => (
+                <button key={t.id} onClick={() => { setTab("txs"); setSelTx(t.id); }}
+                  className="w-full text-left glass px-3 py-2.5 hover:bg-secondary/30 transition border-l-2 border-l-[hsl(var(--warning))]">
+                  <div className="flex items-center justify-between mb-1 text-xs">
+                    <span className="text-foreground/80">{t.fromUsername || shortHash(t.from, 8)} → {shortHash(t.to, 8)}</span>
+                    <span className="num text-primary/90">{t.amount} ⬡</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                    <span className="num">fee {t.fee}</span>
+                    <span className="num">{shortHash(t.id, 8)}</span>
+                    <span className="text-[hsl(var(--warning))]">⧗ {timeAgo(t.timestamp)}</span>
+                  </div>
+                </button>
+              ))}
+              <Pager page={pMem} setPage={setPMem} total={memTxs.length} label="pending" />
+            </>
           )}
 
           {/* Recently confirmed */}

@@ -134,16 +134,27 @@ function getRewardForHeight(height) {
   return Math.min(INITIAL_REWARD / Math.pow(2, halvings), INITIAL_REWARD);
 }
 
-function getBlockInfo() {
-  const now = Math.floor(Date.now() / 1000);
-  const genesis = Math.floor(GENESIS_TIME_MS / 1000);
-  const sinceGenesis = Math.max(0, now - genesis);
-  const height = Math.floor(sinceGenesis / BLOCK_TIME) + 1;
-  const elapsed = sinceGenesis % BLOCK_TIME;
-  const remaining = BLOCK_TIME - elapsed;
+// Active block = lastSealedHeight + 1. Countdown runs from the previous
+// block's timestamp (or genesis). When 120s elapse with no entry submitted,
+// the block enters "awaiting miner" state and stays there until somebody
+// plays — proof-of-gaming halts chain progression.
+function getBlockInfo(chain?: any[], hasEntry?: boolean) {
+  const tip = chain && chain.length > 0 ? chain[chain.length - 1] : null;
+  const prevHeight = tip ? Number(tip.height) : 0;
+  const prevTs = tip ? Number(tip.timestamp) : GENESIS_TIME_MS;
+  const height = prevHeight + 1;
+  const elapsed = Math.max(0, Math.floor((Date.now() - prevTs) / 1000));
+  const remaining = Math.max(0, BLOCK_TIME - elapsed);
+  const overdue = elapsed >= BLOCK_TIME;
+  const awaitingMiner = overdue && !hasEntry;
+  const overtime = overdue ? elapsed - BLOCK_TIME : 0;
   const reward = getRewardForHeight(height);
   const seed = height * 6364136223846793 + 1442695040888963407;
-  return { height, elapsed, remaining, reward, seed: Math.abs(seed % 2147483647) };
+  return {
+    height, elapsed, remaining, reward,
+    seed: Math.abs(seed % 2147483647),
+    awaitingMiner, overtime, overdue,
+  };
 }
 
 // 4. BLOCKCHAIN CORE ───────────────────────────────────────────────────────────

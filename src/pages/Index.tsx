@@ -22,11 +22,15 @@ import blobSprite from "@/assets/blob-sprite.png";
 // 1. CONFIG ────────────────────────────────────────────────────────────────────
 const BLOCK_TIME = 120;
 const INITIAL_REWARD = 10;
-const HALVING_BLOCKS = 210000;
-const MAX_SUPPLY = 20000000;
+const HALVING_BLOCKS = 1_000_000;   // halves every 1M blocks
+const MAX_SUPPLY = 20_000_000;       // 10 × 1M × Σ(1/2^n) = 20M $BLOB
 const MAX_BLOCK_SIZE = 1_000_000;   // ~1 MB, Bitcoin-style
 const MAX_TX_SIZE = 100_000;        // ~100 KB, Bitcoin standard tx limit
 const TX_FEE = 0.001;
+const BLOB_DECIMALS = 8;             // $BLOB is divisible to 8 decimal places
+const BLOB_UNIT = 1e8;               // 1 $BLOB = 100,000,000 base units (satoshis)
+// Round a $BLOB amount to 8-decimal precision (banker-safe via integer base units).
+const to8 = (n: number) => Math.round(Number(n) * BLOB_UNIT) / BLOB_UNIT;
 const GENESIS_TIME_MS = 1776731760000;
 
 const SB_URL: string | undefined = (import.meta as any)?.env?.VITE_SUPABASE_URL;
@@ -155,7 +159,7 @@ function calcBalance(address, chain, mempool?: any[]) {
       if (tx.from === address) bal -= (tx.amount + (tx.fee || TX_FEE));
     }
   }
-  return +Math.max(0, bal).toFixed(6);
+  return to8(Math.max(0, bal));
 }
 
 function calcTotalSupply(chain) {

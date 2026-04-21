@@ -901,111 +901,535 @@ function MiningPanel({ blockInfo, entries, myEntry, chain }: any) {
   );
 }
 
-// 11. BLOCK EXPLORER ──────────────────────────────────────────────────────────
-function BlockExplorer({ chain, blockInfo }: any) {
-  const [sel, setSel] = useState<number | null>(null);
-  const display = [...chain].reverse().slice(0, 30);
+// 11. EXPLORER ────────────────────────────────────────────────────────────────
+// A full-featured blockchain explorer (overview / blocks / txs / mempool /
+// addresses) with a global search bar — inspired by Etherscan / Solscan but
+// styled to match the rest of the app's glass + warning-accent aesthetic.
 
+type ExplorerTx = {
+  id: string;
+  from: string;
+  to: string;
+  fromUsername?: string;
+  toUsername?: string;
+  amount: number;
+  fee: number;
+  timestamp: number;
+  status: "confirmed" | "pending";
+  block?: number;
+  signature?: string;
+  kind: "transfer" | "reward";
+};
+
+function flattenChainTxs(chain: any[]): ExplorerTx[] {
+  const out: ExplorerTx[] = [];
+  for (const b of chain) {
+    if (b.winner && b.reward > 0) {
+      out.push({
+        id: `reward-${b.height}`,
+        from: "coinbase",
+        to: b.winner,
+        toUsername: b.winnerUsername,
+        amount: Number(b.reward),
+        fee: 0,
+        timestamp: b.timestamp,
+        status: "confirmed",
+        block: b.height,
+        kind: "reward",
+      });
+    }
+    for (const tx of (b.transactions || [])) {
+      out.push({
+        id: tx.id || `${b.height}-${tx.signature?.slice(0, 12)}`,
+        from: tx.from,
+        to: tx.to,
+        fromUsername: tx.fromUsername,
+        toUsername: tx.toUsername,
+        amount: Number(tx.amount),
+        fee: Number(tx.fee || 0),
+        timestamp: tx.timestamp || b.timestamp,
+        status: "confirmed",
+        block: b.height,
+        signature: tx.signature,
+        kind: "transfer",
+      });
+    }
+  }
+  return out;
+}
+
+function mempoolToTxs(mempool: any[]): ExplorerTx[] {
+  return mempool.map((tx: any) => ({
+    id: tx.id,
+    from: tx.from,
+    to: tx.to,
+    fromUsername: tx.fromUsername,
+    amount: Number(tx.amount),
+    fee: Number(tx.fee || 0),
+    timestamp: tx.timestamp,
+    status: "pending" as const,
+    signature: tx.signature,
+    kind: "transfer" as const,
+  }));
+}
+
+function shortHash(s?: string, n = 8) {
+  if (!s) return "—";
+  if (s.length <= n * 2 + 1) return s;
+  return `${s.slice(0, n)}…${s.slice(-n)}`;
+}
+
+function timeAgo(ts: number) {
+  const s = Math.max(1, Math.floor((Date.now() - ts) / 1000));
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+function ExplorerStat({ label, value, sub }: { label: string; value: React.ReactNode; sub?: React.ReactNode }) {
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between glass px-4 py-3">
-        <span className="text-sm">⬡ BLOB Chain</span>
-        <span className="text-xs text-muted-foreground num">{chain.length} blocks</span>
-      </div>
-
-      <div className="glass-hi px-4 py-3 ring-1 ring-[hsl(var(--warning)/0.2)]">
-        <div className="grid grid-cols-[60px_1fr_80px_100px_50px] gap-3 items-center text-sm">
-          <span className="num text-[hsl(var(--warning))]">#{blockInfo.height}</span>
-          <span className="text-muted-foreground">🕒 mining…</span>
-          <span className="text-muted-foreground">—</span>
-          <span className="num text-[hsl(var(--warning))]">{blockInfo.reward} $BLOB</span>
-          <span className="text-muted-foreground num text-right">—</span>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-[60px_1fr_80px_100px_50px] gap-3 px-4 py-2">
-        {["Height", "Winner", "Score", "Reward", "Txs"].map(h => (
-          <div key={h} className="label-eyebrow">{h}</div>
-        ))}
-      </div>
-
-      {display.map((b: any) => (
-        <div key={b.height}>
-          <div
-            onClick={() => setSel(sel === b.height ? null : b.height)}
-            className="glass px-4 py-3 cursor-pointer hover:bg-secondary/30 transition grid grid-cols-[60px_1fr_80px_100px_50px] gap-3 items-center text-sm"
-          >
-            <span className="num text-muted-foreground">#{b.height}</span>
-            <span className="truncate text-foreground/80">{b.winnerUsername || b.winner?.slice(0, 18) || "—"}</span>
-            <span className="num text-muted-foreground">{b.winnerScore > 0 ? b.winnerScore : "—"}</span>
-            <span className="num text-primary/80">{b.reward > 0 ? `${b.reward} ⬡` : "—"}</span>
-            <span className="num text-right text-muted-foreground">{(b.transactions || []).length}</span>
-          </div>
-          {sel === b.height && (
-            <div className="glass mt-1 p-4 text-xs text-muted-foreground space-y-1.5 overflow-x-auto">
-              <div><span className="label-eyebrow mr-2">Hash</span><span className="num text-foreground/70">{b.hash}</span></div>
-              <div><span className="label-eyebrow mr-2">Prev</span><span className="num text-foreground/70">{b.previousHash?.slice(0, 40)}…</span></div>
-              <div><span className="label-eyebrow mr-2">Seed</span><span className="num">{b.seed}</span></div>
-              <div><span className="label-eyebrow mr-2">Time</span>{new Date(b.timestamp).toLocaleString()}</div>
-              <div><span className="label-eyebrow mr-2">Winner</span><span className="num text-foreground/70">{b.winner || "—"}</span></div>
-              {(b.transactions || []).map((tx: any, i: number) => (
-                <div key={i} className="num text-foreground/60">
-                  TX · {tx.fromUsername || tx.from?.slice(0, 10)} → {tx.to?.slice(0, 10)} · {tx.amount} $BLOB
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
-      {chain.length <= 1 && (
-        <div className="glass text-center py-10 text-sm text-muted-foreground">
-          Chain starts at genesis · Mine the first block to begin
-        </div>
-      )}
+    <div className="glass px-4 py-3">
+      <div className="label-eyebrow mb-1.5">{label}</div>
+      <div className="text-base font-medium num text-foreground/90">{value}</div>
+      {sub && <div className="text-[11px] text-muted-foreground num mt-0.5">{sub}</div>}
     </div>
   );
 }
 
-// 12. MEMPOOL VIEW ─────────────────────────────────────────────────────────────
-function Mempool({ mempool, wallet }: any) {
+function ExplorerTabBtn({ active, onClick, children, count }: any) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-3 py-2 text-xs font-medium tracking-wide transition border-b ${
+        active
+          ? "text-[hsl(var(--warning))] border-[hsl(var(--warning))]"
+          : "text-muted-foreground border-transparent hover:text-foreground/80"
+      }`}
+    >
+      {children}
+      {typeof count === "number" && (
+        <span className="ml-1.5 num text-[10px] text-muted-foreground">({count})</span>
+      )}
+    </button>
+  );
+}
+
+function BlockExplorer({ chain, blockInfo, mempool }: any) {
+  const [tab, setTab] = useState<"overview" | "blocks" | "txs" | "mempool" | "addresses">("overview");
+  const [query, setQuery] = useState("");
+  const [selBlock, setSelBlock] = useState<number | null>(null);
+  const [selTx, setSelTx] = useState<string | null>(null);
+  const [selAddr, setSelAddr] = useState<string | null>(null);
+
+  const allTxs = useMemo(() => flattenChainTxs(chain), [chain]);
+  const memTxs = useMemo(() => mempoolToTxs(mempool || []), [mempool]);
+
+  // Aggregate addresses
+  const addressBook = useMemo(() => {
+    const m = new Map<string, { address: string; username?: string; sent: number; received: number; mined: number; txCount: number; lastSeen: number }>();
+    const touch = (addr: string, username?: string) => {
+      if (!addr || addr === "coinbase") return;
+      if (!m.has(addr)) m.set(addr, { address: addr, username, sent: 0, received: 0, mined: 0, txCount: 0, lastSeen: 0 });
+      const e = m.get(addr)!;
+      if (username && !e.username) e.username = username;
+      return e;
+    };
+    for (const tx of allTxs) {
+      const ts = tx.timestamp;
+      if (tx.kind === "reward") {
+        const e = touch(tx.to, tx.toUsername); if (e) { e.mined += tx.amount; e.lastSeen = Math.max(e.lastSeen, ts); }
+      } else {
+        const f = touch(tx.from, tx.fromUsername);
+        const t = touch(tx.to, tx.toUsername);
+        if (f) { f.sent += tx.amount + tx.fee; f.txCount++; f.lastSeen = Math.max(f.lastSeen, ts); }
+        if (t) { t.received += tx.amount; t.txCount++; t.lastSeen = Math.max(t.lastSeen, ts); }
+      }
+    }
+    return Array.from(m.values()).sort((a, b) => (b.mined + b.received) - (a.mined + a.received));
+  }, [allTxs]);
+
+  // Search: returns matches across blocks, txs, addresses
+  const q = query.trim().toLowerCase();
+  const searchResults = useMemo(() => {
+    if (!q) return null;
+    const blocks = chain.filter((b: any) =>
+      String(b.height).includes(q) ||
+      b.hash?.toLowerCase().includes(q) ||
+      b.previousHash?.toLowerCase().includes(q) ||
+      b.winner?.toLowerCase().includes(q) ||
+      b.winnerUsername?.toLowerCase().includes(q) ||
+      b.seed?.toLowerCase().includes(q)
+    ).slice(0, 10);
+    const txs = [...memTxs, ...allTxs].filter(t =>
+      t.id.toLowerCase().includes(q) ||
+      t.signature?.toLowerCase().includes(q) ||
+      t.from?.toLowerCase().includes(q) ||
+      t.to?.toLowerCase().includes(q) ||
+      t.fromUsername?.toLowerCase().includes(q) ||
+      t.toUsername?.toLowerCase().includes(q) ||
+      String(t.amount).includes(q)
+    ).slice(0, 15);
+    const addresses = addressBook.filter(a =>
+      a.address.toLowerCase().includes(q) ||
+      a.username?.toLowerCase().includes(q)
+    ).slice(0, 10);
+    return { blocks, txs, addresses };
+  }, [q, chain, allTxs, memTxs, addressBook]);
+
+  const totalSupply = chain.reduce((s: number, b: any) => s + Number(b.reward || 0), 0);
+  const totalTxs = allTxs.filter(t => t.kind === "transfer").length;
+  const totalVolume = allTxs.filter(t => t.kind === "transfer").reduce((s, t) => s + t.amount, 0);
+  const lastBlock = chain[chain.length - 1];
+
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <span className="label-eyebrow">Pending transactions</span>
-        <span className="text-xs text-muted-foreground num">{mempool.length} unconfirmed</span>
-      </div>
-      {mempool.length === 0 ? (
-        <div className="glass text-center py-10 text-sm text-muted-foreground">
-          No pending transactions · Mempool empty
+      {/* Search bar */}
+      <div className="glass-hi p-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search by block #, address, tx hash, signature, username, seed…"
+            className="w-full bg-background/40 border border-border rounded-none pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:border-[hsl(var(--warning))] num placeholder:font-sans placeholder:text-muted-foreground"
+          />
         </div>
-      ) : (
-        <div className="space-y-2">
-          {mempool.map((tx: any, i: number) => {
-            const isMe = tx.from === wallet.address;
-            return (
-              <div
-                key={tx.id || i}
-                className={`glass px-4 py-3 border-l-2 ${isMe ? "border-l-primary" : "border-l-muted"}`}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm text-foreground/80">{tx.fromUsername || tx.from?.slice(0, 16) + "…"}</span>
-                  <span className="num text-sm font-medium text-primary/90">{tx.amount} $BLOB</span>
-                </div>
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span className="num">fee {tx.fee || TX_FEE}</span>
-                  <span className="num">{new Date(tx.timestamp).toLocaleTimeString()}</span>
-                  <span>⧗ pending</span>
-                </div>
+        {q && searchResults && (
+          <div className="mt-3 space-y-2 max-h-80 overflow-y-auto">
+            {searchResults.blocks.length === 0 && searchResults.txs.length === 0 && searchResults.addresses.length === 0 && (
+              <div className="text-xs text-muted-foreground text-center py-4">No results for "{query}"</div>
+            )}
+            {searchResults.blocks.length > 0 && (
+              <div>
+                <div className="label-eyebrow mb-1.5">Blocks · {searchResults.blocks.length}</div>
+                {searchResults.blocks.map((b: any) => (
+                  <button key={b.height} onClick={() => { setTab("blocks"); setSelBlock(b.height); setQuery(""); }}
+                    className="w-full text-left glass px-3 py-2 mb-1 hover:bg-secondary/30 transition flex items-center justify-between text-xs">
+                    <span className="num text-[hsl(var(--warning))]">#{b.height}</span>
+                    <span className="num text-muted-foreground truncate mx-2">{shortHash(b.hash, 10)}</span>
+                    <span className="text-foreground/70">{b.winnerUsername || shortHash(b.winner, 6)}</span>
+                  </button>
+                ))}
               </div>
-            );
-          })}
+            )}
+            {searchResults.txs.length > 0 && (
+              <div>
+                <div className="label-eyebrow mb-1.5">Transactions · {searchResults.txs.length}</div>
+                {searchResults.txs.map(t => (
+                  <button key={t.id} onClick={() => { setTab("txs"); setSelTx(t.id); setQuery(""); }}
+                    className="w-full text-left glass px-3 py-2 mb-1 hover:bg-secondary/30 transition flex items-center justify-between text-xs">
+                    <span className="num text-muted-foreground">{shortHash(t.id, 8)}</span>
+                    <span className="num text-primary/80">{t.amount} ⬡</span>
+                    <span className={`text-[10px] ${t.status === "pending" ? "text-[hsl(var(--warning))]" : "text-foreground/60"}`}>
+                      {t.status === "pending" ? "pending" : `block #${t.block}`}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {searchResults.addresses.length > 0 && (
+              <div>
+                <div className="label-eyebrow mb-1.5">Addresses · {searchResults.addresses.length}</div>
+                {searchResults.addresses.map(a => (
+                  <button key={a.address} onClick={() => { setTab("addresses"); setSelAddr(a.address); setQuery(""); }}
+                    className="w-full text-left glass px-3 py-2 mb-1 hover:bg-secondary/30 transition flex items-center justify-between text-xs">
+                    <span className="text-foreground/80">{a.username || "anon"}</span>
+                    <span className="num text-muted-foreground truncate mx-2">{shortHash(a.address, 8)}</span>
+                    <span className="num text-primary/80">{(a.received + a.mined - a.sent).toFixed(2)} ⬡</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="glass flex items-center gap-1 px-2 overflow-x-auto">
+        <ExplorerTabBtn active={tab === "overview"} onClick={() => setTab("overview")}>Overview</ExplorerTabBtn>
+        <ExplorerTabBtn active={tab === "blocks"} onClick={() => setTab("blocks")} count={chain.length}>Blocks</ExplorerTabBtn>
+        <ExplorerTabBtn active={tab === "txs"} onClick={() => setTab("txs")} count={allTxs.length}>Transactions</ExplorerTabBtn>
+        <ExplorerTabBtn active={tab === "mempool"} onClick={() => setTab("mempool")} count={memTxs.length}>Mempool</ExplorerTabBtn>
+        <ExplorerTabBtn active={tab === "addresses"} onClick={() => setTab("addresses")} count={addressBook.length}>Addresses</ExplorerTabBtn>
+      </div>
+
+      {tab === "overview" && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <ExplorerStat label="Latest block" value={`#${blockInfo.height - 1}`} sub={lastBlock ? timeAgo(lastBlock.timestamp) : "—"} />
+            <ExplorerStat label="Total supply" value={`${totalSupply.toFixed(2)}`} sub="$BLOB minted" />
+            <ExplorerStat label="Transactions" value={totalTxs} sub={`${totalVolume.toFixed(2)} ⬡ volume`} />
+            <ExplorerStat label="Pending" value={memTxs.length} sub="in mempool" />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between px-1">
+                <span className="label-eyebrow">Latest blocks</span>
+                <button onClick={() => setTab("blocks")} className="text-[10px] text-[hsl(var(--warning))] hover:underline">View all →</button>
+              </div>
+              {[...chain].reverse().slice(0, 6).map((b: any) => (
+                <button key={b.height} onClick={() => { setTab("blocks"); setSelBlock(b.height); }}
+                  className="w-full text-left glass px-3 py-2.5 hover:bg-secondary/30 transition flex items-center justify-between gap-2 text-xs">
+                  <span className="num text-[hsl(var(--warning))] shrink-0">#{b.height}</span>
+                  <span className="text-foreground/80 truncate flex-1">{b.winnerUsername || shortHash(b.winner, 6)}</span>
+                  <span className="num text-muted-foreground shrink-0">{(b.transactions || []).length} tx</span>
+                  <span className="num text-primary/80 shrink-0">{Number(b.reward).toFixed(0)} ⬡</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between px-1">
+                <span className="label-eyebrow">Latest transactions</span>
+                <button onClick={() => setTab("txs")} className="text-[10px] text-[hsl(var(--warning))] hover:underline">View all →</button>
+              </div>
+              {[...memTxs, ...allTxs].slice(0, 6).map(t => (
+                <button key={t.id} onClick={() => { setTab("txs"); setSelTx(t.id); }}
+                  className="w-full text-left glass px-3 py-2.5 hover:bg-secondary/30 transition flex items-center justify-between gap-2 text-xs">
+                  {t.kind === "reward"
+                    ? <Trophy className="w-3.5 h-3.5 text-[hsl(var(--warning))] shrink-0" />
+                    : <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+                  <span className="num text-muted-foreground truncate flex-1">{shortHash(t.id, 6)}</span>
+                  <span className="num text-primary/80 shrink-0">{t.amount} ⬡</span>
+                  <span className={`text-[10px] shrink-0 ${t.status === "pending" ? "text-[hsl(var(--warning))]" : "text-muted-foreground"}`}>
+                    {t.status === "pending" ? "pending" : timeAgo(t.timestamp)}
+                  </span>
+                </button>
+              ))}
+              {allTxs.length === 0 && memTxs.length === 0 && (
+                <div className="glass text-center py-6 text-xs text-muted-foreground">No transactions yet</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === "blocks" && (
+        <div className="space-y-1.5">
+          <div className="glass-hi px-3 py-2.5 ring-1 ring-[hsl(var(--warning)/0.2)] grid grid-cols-[50px_1fr_60px_70px_40px] sm:grid-cols-[60px_1fr_80px_100px_50px] gap-2 items-center text-xs">
+            <span className="num text-[hsl(var(--warning))]">#{blockInfo.height}</span>
+            <span className="text-muted-foreground">⏳ mining · {blockInfo.remaining}s</span>
+            <span className="text-muted-foreground">—</span>
+            <span className="num text-[hsl(var(--warning))]">{blockInfo.reward} ⬡</span>
+            <span className="num text-right text-muted-foreground">—</span>
+          </div>
+          <div className="grid grid-cols-[50px_1fr_60px_70px_40px] sm:grid-cols-[60px_1fr_80px_100px_50px] gap-2 px-3 py-1">
+            {["Height", "Winner", "Score", "Reward", "Tx"].map(h => <div key={h} className="label-eyebrow">{h}</div>)}
+          </div>
+          {[...chain].reverse().map((b: any) => (
+            <div key={b.height}>
+              <div onClick={() => setSelBlock(selBlock === b.height ? null : b.height)}
+                className="glass px-3 py-2.5 cursor-pointer hover:bg-secondary/30 transition grid grid-cols-[50px_1fr_60px_70px_40px] sm:grid-cols-[60px_1fr_80px_100px_50px] gap-2 items-center text-xs">
+                <span className="num text-muted-foreground">#{b.height}</span>
+                <span className="truncate text-foreground/80">{b.winnerUsername || shortHash(b.winner, 8)}</span>
+                <span className="num text-muted-foreground">{b.winnerScore > 0 ? b.winnerScore : "—"}</span>
+                <span className="num text-primary/80">{b.reward > 0 ? `${b.reward} ⬡` : "—"}</span>
+                <span className="num text-right text-muted-foreground">{(b.transactions || []).length}</span>
+              </div>
+              {selBlock === b.height && (
+                <div className="glass-hi mt-1 p-3 text-xs space-y-1.5 overflow-x-auto">
+                  <div className="grid grid-cols-[80px_1fr] gap-2"><span className="label-eyebrow">Hash</span><span className="num text-foreground/70 break-all">{b.hash}</span></div>
+                  <div className="grid grid-cols-[80px_1fr] gap-2"><span className="label-eyebrow">Prev</span><span className="num text-foreground/70 break-all">{b.previousHash}</span></div>
+                  <div className="grid grid-cols-[80px_1fr] gap-2"><span className="label-eyebrow">Seed</span><span className="num">{b.seed}</span></div>
+                  <div className="grid grid-cols-[80px_1fr] gap-2"><span className="label-eyebrow">Time</span><span>{new Date(b.timestamp).toLocaleString()} · {timeAgo(b.timestamp)}</span></div>
+                  <div className="grid grid-cols-[80px_1fr] gap-2">
+                    <span className="label-eyebrow">Winner</span>
+                    <button onClick={() => { setTab("addresses"); setSelAddr(b.winner); }}
+                      className="num text-[hsl(var(--warning))] hover:underline text-left break-all">{b.winner || "—"}</button>
+                  </div>
+                  <div className="grid grid-cols-[80px_1fr] gap-2"><span className="label-eyebrow">Mining entries</span><span className="num">{(b.miningEntries || []).length}</span></div>
+                  {(b.transactions || []).length > 0 && (
+                    <div className="pt-1.5 border-t border-border/50">
+                      <div className="label-eyebrow mb-1">Transactions ({b.transactions.length})</div>
+                      {b.transactions.map((tx: any, i: number) => (
+                        <div key={i} className="num text-foreground/60 text-[11px]">
+                          {tx.fromUsername || shortHash(tx.from, 6)} → {tx.toUsername || shortHash(tx.to, 6)} · {tx.amount} ⬡ · fee {tx.fee || 0}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+          {chain.length === 0 && (
+            <div className="glass text-center py-10 text-sm text-muted-foreground">Chain starts at genesis</div>
+          )}
+        </div>
+      )}
+
+      {tab === "txs" && (
+        <div className="space-y-1.5">
+          <div className="grid grid-cols-[18px_1fr_70px_60px_60px] sm:grid-cols-[18px_1fr_1fr_80px_70px_80px] gap-2 px-3 py-1">
+            {["", "From", "To", "Amount", "Block", "Time"].slice(0, window.innerWidth < 640 ? 5 : 6).map(h => <div key={h} className="label-eyebrow">{h}</div>)}
+          </div>
+          {[...memTxs, ...allTxs].length === 0 && (
+            <div className="glass text-center py-10 text-sm text-muted-foreground">No transactions yet</div>
+          )}
+          {[...memTxs, ...allTxs].slice(0, 100).map(t => (
+            <div key={t.id}>
+              <div onClick={() => setSelTx(selTx === t.id ? null : t.id)}
+                className="glass px-3 py-2.5 cursor-pointer hover:bg-secondary/30 transition grid grid-cols-[18px_1fr_70px_60px_60px] sm:grid-cols-[18px_1fr_1fr_80px_70px_80px] gap-2 items-center text-xs">
+                {t.kind === "reward"
+                  ? <Trophy className="w-3.5 h-3.5 text-[hsl(var(--warning))]" />
+                  : <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground" />}
+                <span className="text-foreground/80 truncate">{t.kind === "reward" ? "coinbase" : (t.fromUsername || shortHash(t.from, 6))}</span>
+                <span className="hidden sm:block text-foreground/80 truncate">{t.toUsername || shortHash(t.to, 6)}</span>
+                <span className="num text-primary/80">{t.amount} ⬡</span>
+                <span className="num text-muted-foreground">{t.status === "pending" ? "—" : `#${t.block}`}</span>
+                <span className={`num text-right ${t.status === "pending" ? "text-[hsl(var(--warning))]" : "text-muted-foreground"}`}>
+                  {t.status === "pending" ? "pending" : timeAgo(t.timestamp)}
+                </span>
+              </div>
+              {selTx === t.id && (
+                <div className="glass-hi mt-1 p-3 text-xs space-y-1.5 overflow-x-auto">
+                  <div className="grid grid-cols-[80px_1fr] gap-2"><span className="label-eyebrow">ID</span><span className="num text-foreground/70 break-all">{t.id}</span></div>
+                  <div className="grid grid-cols-[80px_1fr] gap-2">
+                    <span className="label-eyebrow">From</span>
+                    <button onClick={() => { setTab("addresses"); setSelAddr(t.from); }} className="num text-[hsl(var(--warning))] hover:underline text-left break-all">
+                      {t.kind === "reward" ? "coinbase (block reward)" : t.from}
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-[80px_1fr] gap-2">
+                    <span className="label-eyebrow">To</span>
+                    <button onClick={() => { setTab("addresses"); setSelAddr(t.to); }} className="num text-[hsl(var(--warning))] hover:underline text-left break-all">{t.to}</button>
+                  </div>
+                  <div className="grid grid-cols-[80px_1fr] gap-2"><span className="label-eyebrow">Amount</span><span className="num">{t.amount} $BLOB</span></div>
+                  <div className="grid grid-cols-[80px_1fr] gap-2"><span className="label-eyebrow">Fee</span><span className="num">{t.fee} $BLOB</span></div>
+                  <div className="grid grid-cols-[80px_1fr] gap-2"><span className="label-eyebrow">Status</span>
+                    <span className={t.status === "pending" ? "text-[hsl(var(--warning))]" : "text-foreground/70"}>
+                      {t.status === "pending" ? "⧗ pending in mempool" : `✓ confirmed in block #${t.block}`}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-[80px_1fr] gap-2"><span className="label-eyebrow">Time</span><span>{new Date(t.timestamp).toLocaleString()}</span></div>
+                  {t.signature && (
+                    <div className="grid grid-cols-[80px_1fr] gap-2"><span className="label-eyebrow">Signature</span><span className="num text-foreground/60 break-all text-[10px]">{t.signature}</span></div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === "mempool" && (
+        <div className="space-y-2">
+          <div className="glass-hi px-3 py-2.5 flex items-center justify-between text-xs">
+            <span className="label-eyebrow">Pending pool</span>
+            <span className="num text-muted-foreground">{memTxs.length} unconfirmed · {memTxs.reduce((s, t) => s + t.amount, 0).toFixed(2)} ⬡ queued</span>
+          </div>
+          {memTxs.length === 0 ? (
+            <div className="glass text-center py-10 text-xs text-muted-foreground">Mempool is empty · all transactions confirmed</div>
+          ) : (
+            memTxs.map(t => (
+              <button key={t.id} onClick={() => { setTab("txs"); setSelTx(t.id); }}
+                className="w-full text-left glass px-3 py-2.5 hover:bg-secondary/30 transition border-l-2 border-l-[hsl(var(--warning))]">
+                <div className="flex items-center justify-between mb-1 text-xs">
+                  <span className="text-foreground/80">{t.fromUsername || shortHash(t.from, 8)} → {shortHash(t.to, 8)}</span>
+                  <span className="num text-primary/90">{t.amount} ⬡</span>
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                  <span className="num">fee {t.fee}</span>
+                  <span className="num">{shortHash(t.id, 8)}</span>
+                  <span className="text-[hsl(var(--warning))]">⧗ {timeAgo(t.timestamp)}</span>
+                </div>
+              </button>
+            ))
+          )}
+
+          {/* Recently confirmed */}
+          <div className="pt-2">
+            <div className="label-eyebrow mb-2 px-1">Recently confirmed</div>
+            {allTxs.filter(t => t.kind === "transfer").slice(0, 10).map(t => (
+              <button key={t.id} onClick={() => { setTab("txs"); setSelTx(t.id); }}
+                className="w-full text-left glass px-3 py-2 mb-1 hover:bg-secondary/30 transition flex items-center justify-between gap-2 text-xs">
+                <span className="text-foreground/70 truncate">{t.fromUsername || shortHash(t.from, 6)} → {t.toUsername || shortHash(t.to, 6)}</span>
+                <span className="num text-primary/80 shrink-0">{t.amount} ⬡</span>
+                <span className="num text-muted-foreground shrink-0">#{t.block}</span>
+              </button>
+            ))}
+            {allTxs.filter(t => t.kind === "transfer").length === 0 && (
+              <div className="text-[11px] text-muted-foreground text-center py-3">No confirmed transactions yet</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === "addresses" && (
+        <div className="space-y-1.5">
+          {selAddr ? (
+            (() => {
+              const a = addressBook.find(x => x.address === selAddr);
+              const addrTxs = [...memTxs, ...allTxs].filter(t => t.from === selAddr || t.to === selAddr);
+              const balance = (a?.received || 0) + (a?.mined || 0) - (a?.sent || 0);
+              return (
+                <div className="space-y-3">
+                  <button onClick={() => setSelAddr(null)} className="text-xs text-muted-foreground hover:text-foreground">← Back to addresses</button>
+                  <div className="glass-hi p-4 space-y-2">
+                    <div className="label-eyebrow">Address</div>
+                    <div className="num text-sm text-foreground/90 break-all">{selAddr}</div>
+                    {a?.username && <div className="text-xs text-muted-foreground">@{a.username}</div>}
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <ExplorerStat label="Balance" value={`${balance.toFixed(4)}`} sub="$BLOB" />
+                    <ExplorerStat label="Mined" value={(a?.mined || 0).toFixed(2)} sub="from blocks" />
+                    <ExplorerStat label="Received" value={(a?.received || 0).toFixed(2)} />
+                    <ExplorerStat label="Sent" value={(a?.sent || 0).toFixed(2)} />
+                  </div>
+                  <div className="label-eyebrow px-1">Transactions ({addrTxs.length})</div>
+                  {addrTxs.slice(0, 50).map(t => (
+                    <button key={t.id} onClick={() => { setTab("txs"); setSelTx(t.id); }}
+                      className="w-full text-left glass px-3 py-2.5 hover:bg-secondary/30 transition flex items-center justify-between gap-2 text-xs">
+                      {t.kind === "reward"
+                        ? <Trophy className="w-3.5 h-3.5 text-[hsl(var(--warning))] shrink-0" />
+                        : t.from === selAddr
+                          ? <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                          : <ArrowDownLeft className="w-3.5 h-3.5 text-primary/80 shrink-0" />}
+                      <span className="text-foreground/70 truncate flex-1">
+                        {t.from === selAddr ? `→ ${shortHash(t.to, 8)}` : `← ${t.kind === "reward" ? "coinbase" : shortHash(t.from, 8)}`}
+                      </span>
+                      <span className={`num shrink-0 ${t.from === selAddr ? "text-muted-foreground" : "text-primary/80"}`}>
+                        {t.from === selAddr ? "-" : "+"}{t.amount} ⬡
+                      </span>
+                      <span className="num text-muted-foreground shrink-0 text-[10px]">{t.status === "pending" ? "pending" : `#${t.block}`}</span>
+                    </button>
+                  ))}
+                </div>
+              );
+            })()
+          ) : (
+            <>
+              <div className="grid grid-cols-[1fr_80px_80px_60px] sm:grid-cols-[1fr_1fr_100px_100px_60px] gap-2 px-3 py-1">
+                {["Address", "Username", "Balance", "Mined", "Tx"].slice(0, window.innerWidth < 640 ? 4 : 5).map(h => <div key={h} className="label-eyebrow">{h}</div>)}
+              </div>
+              {addressBook.length === 0 && (
+                <div className="glass text-center py-10 text-xs text-muted-foreground">No addresses tracked yet</div>
+              )}
+              {addressBook.slice(0, 50).map(a => {
+                const balance = a.received + a.mined - a.sent;
+                return (
+                  <button key={a.address} onClick={() => setSelAddr(a.address)}
+                    className="w-full text-left glass px-3 py-2.5 hover:bg-secondary/30 transition grid grid-cols-[1fr_80px_80px_60px] sm:grid-cols-[1fr_1fr_100px_100px_60px] gap-2 items-center text-xs">
+                    <span className="num text-foreground/80 truncate">{shortHash(a.address, 8)}</span>
+                    <span className="hidden sm:block text-muted-foreground truncate">{a.username || "—"}</span>
+                    <span className="num text-primary/80">{balance.toFixed(2)} ⬡</span>
+                    <span className="num text-muted-foreground">{a.mined.toFixed(2)}</span>
+                    <span className="num text-right text-muted-foreground">{a.txCount}</span>
+                  </button>
+                );
+              })}
+            </>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-// 13. WALLET SCREEN — clean layout matching the Mine tab ──────────────────────
 function WalletScreen({ wallet, chain, mempool, onBroadcast }: any) {
   const [copied, setCopied] = useState(false);
   const balance = calcBalance(wallet.address, chain);

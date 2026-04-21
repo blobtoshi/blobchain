@@ -13,7 +13,8 @@ import { sha256 } from "@noble/hashes/sha256";
 import { ripemd160 } from "@noble/hashes/ripemd160";
 import { base58check } from "@scure/base";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Send, Play, Wallet, Plus, Download, Lock } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Send, Play, Wallet, Plus, Download, Lock, Settings as SettingsIcon, LogOut, ChevronDown, ArrowDownLeft, ArrowUpRight, Trophy, Eye, EyeOff } from "lucide-react";
 import runnerArt from "@/assets/runner.png";
 
 // 1. CONFIG ────────────────────────────────────────────────────────────────────
@@ -1002,90 +1003,174 @@ function Mempool({ mempool, wallet }: any) {
   );
 }
 
-// 13. WALLET SCREEN (Send lives here) ─────────────────────────────────────────
+// 13. WALLET SCREEN — clean layout matching the Mine tab ──────────────────────
 function WalletScreen({ wallet, chain, mempool, onBroadcast }: any) {
-  const [showPriv, setShowPriv] = useState(false);
   const [copied, setCopied] = useState(false);
   const balance = calcBalance(wallet.address, chain);
   const pending = mempool
     .filter((tx: any) => tx.to === wallet.address)
     .reduce((s: number, tx: any) => s + tx.amount, 0);
-  const totalBlocks = chain.filter((b: any) => b.winner === wallet.address).length;
-  const totalMined = chain
-    .filter((b: any) => b.winner === wallet.address)
-    .reduce((s: number, b: any) => s + (b.reward || 0), 0);
 
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(wallet.address);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), 1500);
     } catch {}
   };
 
+  // Build transaction history: confirmed (chain) + pending (mempool) + block rewards
+  const history = (() => {
+    const items: any[] = [];
+    for (const b of chain) {
+      if (b.winner === wallet.address && (b.reward || 0) > 0) {
+        items.push({
+          kind: "reward",
+          amount: b.reward,
+          counterparty: `Block #${b.height}`,
+          ts: b.timestamp,
+          status: "confirmed",
+          id: `r-${b.height}`,
+        });
+      }
+      for (const tx of (b.transactions || [])) {
+        if (tx.to === wallet.address || tx.from === wallet.address) {
+          items.push({
+            kind: tx.from === wallet.address ? "send" : "receive",
+            amount: tx.amount,
+            fee: tx.fee || TX_FEE,
+            counterparty: tx.from === wallet.address ? tx.to : (tx.fromUsername || tx.from),
+            ts: tx.timestamp,
+            status: "confirmed",
+            id: tx.id,
+          });
+        }
+      }
+    }
+    for (const tx of mempool) {
+      if (tx.to === wallet.address || tx.from === wallet.address) {
+        items.push({
+          kind: tx.from === wallet.address ? "send" : "receive",
+          amount: tx.amount,
+          fee: tx.fee || TX_FEE,
+          counterparty: tx.from === wallet.address ? tx.to : (tx.fromUsername || tx.from),
+          ts: tx.timestamp,
+          status: "pending",
+          id: tx.id,
+        });
+      }
+    }
+    return items.sort((a, b) => b.ts - a.ts);
+  })();
+
+  const Stat = ({ label, value, accent }: any) => (
+    <div className="px-1">
+      <div className="label-eyebrow mb-2">{label}</div>
+      <div className={`text-2xl sm:text-3xl font-semibold num ${accent || "text-foreground"}`}>{value}</div>
+    </div>
+  );
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <div className="lg:col-span-2 space-y-4">
-        <div className="glass-hi p-6">
-          <div className="label-eyebrow mb-4">Your wallet</div>
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-2 h-2 rounded-full bg-primary shadow-[0_0_12px_hsl(var(--primary))]" />
-            <div className="num text-sm text-foreground/80 truncate flex-1">{wallet.address}</div>
-            <button
-              onClick={copy}
-              className="px-3 py-1 rounded-md text-xs border border-border hover:border-primary/40 hover:text-primary transition"
-            >
-              {copied ? "Copied" : "Copy"}
-            </button>
-          </div>
-          <div className="num text-5xl font-semibold text-primary leading-none mb-2">
-            {balance.toFixed(6)}
-            <span className="text-base text-muted-foreground ml-2">$BLOB</span>
-          </div>
-          {pending > 0 && (
-            <div className="text-xs text-muted-foreground num">+{pending.toFixed(6)} pending</div>
-          )}
-        </div>
-
-        <div className="grid grid-cols-3 gap-2">
-          <div className="glass p-4">
-            <div className="num text-2xl font-semibold text-[hsl(var(--warning))]">{totalBlocks}</div>
-            <div className="label-eyebrow mt-1">Blocks mined</div>
-          </div>
-          <div className="glass p-4">
-            <div className="num text-2xl font-semibold text-primary">{totalMined.toFixed(2)}</div>
-            <div className="label-eyebrow mt-1">Total earned</div>
-          </div>
-          <div className="glass p-4">
-            <div className="num text-2xl font-semibold text-[hsl(var(--info))]">{chain.length - 1}</div>
-            <div className="label-eyebrow mt-1">Chain height</div>
-          </div>
-        </div>
-
-        <div className="glass p-4">
-          <div className="label-eyebrow mb-2">Public key (secp256k1, compressed)</div>
-          <div className="num text-[10px] text-muted-foreground/80 break-all leading-relaxed">
-            {wallet.publicKey}
-          </div>
-          <button
-            onClick={() => setShowPriv(!showPriv)}
-            className="mt-3 px-3 py-1 rounded-md text-xs border border-destructive/30 text-destructive hover:bg-destructive/10 transition"
-          >
-            {showPriv ? "Hide private key ▲" : "Show private key ▼"}
-          </button>
-          {showPriv && (
-            <div className="mt-3 p-3 rounded-md border border-destructive/30 bg-destructive/5">
-              <div className="text-xs text-destructive mb-2">⚠ Never share this key</div>
-              <div className="num text-[10px] text-foreground/60 break-all leading-relaxed">{wallet.privateKey}</div>
+    <div className="space-y-5">
+      {/* Hero balance + address */}
+      <div className="relative overflow-hidden rounded-3xl glass-hi px-5 sm:px-8 py-8 sm:py-10">
+        <div className="pointer-events-none absolute -top-32 right-0 w-[420px] h-[420px] rounded-full bg-primary/10 blur-3xl" />
+        <div className="relative flex flex-col gap-6">
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+            <div>
+              <div className="label-eyebrow mb-2">Balance</div>
+              <div className="num text-4xl sm:text-6xl font-semibold leading-none text-primary drop-shadow-[0_0_24px_hsl(var(--primary)/0.4)]">
+                {balance.toFixed(6)}
+                <span className="text-base sm:text-lg text-muted-foreground ml-2 font-normal">$BLOB</span>
+              </div>
+              {pending > 0 && (
+                <div className="text-xs text-muted-foreground num mt-2">+{pending.toFixed(6)} incoming</div>
+              )}
             </div>
-          )}
+            <div className="flex items-center gap-2 max-w-full">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-full border border-border bg-card/50 min-w-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))] shrink-0" />
+                <span className="num text-xs text-foreground/80 truncate">{wallet.address}</span>
+              </div>
+              <button
+                onClick={copy}
+                className="px-3 py-2 rounded-full text-xs border border-border hover:border-primary/40 hover:text-primary transition shrink-0"
+              >
+                {copied ? "Copied" : "Copy"}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="lg:col-span-1">
-        <div className="glass-hi p-6 lg:sticky lg:top-20">
-          <div className="label-eyebrow mb-4">Send $BLOB</div>
-          <SendTxForm wallet={wallet} chain={chain} onBroadcast={onBroadcast} />
+      {/* Stats row — match Mine tab style */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 px-1">
+        <Stat label="Available" value={balance.toFixed(2)} accent="text-primary" />
+        <Stat label="Pending" value={pending.toFixed(2)} />
+        <Stat label="Sent" value={history.filter(h => h.kind === "send").length} />
+        <Stat label="Received" value={history.filter(h => h.kind !== "send").length} />
+      </div>
+
+      {/* Send + History */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-1 order-1 lg:order-2">
+          <div className="glass-hi p-5 sm:p-6 lg:sticky lg:top-20">
+            <div className="label-eyebrow mb-4">Send $BLOB</div>
+            <SendTxForm wallet={wallet} chain={chain} onBroadcast={onBroadcast} />
+          </div>
+        </div>
+
+        <div className="lg:col-span-2 order-2 lg:order-1 space-y-2">
+          <div className="label-eyebrow px-1">Transaction history</div>
+          {history.length === 0 ? (
+            <div className="glass px-5 py-10 text-center text-sm text-muted-foreground">
+              No transactions yet — mine a block or send some $BLOB to see history here
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {history.map((h) => {
+                const isOut = h.kind === "send";
+                const isReward = h.kind === "reward";
+                const Icon = isReward ? Trophy : isOut ? ArrowUpRight : ArrowDownLeft;
+                const color = isReward
+                  ? "text-[hsl(var(--warning))]"
+                  : isOut
+                    ? "text-destructive"
+                    : "text-primary";
+                const sign = isOut ? "−" : "+";
+                return (
+                  <div key={h.id} className="glass px-4 py-3 flex items-center gap-3">
+                    <div className={`w-9 h-9 rounded-full border border-border bg-card/50 flex items-center justify-center ${color}`}>
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="font-medium">
+                          {isReward ? "Block reward" : isOut ? "Sent" : "Received"}
+                        </span>
+                        {h.status === "pending" && (
+                          <span className="text-[10px] tracking-wide uppercase px-1.5 py-0.5 rounded-full border border-border text-muted-foreground">
+                            Pending
+                          </span>
+                        )}
+                      </div>
+                      <div className="num text-xs text-muted-foreground truncate">
+                        {isReward ? h.counterparty : (isOut ? "to " : "from ") + h.counterparty}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className={`num text-sm font-semibold ${color}`}>
+                        {sign}{Number(h.amount).toFixed(4)}
+                      </div>
+                      <div className="num text-[10px] text-muted-foreground">
+                        {new Date(h.ts).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1157,6 +1242,8 @@ export default function BlobChainApp() {
   const [unlockOpen, setUnlockOpen] = useState(false);
   const [unlockPass, setUnlockPass] = useState("");
   const [unlockErr, setUnlockErr] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [showPriv, setShowPriv] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
 
   const [connectOpen, setConnectOpen] = useState(false);
@@ -1625,14 +1712,39 @@ export default function BlobChainApp() {
             )}
 
             {wallet ? (
-              <button
-                onClick={() => setScreen("wallet")}
-                className="flex items-center gap-2 px-3 py-2 rounded-full border border-border hover:border-primary/40 transition text-xs"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
-                <span className="hidden md:inline text-muted-foreground">{wallet.username}</span>
-                <span className="num text-primary">{balance.toFixed(2)}</span>
-              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="flex items-center gap-2 px-3 py-2 rounded-full border border-border hover:border-primary/40 transition text-xs group">
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
+                    <span className="hidden md:inline text-muted-foreground max-w-[100px] truncate">{wallet.username}</span>
+                    <span className="num text-primary">{balance.toFixed(2)}</span>
+                    <ChevronDown className="w-3 h-3 text-muted-foreground group-hover:text-primary transition" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="glass-hi border-border w-56">
+                  <DropdownMenuLabel className="text-[10px] tracking-widest uppercase text-muted-foreground font-normal">
+                    Connected as
+                  </DropdownMenuLabel>
+                  <div className="px-2 pb-2">
+                    <div className="text-sm font-medium truncate">{wallet.username}</div>
+                    <div className="num text-[10px] text-muted-foreground truncate">{wallet.address}</div>
+                  </div>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setScreen("wallet")} className="cursor-pointer">
+                    <Wallet className="w-4 h-4 mr-2" /> Open wallet
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => { setShowPriv(false); setSettingsOpen(true); }} className="cursor-pointer">
+                    <SettingsIcon className="w-4 h-4 mr-2" /> Settings
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={disconnectWallet}
+                    className="cursor-pointer text-destructive focus:text-destructive focus:bg-destructive/10"
+                  >
+                    <LogOut className="w-4 h-4 mr-2" /> Disconnect
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             ) : vaultPub ? (
               <button
                 onClick={() => { setUnlockErr(""); setUnlockPass(""); setUnlockOpen(true); }}
@@ -1767,6 +1879,66 @@ export default function BlobChainApp() {
               </button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Settings dialog — public/private keys live here */}
+      <Dialog open={settingsOpen} onOpenChange={(o) => { setSettingsOpen(o); if (!o) setShowPriv(false); }}>
+        <DialogContent className="glass-hi border-border max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-medium tracking-wide flex items-center gap-2">
+              <SettingsIcon className="w-4 h-4 text-primary" /> Wallet settings
+            </DialogTitle>
+          </DialogHeader>
+          {wallet && (
+            <div className="space-y-4 pt-1">
+              <div>
+                <div className="label-eyebrow mb-2">Miner name</div>
+                <div className="text-sm font-medium">{wallet.username}</div>
+              </div>
+              <div>
+                <div className="label-eyebrow mb-2">Address</div>
+                <div className="num text-xs text-foreground/80 break-all leading-relaxed p-3 rounded-md bg-secondary/40 border border-border">
+                  {wallet.address}
+                </div>
+              </div>
+              <div>
+                <div className="label-eyebrow mb-2">Public key (secp256k1, compressed)</div>
+                <div className="num text-[10px] text-muted-foreground break-all leading-relaxed p-3 rounded-md bg-secondary/40 border border-border">
+                  {wallet.publicKey}
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="label-eyebrow">Private key</div>
+                  <button
+                    onClick={() => setShowPriv(v => !v)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] border border-destructive/30 text-destructive hover:bg-destructive/10 transition"
+                  >
+                    {showPriv ? <><EyeOff className="w-3 h-3" /> Hide</> : <><Eye className="w-3 h-3" /> Reveal</>}
+                  </button>
+                </div>
+                {showPriv ? (
+                  <div className="p-3 rounded-md border border-destructive/30 bg-destructive/5">
+                    <div className="text-[11px] text-destructive mb-2">⚠ Never share this key — anyone with it controls your wallet</div>
+                    <div className="num text-[10px] text-foreground/70 break-all leading-relaxed">{wallet.privateKey}</div>
+                  </div>
+                ) : (
+                  <div className="num text-[10px] text-muted-foreground/50 break-all leading-relaxed p-3 rounded-md bg-secondary/40 border border-border select-none">
+                    {"•".repeat(64)}
+                  </div>
+                )}
+              </div>
+              <div className="pt-2 border-t border-border flex gap-2">
+                <button
+                  onClick={() => { disconnectWallet(); setSettingsOpen(false); }}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-destructive/30 text-xs text-destructive hover:bg-destructive/10 transition"
+                >
+                  <LogOut className="w-3.5 h-3.5" /> Disconnect wallet
+                </button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

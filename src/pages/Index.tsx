@@ -1165,7 +1165,7 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
       }
     }
     return Array.from(m.values()).sort((a, b) => (b.mined + b.received) - (a.mined + a.received));
-  }, [allTxs]);
+  }, [allTxs, players]);
 
   // Search: returns matches across blocks, txs, addresses
   const q = query.trim().toLowerCase();

@@ -2207,13 +2207,6 @@ function WalletScreen({ wallet, chain, mempool, onBroadcast }: any) {
     return items.sort((a, b) => b.ts - a.ts);
   })();
 
-  const Stat = ({ label, value, accent }: any) => (
-    <div className="px-1">
-      <div className="label-eyebrow mb-2">{label}</div>
-      <div className={`text-2xl sm:text-3xl font-semibold num ${accent || "text-foreground"}`}>{value}</div>
-    </div>
-  );
-
   return (
     <div className="space-y-5">
       {/* Hero balance + address */}

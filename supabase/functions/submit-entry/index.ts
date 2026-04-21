@@ -1,14 +1,14 @@
-// Verifies an ECDSA P-256 signed mining entry and upserts it.
+// Verifies a secp256k1 (Bitcoin curve) signed mining entry and upserts it.
 // Public RLS writes are disabled; this function uses the service role.
 import { createClient } from "npm:@supabase/supabase-js@2.95.0";
 import { corsHeaders } from "npm:@supabase/supabase-js@2.95.0/cors";
+import * as secp from "npm:@noble/secp256k1@2.1.0";
+import { sha256 } from "npm:@noble/hashes@1.5.0/sha256";
+import { ripemd160 } from "npm:@noble/hashes@1.5.0/ripemd160";
+import { base58check } from "npm:@scure/base@1.1.9";
 
 const enc = new TextEncoder();
-
-async function sha256hex(s: string) {
-  const buf = await crypto.subtle.digest("SHA-256", enc.encode(s));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
-}
+const b58check = base58check(sha256);
 
 function hexToBytes(hex: string): Uint8Array {
   if (hex.length % 2) throw new Error("bad hex");
@@ -17,22 +17,20 @@ function hexToBytes(hex: string): Uint8Array {
   return out;
 }
 
-async function verifyEcdsa(publicKeyJwk: string, signatureHex: string, data: string) {
-  const jwk = JSON.parse(publicKeyJwk);
-  const key = await crypto.subtle.importKey(
-    "jwk", jwk,
-    { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]
-  );
-  return crypto.subtle.verify(
-    { name: "ECDSA", hash: "SHA-256" },
-    key,
-    hexToBytes(signatureHex),
-    enc.encode(data),
-  );
+function pubKeyToAddress(pubHex: string) {
+  const pub = hexToBytes(pubHex);
+  const h160 = ripemd160(sha256(pub));
+  const payload = new Uint8Array(1 + 20);
+  payload[0] = 0x00;
+  payload.set(h160, 1);
+  return b58check.encode(payload);
 }
 
-async function deriveAddress(publicKeyJwk: string) {
-  return "0x" + (await sha256hex(publicKeyJwk)).slice(0, 40);
+function verifySig(pubHex: string, sigHex: string, data: string): boolean {
+  try {
+    const msgHash = sha256(enc.encode(data));
+    return secp.verify(hexToBytes(sigHex), msgHash, hexToBytes(pubHex));
+  } catch { return false; }
 }
 
 const BLOCK_TIME = 120;
@@ -43,6 +41,10 @@ function currentHeight() {
   return Math.floor(Math.max(0, now - genesis) / BLOCK_TIME) + 1;
 }
 
+const ADDR_RE = /^[1][1-9A-HJ-NP-Za-km-z]{25,34}$/;
+const PUB_RE = /^(02|03)[0-9a-fA-F]{64}$/;
+const SIG_RE = /^[0-9a-fA-F]{128}$/;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -50,17 +52,16 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { address, username, score, block_height, block_seed, signature, publicKey } = body ?? {};
 
-    // Basic shape validation
-    if (typeof address !== "string" || !address.startsWith("0x")) return bad("invalid address");
-    if (typeof publicKey !== "string") return bad("missing publicKey");
-    if (typeof signature !== "string" || !signature.length) return bad("missing signature");
+    if (typeof address !== "string" || !ADDR_RE.test(address)) return bad("invalid address");
+    if (typeof publicKey !== "string" || !PUB_RE.test(publicKey)) return bad("invalid publicKey");
+    if (typeof signature !== "string" || !SIG_RE.test(signature)) return bad("invalid signature");
     if (typeof block_height !== "number" || block_height < 1) return bad("invalid block_height");
     const sc = Number(score);
     if (!Number.isFinite(sc) || sc < 0 || sc > 10_000_000) return bad("invalid score");
     if (username && typeof username === "string" && username.length > 24) return bad("username too long");
 
     // Address must match publicKey
-    const derived = await deriveAddress(publicKey);
+    const derived = pubKeyToAddress(publicKey.toLowerCase());
     if (derived !== address) return bad("address does not match publicKey");
 
     // Block height must be current (no backfill, no future)
@@ -69,15 +70,13 @@ Deno.serve(async (req) => {
 
     // Verify signature over canonical entry payload
     const payload = `${block_height}:${address}:${Math.floor(sc)}`;
-    const ok = await verifyEcdsa(publicKey, signature, payload);
-    if (!ok) return bad("bad signature");
+    if (!verifySig(publicKey, signature, payload)) return bad("bad signature");
 
     const supa = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Keep best score per (address, height)
     const { data: existing } = await supa
       .from("blob_entries")
       .select("score")
@@ -98,7 +97,6 @@ Deno.serve(async (req) => {
 
     if (error) return bad(error.message, 500);
 
-    // Best-effort: refresh public_key on player record for future verification UX
     await supa.from("blob_players").upsert({
       address,
       username: username?.toString().slice(0, 24) ?? "anon",

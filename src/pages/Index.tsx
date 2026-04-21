@@ -1756,15 +1756,53 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
 
       {tab === "mempool" && (
         <div className="space-y-2">
+          <FilterPanel activeCount={txFiltersActive(memF)} onClear={() => setMemF(emptyTxFilters)}>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              <div className="col-span-2 sm:col-span-2">
+                <FieldLabel>Address (from / to)</FieldLabel>
+                <FInput value={memF.addr} onChange={e => setMemF({ ...memF, addr: e.target.value })} placeholder="address or @username" />
+              </div>
+              <div>
+                <FieldLabel>Side</FieldLabel>
+                <FSelect value={memF.addrSide} onChange={v => setMemF({ ...memF, addrSide: v as any })}
+                  options={[{ v: "any", l: "Either" }, { v: "from", l: "Sender (from)" }, { v: "to", l: "Recipient (to)" }]} />
+              </div>
+              <div>
+                <FieldLabel>Min amount ⬡</FieldLabel>
+                <FInput type="number" value={memF.minAmount} onChange={e => setMemF({ ...memF, minAmount: e.target.value })} placeholder="0" />
+              </div>
+              <div>
+                <FieldLabel>Max amount ⬡</FieldLabel>
+                <FInput type="number" value={memF.maxAmount} onChange={e => setMemF({ ...memF, maxAmount: e.target.value })} placeholder="∞" />
+              </div>
+              <div>
+                <FieldLabel>From date</FieldLabel>
+                <FInput type="date" value={memF.dateFrom} onChange={e => setMemF({ ...memF, dateFrom: e.target.value })} />
+              </div>
+              <div>
+                <FieldLabel>To date</FieldLabel>
+                <FInput type="date" value={memF.dateTo} onChange={e => setMemF({ ...memF, dateTo: e.target.value })} />
+              </div>
+              <div>
+                <FieldLabel>Sort by</FieldLabel>
+                <FSelect value={memF.sort} onChange={v => setMemF({ ...memF, sort: v as any })}
+                  options={[{ v: "newest", l: "Newest" }, { v: "oldest", l: "Oldest" }, { v: "amount-desc", l: "Largest amount" }, { v: "amount-asc", l: "Smallest amount" }]} />
+              </div>
+            </div>
+          </FilterPanel>
           <div className="glass-hi px-3 py-2.5 flex items-center justify-between text-xs">
             <span className="label-eyebrow">Pending pool</span>
-            <span className="num text-muted-foreground">{memTxs.length} unconfirmed · {memTxs.reduce((s, t) => s + t.amount, 0).toFixed(2)} ⬡ queued</span>
+            <span className="num text-muted-foreground">
+              {memFiltered.length}{memFiltered.length !== memTxs.length && ` of ${memTxs.length}`} unconfirmed · {memFiltered.reduce((s, t) => s + t.amount, 0).toFixed(2)} ⬡ queued
+            </span>
           </div>
           {memTxs.length === 0 ? (
             <div className="glass text-center py-10 text-xs text-muted-foreground">Mempool is empty · all transactions confirmed</div>
+          ) : memFiltered.length === 0 ? (
+            <div className="glass text-center py-10 text-xs text-muted-foreground">No pending transactions match these filters</div>
           ) : (
             <>
-              {memTxs.slice(pMem * PAGE_SIZE, (pMem + 1) * PAGE_SIZE).map(t => (
+              {memFiltered.slice(pMem * PAGE_SIZE, (pMem + 1) * PAGE_SIZE).map(t => (
                 <button key={t.id} onClick={() => { setTab("txs"); setSelTx(t.id); }}
                   className="w-full text-left glass px-3 py-2.5 hover:bg-secondary/30 transition border-l-2 border-l-[hsl(var(--warning))]">
                   <div className="flex items-center justify-between mb-1 text-xs">
@@ -1778,7 +1816,7 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
                   </div>
                 </button>
               ))}
-              <Pager page={pMem} setPage={setPMem} total={memTxs.length} label="pending" />
+              <Pager page={pMem} setPage={setPMem} total={memFiltered.length} label="pending" />
             </>
           )}
 

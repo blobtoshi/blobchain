@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import * as Relay from "@/lib/blobRelay";
+import { supabase } from "@/integrations/supabase/client";
 import * as Vault from "@/lib/walletVault";
 import * as secp from "@noble/secp256k1";
 import { sha256 } from "@noble/hashes/sha256";

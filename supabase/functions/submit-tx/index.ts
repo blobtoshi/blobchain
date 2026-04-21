@@ -9,6 +9,7 @@ import { base58check } from "npm:@scure/base@1.1.9";
 
 const TX_FEE = 0.001;
 const MAX_TX_SIZE = 100_000; // 100 KB, Bitcoin standard tx limit
+const BLOB_UNIT = 1e8;        // $BLOB is divisible to 8 decimals
 const enc = new TextEncoder();
 const b58check = base58check(sha256);
 
@@ -74,8 +75,12 @@ Deno.serve(async (req) => {
     if (from === to) return bad("self-send not allowed");
     if (typeof publicKey !== "string" || !PUB_RE.test(publicKey)) return bad("invalid publicKey");
     if (typeof signature !== "string" || !SIG_RE.test(signature)) return bad("invalid signature");
-    const amt = Number(amount);
-    if (!Number.isFinite(amt) || amt <= 0 || amt > 1_000_000) return bad("invalid amount");
+    const amtRaw = Number(amount);
+    if (!Number.isFinite(amtRaw) || amtRaw <= 0 || amtRaw > 1_000_000) return bad("invalid amount");
+    // Enforce 8-decimal precision: amount × 1e8 must be a whole number.
+    const units = Math.round(amtRaw * BLOB_UNIT);
+    if (Math.abs(amtRaw * BLOB_UNIT - units) > 1e-6) return bad("amount exceeds 8-decimal precision");
+    const amt = units / BLOB_UNIT;
     const ts = Number(timestamp);
     if (!Number.isFinite(ts)) return bad("invalid timestamp");
     if (Math.abs(Date.now() - ts) > 10 * 60 * 1000) return bad("timestamp out of window");

@@ -22,11 +22,15 @@ import blobSprite from "@/assets/blob-sprite.png";
 // 1. CONFIG ────────────────────────────────────────────────────────────────────
 const BLOCK_TIME = 120;
 const INITIAL_REWARD = 10;
-const HALVING_BLOCKS = 210000;
-const MAX_SUPPLY = 20000000;
+const HALVING_BLOCKS = 1_000_000;   // halves every 1M blocks
+const MAX_SUPPLY = 20_000_000;       // 10 × 1M × Σ(1/2^n) = 20M $BLOB
 const MAX_BLOCK_SIZE = 1_000_000;   // ~1 MB, Bitcoin-style
 const MAX_TX_SIZE = 100_000;        // ~100 KB, Bitcoin standard tx limit
 const TX_FEE = 0.001;
+const BLOB_DECIMALS = 8;             // $BLOB is divisible to 8 decimal places
+const BLOB_UNIT = 1e8;               // 1 $BLOB = 100,000,000 base units (satoshis)
+// Round a $BLOB amount to 8-decimal precision (banker-safe via integer base units).
+const to8 = (n: number) => Math.round(Number(n) * BLOB_UNIT) / BLOB_UNIT;
 const GENESIS_TIME_MS = 1776731760000;
 
 const SB_URL: string | undefined = (import.meta as any)?.env?.VITE_SUPABASE_URL;
@@ -155,7 +159,7 @@ function calcBalance(address, chain, mempool?: any[]) {
       if (tx.from === address) bal -= (tx.amount + (tx.fee || TX_FEE));
     }
   }
-  return +Math.max(0, bal).toFixed(6);
+  return to8(Math.max(0, bal));
 }
 
 function calcTotalSupply(chain) {
@@ -730,16 +734,18 @@ function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent }: any) {
 
   async function send() {
     setErr("");
-    const amount = parseFloat(amt);
+    const parsed = parseFloat(amt);
     const raw = to.trim().replace(/^@/, "");
     if (!raw) { setErr("Enter a recipient (address or @username)"); return; }
-    let toAddress: string | null = null;
-    if (ADDR_RE.test(raw)) toAddress = raw;
-    else if (resolved?.address) toAddress = resolved.address;
+    let toAddress = "";
+    if (raw.startsWith("1") && raw.length >= 26) toAddress = raw;
+    else if ((window as any).__resolveUsername) toAddress = await (window as any).__resolveUsername(raw);
     else { setErr("Recipient not found"); return; }
     if (toAddress === wallet.address) { setErr("Cannot send to yourself"); return; }
-    if (!amount || amount <= 0) { setErr("Invalid amount"); return; }
-    if (amount + TX_FEE > balance) { setErr(`Insufficient balance (need ${(amount + TX_FEE).toFixed(6)})`); return; }
+    if (!Number.isFinite(parsed) || parsed <= 0) { setErr("Invalid amount"); return; }
+    const amount = to8(parsed);
+    if (amount <= 0) { setErr(`Minimum amount is ${(1 / BLOB_UNIT).toFixed(BLOB_DECIMALS)} $BLOB`); return; }
+    if (amount + TX_FEE > balance) { setErr(`Insufficient balance (need ${(amount + TX_FEE).toFixed(BLOB_DECIMALS)})`); return; }
     setSt("signing");
     try {
       const ts = Date.now();
@@ -778,7 +784,7 @@ function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent }: any) {
     <div className="space-y-3">
       <div className="flex items-center justify-between text-xs">
         <span className="text-muted-foreground">Available</span>
-        <span className="num text-primary">{balance.toFixed(6)} $BLOB</span>
+        <span className="num text-primary">{balance.toFixed(BLOB_DECIMALS)} $BLOB</span>
       </div>
       <div className="space-y-2">
         <label className="label-eyebrow block">Recipient</label>
@@ -816,8 +822,8 @@ function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent }: any) {
             onChange={e => setAmt(e.target.value)}
             type="number"
             min="0"
-            step="0.000001"
-            placeholder="0.00"
+            step="0.00000001"
+            placeholder="0.00000000"
             className="w-full px-4 py-3 pr-20 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm num placeholder:text-muted-foreground/60"
           />
           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$BLOB</span>
@@ -2043,11 +2049,11 @@ function WalletScreen({ wallet, chain, mempool, onBroadcast }: any) {
             <div>
               <div className="label-eyebrow mb-2">Balance</div>
               <div className="num text-4xl sm:text-6xl font-semibold leading-none text-primary drop-shadow-[0_0_24px_hsl(var(--primary)/0.4)]">
-                {balance.toFixed(6)}
+                {balance.toFixed(BLOB_DECIMALS)}
                 <span className="text-base sm:text-lg text-muted-foreground ml-2 font-normal">$BLOB</span>
               </div>
               {pending > 0 && (
-                <div className="text-xs text-muted-foreground num mt-2">+{pending.toFixed(6)} incoming</div>
+                <div className="text-xs text-muted-foreground num mt-2">+{pending.toFixed(BLOB_DECIMALS)} incoming</div>
               )}
             </div>
             <div className="flex items-center gap-2 max-w-full">

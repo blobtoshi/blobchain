@@ -9,6 +9,7 @@ import { base58check } from "npm:@scure/base@1.1.9";
 
 const TX_FEE = 0.001;
 const MAX_TX_SIZE = 100_000; // 100 KB, Bitcoin standard tx limit
+const BLOB_UNIT = 1e8;        // $BLOB is divisible to 8 decimals
 const enc = new TextEncoder();
 const b58check = base58check(sha256);
 

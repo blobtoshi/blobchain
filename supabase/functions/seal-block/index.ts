@@ -92,41 +92,50 @@ Deno.serve(async (req) => {
       .eq("block_height", targetHeight);
     const entries = entriesRaw ?? [];
 
-    // Pull mempool txs to include. Order by fee_rate DESC (highest priority
-    // first) — Bitcoin-style block-template construction.
-    const { data: txRows } = await supa
-      .from("blob_mempool").select("*")
-      .order("fee_rate", { ascending: false })
-      .order("timestamp", { ascending: true })
-      .limit(5000);
-    const allTxs = (txRows ?? []).map(r => ({
-      id: r.id,
-      from: r.from_address,
-      fromUsername: r.from_username,
-      to: r.to_address,
-      amount: Number(r.amount),
-      fee: Number(r.fee ?? 0),
-      feeRate: Number(r.fee_rate ?? 10),
-      memo: r.memo ?? "",
-      signature: r.signature,
-      publicKey: r.public_key,
-      timestamp: Number(r.timestamp),
-    }));
-    // Reserve ~10 KB of header/coinbase overhead, then greedily pack txs
-    const HEADER_OVERHEAD = 10_000;
-    const txs: typeof allTxs = [];
-    let used = HEADER_OVERHEAD;
-    for (const t of allTxs) {
-      const sz = JSON.stringify(t).length;
-      if (sz > MAX_TX_SIZE) continue; // drop oversize tx
-      if (used + sz > MAX_BLOCK_SIZE) break;
-      txs.push(t);
-      used += sz;
-    }
-
     const seedNum = targetHeight * 6364136223846793 + 1442695040888963407;
     const seed = Math.abs(seedNum % 2147483647);
     const winner = pickWinner(entries, seed);
+
+    // PROOF-OF-GAMING: a block with no miner cannot confirm transactions.
+    // Mempool txs stay pending and roll over to a future block that has a winner.
+    // This makes the gaming layer load-bearing: no players → no settlement.
+    let txs: Array<{
+      id: string; from: string; fromUsername: string | null; to: string;
+      amount: number; fee: number; feeRate: number; memo: string;
+      signature: string; publicKey: string; timestamp: number;
+    }> = [];
+    if (winner) {
+      // Pull mempool txs to include. Order by fee_rate DESC (highest priority
+      // first) — Bitcoin-style block-template construction.
+      const { data: txRows } = await supa
+        .from("blob_mempool").select("*")
+        .order("fee_rate", { ascending: false })
+        .order("timestamp", { ascending: true })
+        .limit(5000);
+      const allTxs = (txRows ?? []).map(r => ({
+        id: r.id,
+        from: r.from_address,
+        fromUsername: r.from_username,
+        to: r.to_address,
+        amount: Number(r.amount),
+        fee: Number(r.fee ?? 0),
+        feeRate: Number(r.fee_rate ?? 10),
+        memo: r.memo ?? "",
+        signature: r.signature,
+        publicKey: r.public_key,
+        timestamp: Number(r.timestamp),
+      }));
+      // Reserve ~10 KB of header/coinbase overhead, then greedily pack txs
+      const HEADER_OVERHEAD = 10_000;
+      let used = HEADER_OVERHEAD;
+      for (const t of allTxs) {
+        const sz = JSON.stringify(t).length;
+        if (sz > MAX_TX_SIZE) continue; // drop oversize tx
+        if (used + sz > MAX_BLOCK_SIZE) break;
+        txs.push(t);
+        used += sz;
+      }
+    }
 
     const baseReward = getRewardForHeight(targetHeight);
     const feeTotal = txs.reduce((s, t) => s + (Number(t.fee) || 0), 0);

@@ -280,22 +280,9 @@ function drawBlob(ctx, x, y, action, wob, sq, _blink) {
   const t = wob * 0.08;
   const floatY = duck ? 0 : Math.sin(t) * 5;
   const floatX = duck ? 0 : Math.sin(t * 0.7) * 1.5;
-  // Pulsing aura
-  const auraPulse = 0.85 + Math.sin(t * 1.3) * 0.15;
-
   ctx.save();
   ctx.translate(x + floatX, y + floatY - (duck ? 0 : 4));
   ctx.scale(1, sq);
-
-  // Soft pulsing outer aura
-  ctx.save();
-  ctx.shadowColor = "#00d8ff";
-  ctx.shadowBlur = 28 * auraPulse;
-  ctx.fillStyle = `rgba(0, 200, 255, ${0.18 * auraPulse})`;
-  ctx.beginPath();
-  ctx.ellipse(0, 0, baseW * 0.5 * auraPulse, baseH * 0.5 * auraPulse, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
 
   // Tiny shadow on the ground beneath the floating sprite
   if (!duck) {
@@ -520,12 +507,30 @@ function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry }) {
       const p = g.player;
       bgNodes.current.forEach(n => { n.x -= n.spd; if (n.x < -15) n.x = CW + 15; });
       drawBG(ctx, g.frame, bgNodes.current);
-      if (!g.locked && p.action !== "dead") {
-        for (let i = 1; i <= 3; i++) {
-          ctx.save(); ctx.globalAlpha = .05 * (4 - i); ctx.fillStyle = "#00ffcc";
-          ctx.beginPath(); ctx.ellipse(PX - i * 10, p.y, 18, 24, 0, 0, Math.PI * 2);
-          ctx.fill(); ctx.restore();
+      // Motion trail — fading after-images of the sprite following behind
+      if (!g.locked && p.action !== "dead" && _blobImg && _blobImg.complete && _blobImg.naturalWidth > 0) {
+        if (!g.trail) g.trail = [];
+        const tT = p.wob * 0.08;
+        const trailFloatY = p.action === "duck" ? 0 : Math.sin(tT) * 5;
+        g.trail.unshift({ x: PX, y: p.y + trailFloatY - (p.action === "duck" ? 0 : 4), action: p.action });
+        if (g.trail.length > 8) g.trail.length = 8;
+        const duck = p.action === "duck";
+        const baseW = duck ? 78 : 64;
+        const baseH = duck ? 46 : 72;
+        for (let i = g.trail.length - 1; i >= 1; i--) {
+          const tr = g.trail[i];
+          const a = (1 - i / g.trail.length) * 0.28;
+          ctx.save();
+          ctx.globalAlpha = a;
+          ctx.globalCompositeOperation = "lighter";
+          ctx.imageSmoothingEnabled = false;
+          ctx.translate(tr.x - i * 6, tr.y);
+          ctx.scale(1, p.sq);
+          ctx.drawImage(_blobImg, -baseW / 2, -baseH / 2, baseW, baseH);
+          ctx.restore();
         }
+      } else if (g.trail) {
+        g.trail.length = 0;
       }
       g.obstacles.forEach(o => drawFork(ctx, o));
       g.tokens.forEach(t => { if (t.alive) drawToken(ctx, t.x, t.y, g.frame); });

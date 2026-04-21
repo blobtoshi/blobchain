@@ -25,7 +25,7 @@ const MAX_SUPPLY = 21000000;
 const MAX_BLOCK_SIZE = 1_000_000;   // ~1 MB, Bitcoin-style
 const MAX_TX_SIZE = 100_000;        // ~100 KB, Bitcoin standard tx limit
 const TX_FEE = 0.001;
-const GENESIS_TIME_MS = 1745000000000;
+const GENESIS_TIME_MS = 1776731760000;
 
 const SB_URL: string | undefined = (import.meta as any)?.env?.VITE_SUPABASE_URL;
 const SB_KEY: string | undefined = (import.meta as any)?.env?.VITE_SUPABASE_ANON_KEY;

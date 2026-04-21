@@ -7,7 +7,7 @@ import { corsHeaders } from "npm:@supabase/supabase-js@2.95.0/cors";
 const BLOCK_TIME = 120;
 const INITIAL_REWARD = 10;
 const HALVING_BLOCKS = 210000;
-const GENESIS_TIME_MS = 1745000000000;
+const GENESIS_TIME_MS = 1776731760000;
 const TX_FEE = 0.001;
 const MAX_BLOCK_SIZE = 1_000_000;   // 1 MB, Bitcoin-style
 const MAX_TX_SIZE = 100_000;        // 100 KB, Bitcoin standard tx limit

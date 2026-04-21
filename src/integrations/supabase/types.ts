@@ -100,9 +100,11 @@ export type Database = {
           amount: number
           created_at: string | null
           fee: number | null
+          fee_rate: number | null
           from_address: string
           from_username: string | null
           id: string
+          memo: string | null
           public_key: string
           signature: string
           status: string | null
@@ -113,9 +115,11 @@ export type Database = {
           amount: number
           created_at?: string | null
           fee?: number | null
+          fee_rate?: number | null
           from_address: string
           from_username?: string | null
           id: string
+          memo?: string | null
           public_key: string
           signature: string
           status?: string | null
@@ -126,9 +130,11 @@ export type Database = {
           amount?: number
           created_at?: string | null
           fee?: number | null
+          fee_rate?: number | null
           from_address?: string
           from_username?: string | null
           id?: string
+          memo?: string | null
           public_key?: string
           signature?: string
           status?: string | null

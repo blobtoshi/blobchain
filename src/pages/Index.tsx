@@ -1441,6 +1441,16 @@ export default function BlobChainApp() {
               />
             </div>
             {connectErr && <div className="text-xs text-destructive">{connectErr}</div>}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConnectMode("choose")}
+                className="px-4 py-3 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition"
+              >
+                Back
+              </button>
+              <button
+                onClick={createWallet}
+                disabled={creating || !nameIn.trim() || !pass1 || !pass2}
                 className="flex-1 py-3 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition"
               >
                 {creating ? "Generating keypair…" : "Generate wallet"}

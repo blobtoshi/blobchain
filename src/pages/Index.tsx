@@ -1242,6 +1242,8 @@ export default function BlobChainApp() {
   const [unlockOpen, setUnlockOpen] = useState(false);
   const [unlockPass, setUnlockPass] = useState("");
   const [unlockErr, setUnlockErr] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [showPriv, setShowPriv] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
 
   const [connectOpen, setConnectOpen] = useState(false);

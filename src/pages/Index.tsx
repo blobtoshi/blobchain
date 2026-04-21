@@ -2863,7 +2863,7 @@ export default function BlobChainApp() {
               </div>
               <div className="flex-1">
                 <div className="text-sm font-medium text-foreground">Import wallet</div>
-                <div className="text-xs text-muted-foreground">Restore from an exported wallet JSON</div>
+                <div className="text-xs text-muted-foreground">Restore from an exported private key</div>
               </div>
             </button>
             <div className="text-[11px] text-muted-foreground/70 text-center pt-1">

@@ -2617,7 +2617,7 @@ export default function BlobChainApp() {
     <div className="min-h-screen pb-16 relative">
       {newBlock && (
         <div
-          className={`fixed top-0 left-0 right-0 z-[1000] px-6 py-3 backdrop-blur-xl border-b text-center flex justify-center items-center gap-5 ${
+          className={`fixed top-16 left-0 right-0 z-[1000] px-6 py-3 backdrop-blur-xl border-b text-center flex justify-center items-center gap-5 ${
             newBlock.isMine
               ? "bg-primary/15 border-primary/50"
               : "bg-card/80 border-[hsl(var(--warning)/0.4)]"

@@ -8,6 +8,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import * as Relay from "@/lib/blobRelay";
 import * as Vault from "@/lib/walletVault";
+import * as secp from "@noble/secp256k1";
+import { sha256 } from "@noble/hashes/sha256";
+import { ripemd160 } from "@noble/hashes/ripemd160";
+import { base58check } from "@scure/base";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Send, Play, Wallet, Plus, Download, Lock } from "lucide-react";
 import runnerArt from "@/assets/runner.png";
@@ -34,29 +38,44 @@ async function sha256hex(str: string) {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function generateWallet() {
-  const kp = await crypto.subtle.generateKey(
-    { name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]
-  );
-  const pub = await crypto.subtle.exportKey("jwk", kp.publicKey);
-  const priv = await crypto.subtle.exportKey("jwk", kp.privateKey);
-  const pubStr = JSON.stringify(pub);
-  const privStr = JSON.stringify(priv);
-  const addrHash = await sha256hex(pubStr);
-  const address = "0x" + addrHash.slice(0, 40);
-  return { address, publicKey: pubStr, privateKey: privStr };
+// Bitcoin-style secp256k1 wallet.
+//   privateKey : 64-char hex (32 bytes)
+//   publicKey  : 66-char hex (33-byte compressed SEC1 point)
+//   address    : Base58Check P2PKH ("1..." mainnet-style version 0x00)
+const b58check = base58check(sha256);
+
+function bytesToHex(b: Uint8Array) {
+  let s = ""; for (let i = 0; i < b.length; i++) s += b[i].toString(16).padStart(2, "0"); return s;
+}
+function hexToBytes(h: string) {
+  const out = new Uint8Array(h.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(h.substr(i * 2, 2), 16);
+  return out;
 }
 
-async function signData(privKeyStr, data) {
+function pubKeyToAddress(pubHex: string) {
+  const pub = hexToBytes(pubHex);
+  const h160 = ripemd160(sha256(pub));
+  const payload = new Uint8Array(1 + 20);
+  payload[0] = 0x00; // P2PKH version byte
+  payload.set(h160, 1);
+  return b58check.encode(payload);
+}
+
+async function generateWallet() {
+  const priv = secp.utils.randomPrivateKey();
+  const pub = secp.getPublicKey(priv, true); // compressed
+  const privateKey = bytesToHex(priv);
+  const publicKey = bytesToHex(pub);
+  const address = pubKeyToAddress(publicKey);
+  return { address, publicKey, privateKey };
+}
+
+async function signData(privHex: string, data: string) {
   try {
-    const key = await crypto.subtle.importKey(
-      "jwk", JSON.parse(privKeyStr),
-      { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]
-    );
-    const sig = await crypto.subtle.sign(
-      { name: "ECDSA", hash: "SHA-256" }, key, enc.encode(data)
-    );
-    return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+    const msgHash = sha256(enc.encode(data));
+    const sig = await secp.signAsync(msgHash, hexToBytes(privHex));
+    return sig.toCompactHex(); // 128 hex chars (r||s)
   } catch { return ""; }
 }
 

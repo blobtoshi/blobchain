@@ -2141,8 +2141,8 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
               <div className="flex items-center justify-between px-1 text-[10px] text-muted-foreground num">
                 <span>{addrFiltered.length} of {addressBook.length} addresses</span>
               </div>
-              <div className="grid grid-cols-[1fr_80px_80px_60px] sm:grid-cols-[1fr_1fr_100px_100px_60px] gap-2 px-3 py-1">
-                {["Address", "Username", "Balance", "Mined", "Tx"].slice(0, window.innerWidth < 640 ? 4 : 5).map(h => <div key={h} className="label-eyebrow">{h}</div>)}
+              <div className="grid grid-cols-[1fr_1fr_80px_60px] sm:grid-cols-[1fr_1fr_100px_100px_60px] gap-2 px-3 py-1">
+                {(window.innerWidth < 640 ? ["Address", "Username", "Balance", "Mined"] : ["Address", "Username", "Balance", "Mined", "Tx"]).map(h => <div key={h} className="label-eyebrow">{h}</div>)}
               </div>
               {addressBook.length === 0 ? (
                 <div className="glass text-center py-10 text-xs text-muted-foreground">No addresses tracked yet</div>
@@ -2153,12 +2153,12 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
                 const balance = a.received + a.mined - a.sent;
                 return (
                   <button key={a.address} onClick={() => setSelAddr(a.address)}
-                    className="w-full text-left glass px-3 py-2.5 hover:bg-secondary/30 transition grid grid-cols-[1fr_80px_80px_60px] sm:grid-cols-[1fr_1fr_100px_100px_60px] gap-2 items-center text-xs">
+                    className="w-full text-left glass px-3 py-2.5 hover:bg-secondary/30 transition grid grid-cols-[1fr_1fr_80px_60px] sm:grid-cols-[1fr_1fr_100px_100px_60px] gap-2 items-center text-xs">
                     <span className="num text-foreground/80 truncate">{shortHash(a.address, 8)}</span>
-                    <span className="hidden sm:block text-muted-foreground truncate">{a.username || "—"}</span>
-                    <span className="num text-primary/80">{balance.toFixed(2)} ⬡</span>
+                    <span className="text-primary/80 truncate">{a.username || "—"}</span>
+                    <span className="num text-muted-foreground">{balance.toFixed(2)} ⬡</span>
                     <span className="num text-muted-foreground">{a.mined.toFixed(2)}</span>
-                    <span className="num text-right text-muted-foreground">{a.txCount}</span>
+                    <span className="hidden sm:block num text-right text-muted-foreground">{a.txCount}</span>
                   </button>
                 );
               })}

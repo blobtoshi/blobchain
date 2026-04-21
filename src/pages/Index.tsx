@@ -1132,9 +1132,17 @@ export default function BlobChainApp() {
   const F = '"Courier New",monospace';
 
   const [wallet, setWallet] = useState<any>(null);
+  const [vaultPub, setVaultPub] = useState<Vault.WalletPublic | null>(null);
+  const [unlockOpen, setUnlockOpen] = useState(false);
+  const [unlockPass, setUnlockPass] = useState("");
+  const [unlockErr, setUnlockErr] = useState("");
+  const [unlocking, setUnlocking] = useState(false);
+
   const [connectOpen, setConnectOpen] = useState(false);
   const [connectMode, setConnectMode] = useState<"choose" | "create" | "import">("choose");
   const [nameIn, setNameIn] = useState("");
+  const [pass1, setPass1] = useState("");
+  const [pass2, setPass2] = useState("");
   const [importJson, setImportJson] = useState("");
   const [connectErr, setConnectErr] = useState("");
   const [creating, setCreating] = useState(false);
@@ -1150,28 +1158,32 @@ export default function BlobChainApp() {
   const [gameLaunched, setGameLaunched] = useState(false);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem("blob_wallet_v2");
-      if (saved) setWallet(JSON.parse(saved));
-    } catch {}
+    // Force-purge any legacy plaintext wallet from previous versions of the app
+    Vault.purgeLegacyPlaintextWallet();
+    setVaultPub(Vault.getStoredWalletPublic());
     document.title = "⬡ BLOB CHAIN — Proof-of-Gaming";
   }, []);
 
   function resetConnect() {
     setConnectMode("choose");
     setNameIn("");
+    setPass1("");
+    setPass2("");
     setImportJson("");
     setConnectErr("");
   }
 
   async function createWallet() {
     if (!nameIn.trim()) return;
+    if (pass1.length < 6) { setConnectErr("Passphrase must be at least 6 characters"); return; }
+    if (pass1 !== pass2) { setConnectErr("Passphrases do not match"); return; }
     setCreating(true);
     setConnectErr("");
     try {
       const w: any = await generateWallet();
       w.username = nameIn.trim().slice(0, 24);
-      try { localStorage.setItem("blob_wallet_v2", JSON.stringify(w)); } catch {}
+      await Vault.saveEncryptedWallet(w, pass1);
+      setVaultPub({ address: w.address, publicKey: w.publicKey, username: w.username });
       setWallet(w);
       setConnectOpen(false);
       resetConnect();
@@ -1185,6 +1197,8 @@ export default function BlobChainApp() {
   async function importWallet() {
     setConnectErr("");
     if (!nameIn.trim()) { setConnectErr("Enter a miner name"); return; }
+    if (pass1.length < 6) { setConnectErr("Passphrase must be at least 6 characters"); return; }
+    if (pass1 !== pass2) { setConnectErr("Passphrases do not match"); return; }
     let parsed: any;
     try { parsed = JSON.parse(importJson.trim()); }
     catch { setConnectErr("Invalid JSON"); return; }
@@ -1198,15 +1212,36 @@ export default function BlobChainApp() {
       privateKey: parsed.privateKey,
       username: nameIn.trim().slice(0, 24),
     };
-    try { localStorage.setItem("blob_wallet_v2", JSON.stringify(w)); } catch {}
-    setWallet(w);
-    setConnectOpen(false);
-    resetConnect();
+    try {
+      await Vault.saveEncryptedWallet(w, pass1);
+      setVaultPub({ address: w.address, publicKey: w.publicKey, username: w.username });
+      setWallet(w);
+      setConnectOpen(false);
+      resetConnect();
+    } catch (e: any) {
+      setConnectErr(String(e?.message || e));
+    }
+  }
+
+  async function unlockExisting() {
+    setUnlockErr("");
+    setUnlocking(true);
+    try {
+      const w = await Vault.unlockWallet(unlockPass);
+      setWallet(w);
+      setUnlockOpen(false);
+      setUnlockPass("");
+    } catch (e: any) {
+      setUnlockErr(String(e?.message || e));
+    } finally {
+      setUnlocking(false);
+    }
   }
 
   function disconnectWallet() {
-    try { localStorage.removeItem("blob_wallet_v2"); } catch {}
+    Vault.clearWallet();
     setWallet(null);
+    setVaultPub(null);
     setGameLaunched(false);
   }
 

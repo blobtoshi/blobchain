@@ -28,9 +28,9 @@ const MAX_BLOCK_SIZE = 1_000_000;   // ~1 MB, Bitcoin-style
 const MAX_TX_SIZE = 100_000;        // ~100 KB, Bitcoin standard tx limit
 const TX_FEE = 0.001;                // legacy fallback for old chain entries
 const BLOB_DECIMALS = 8;             // $BLOB is divisible to 8 decimal places
-const BLOB_UNIT = 1e8;               // 1 $BLOB = 100,000,000 base units (satoshis)
-const BASE_FEE_RATE = 10;            // sat/byte at zero congestion
-const MIN_FEE_RATE = 1;              // absolute floor (sat/byte)
+const BLOB_UNIT = 1e8;               // 1 $BLOB = 100,000,000 drops (base unit)
+const BASE_FEE_RATE = 10;            // drops/byte at zero congestion
+const MIN_FEE_RATE = 1;              // absolute floor (drops/byte)
 const MAX_MEMO_BYTES = 80;           // OP_RETURN-style memo limit
 // Round a $BLOB amount to 8-decimal precision (banker-safe via integer base units).
 const to8 = (n: number) => Math.round(Number(n) * BLOB_UNIT) / BLOB_UNIT;
@@ -812,7 +812,7 @@ function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent }: any) {
     if (amount <= 0) { setErr(`Minimum amount is ${(1 / BLOB_UNIT).toFixed(BLOB_DECIMALS)} $BLOB`); return; }
     if (memoOver) { setErr(`Memo too long (${memoLen}/${MAX_MEMO_BYTES} bytes)`); return; }
     if (!Number.isFinite(activeFeeRate) || activeFeeRate < MIN_FEE_RATE) {
-      setErr(`Fee rate must be at least ${MIN_FEE_RATE} sat/byte`); return;
+      setErr(`Fee rate must be at least ${MIN_FEE_RATE} drops/byte`); return;
     }
     setSt("signing");
     try {
@@ -946,13 +946,13 @@ function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent }: any) {
         <div className="flex items-center justify-between">
           <label className="label-eyebrow block">Gas (network fee rate)</label>
           <span className="text-[10px] text-muted-foreground num">
-            recommended <span className="text-primary">{recRate}</span> sat/B
+            recommended <span className="text-primary">{recRate}</span> drops/B
           </span>
         </div>
         <div className="grid grid-cols-3 gap-2">
-          <PresetButton id="slow"   title="Slow"   sub={`${presetRates.slow} sat/B`} />
-          <PresetButton id="normal" title="Normal" sub={`${presetRates.normal} sat/B`} />
-          <PresetButton id="fast"   title="Fast"   sub={`${presetRates.fast} sat/B`} />
+          <PresetButton id="slow"   title="Slow"   sub={`${presetRates.slow} drops/B`} />
+          <PresetButton id="normal" title="Normal" sub={`${presetRates.normal} drops/B`} />
+          <PresetButton id="fast"   title="Fast"   sub={`${presetRates.fast} drops/B`} />
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -975,7 +975,7 @@ function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent }: any) {
                 placeholder={String(recRate)}
                 className="w-full px-3 py-1.5 pr-14 rounded bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-xs num"
               />
-              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">sat/B</span>
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">drops/B</span>
             </div>
           )}
         </div>
@@ -984,7 +984,7 @@ function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent }: any) {
       <div className="rounded-lg border border-border/60 bg-secondary/30 px-3 py-2 text-xs space-y-1">
         <div className="flex items-center justify-between text-muted-foreground">
           <span>Fee rate</span>
-          <span className="num">{activeFeeRate} sat/B</span>
+          <span className="num">{activeFeeRate} drops/B</span>
         </div>
         <div className="flex items-center justify-between text-muted-foreground">
           <span>Tx size (est.)</span>

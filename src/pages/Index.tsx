@@ -62,9 +62,6 @@ const SB_URL: string | undefined = (import.meta as any)?.env?.VITE_SUPABASE_URL;
 const SB_KEY: string | undefined = (import.meta as any)?.env?.VITE_SUPABASE_ANON_KEY;
 const GENESIS_TIME_MS = 1776731760000;
 
-const SB_URL: string | undefined = (import.meta as any)?.env?.VITE_SUPABASE_URL;
-const SB_KEY: string | undefined = (import.meta as any)?.env?.VITE_SUPABASE_ANON_KEY;
-
 const CW = 780, CH = 360, GY = 290, PX = 130;
 const GRAVITY = 0.66, JUMP_V = -14.5;
 

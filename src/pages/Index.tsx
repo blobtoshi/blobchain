@@ -134,16 +134,27 @@ function getRewardForHeight(height) {
   return Math.min(INITIAL_REWARD / Math.pow(2, halvings), INITIAL_REWARD);
 }
 
-function getBlockInfo() {
-  const now = Math.floor(Date.now() / 1000);
-  const genesis = Math.floor(GENESIS_TIME_MS / 1000);
-  const sinceGenesis = Math.max(0, now - genesis);
-  const height = Math.floor(sinceGenesis / BLOCK_TIME) + 1;
-  const elapsed = sinceGenesis % BLOCK_TIME;
-  const remaining = BLOCK_TIME - elapsed;
+// Active block = lastSealedHeight + 1. Countdown runs from the previous
+// block's timestamp (or genesis). When 120s elapse with no entry submitted,
+// the block enters "awaiting miner" state and stays there until somebody
+// plays — proof-of-gaming halts chain progression.
+function getBlockInfo(chain?: any[], hasEntry?: boolean) {
+  const tip = chain && chain.length > 0 ? chain[chain.length - 1] : null;
+  const prevHeight = tip ? Number(tip.height) : 0;
+  const prevTs = tip ? Number(tip.timestamp) : GENESIS_TIME_MS;
+  const height = prevHeight + 1;
+  const elapsed = Math.max(0, Math.floor((Date.now() - prevTs) / 1000));
+  const remaining = Math.max(0, BLOCK_TIME - elapsed);
+  const overdue = elapsed >= BLOCK_TIME;
+  const awaitingMiner = overdue && !hasEntry;
+  const overtime = overdue ? elapsed - BLOCK_TIME : 0;
   const reward = getRewardForHeight(height);
   const seed = height * 6364136223846793 + 1442695040888963407;
-  return { height, elapsed, remaining, reward, seed: Math.abs(seed % 2147483647) };
+  return {
+    height, elapsed, remaining, reward,
+    seed: Math.abs(seed % 2147483647),
+    awaitingMiner, overtime, overdue,
+  };
 }
 
 // 4. BLOCKCHAIN CORE ───────────────────────────────────────────────────────────
@@ -1099,7 +1110,11 @@ function MiningPanel({ blockInfo, entries, myEntry, chain }: any) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 px-1">
         <Stat label="Block" value={`#${blockInfo.height}`} accent="text-primary" />
         <Stat label="Reward" value={`${blockInfo.reward} $BLOB`} />
-        <Stat label="Remaining" value={`${blockInfo.remaining}s`} accent="text-primary" />
+        <Stat
+          label={blockInfo.awaitingMiner ? "Awaiting" : "Remaining"}
+          value={blockInfo.awaitingMiner ? "miner" : `${blockInfo.remaining}s`}
+          accent={blockInfo.awaitingMiner ? "text-[hsl(var(--warning))]" : "text-primary"}
+        />
         <Stat label="Miners" value={entries.length} />
       </div>
 
@@ -1816,7 +1831,7 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
           </div>
           <div className="glass-hi px-3 py-2.5 ring-1 ring-[hsl(var(--warning)/0.2)] grid grid-cols-[50px_1fr_60px_70px_40px] sm:grid-cols-[60px_1fr_80px_100px_50px] gap-2 items-center text-xs">
             <span className="num text-[hsl(var(--warning))]">#{blockInfo.height}</span>
-            <span className="text-muted-foreground">⏳ mining · {blockInfo.remaining}s</span>
+            <span className="text-muted-foreground">{blockInfo.awaitingMiner ? "⏸ awaiting miner" : `⏳ mining · ${blockInfo.remaining}s`}</span>
             <span className="text-muted-foreground">—</span>
             <span className="num text-[hsl(var(--warning))]">{blockInfo.reward} ⬡</span>
             <span className="num text-right text-muted-foreground">—</span>
@@ -2846,18 +2861,30 @@ function NetworkView({ nodeCount, chain, blockInfo, mempool = [] }: any) {
       </div>
 
       {/* Next block countdown */}
-      <div className="glass p-5 rounded-md">
+      <div className={`glass p-5 rounded-md ${blockInfo.awaitingMiner ? "ring-1 ring-[hsl(var(--warning)/0.4)]" : ""}`}>
         <div className="flex items-center justify-between mb-3">
           <div>
-            <div className="label-eyebrow">Next block</div>
+            <div className="label-eyebrow">{blockInfo.awaitingMiner ? "Awaiting miner" : "Next block"}</div>
             <div className="text-sm text-foreground/60 mt-0.5">Block #{blockInfo.height} · {BLOCK_TIME}s target</div>
           </div>
-          <div className="num text-3xl font-semibold tabular-nums tracking-tight text-primary">{mm}:{ss}</div>
+          {blockInfo.awaitingMiner ? (
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[hsl(var(--warning))] opacity-70" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[hsl(var(--warning))]" />
+              </span>
+              <div className="num text-xl font-semibold tabular-nums tracking-tight text-[hsl(var(--warning))]">
+                +{Math.floor(blockInfo.overtime / 60).toString().padStart(2, "0")}:{(blockInfo.overtime % 60).toString().padStart(2, "0")}
+              </div>
+            </div>
+          ) : (
+            <div className="num text-3xl font-semibold tabular-nums tracking-tight text-primary">{mm}:{ss}</div>
+          )}
         </div>
-        <Bar pct={elapsedPct} />
+        <Bar pct={blockInfo.awaitingMiner ? 100 : elapsedPct} tone={blockInfo.awaitingMiner ? "bg-[hsl(var(--warning))]" : "bg-primary"} />
         <div className="flex justify-between text-[11px] text-foreground/50 mt-1.5 num">
           <span>{blockInfo.elapsed}s elapsed</span>
-          <span>{remaining}s remaining</span>
+          <span>{blockInfo.awaitingMiner ? "needs ≥1 miner to seal" : `${remaining}s remaining`}</span>
         </div>
       </div>
 
@@ -3113,12 +3140,16 @@ export default function BlobChainApp() {
     setGameLaunched(false);
   }
 
+  // Tick block info every second. blockInfo derives from the chain tip
+  // and current entries, so the countdown only advances after a real
+  // miner submits a score.
   useEffect(() => {
-    const iv = setInterval(() => setBlock(getBlockInfo()), 1000);
+    setBlock(getBlockInfo(chain, entries.length > 0));
+    const iv = setInterval(() => setBlock(getBlockInfo(chain, entries.length > 0)), 1000);
     return () => clearInterval(iv);
-  }, []);
+  }, [chain, entries.length]);
 
-  // Keep latest values available to the sealing effect (avoid stale closures)
+  // Keep latest values available to async effects (avoid stale closures)
   const entriesRef = useRef(entries);
   const mempoolRef = useRef(mempool);
   const chainRef = useRef(chain);
@@ -3135,10 +3166,13 @@ export default function BlobChainApp() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [c, m, e] = await Promise.all([
-        Relay.fetchChain(),
+      const c = await Relay.fetchChain();
+      if (cancelled) return;
+      const tipHeight = c.length ? c[c.length - 1].height : 0;
+      const activeHeight = tipHeight + 1;
+      const [m, e] = await Promise.all([
         Relay.fetchMempool(),
-        Relay.fetchEntries(currentHeightRef.current),
+        Relay.fetchEntries(activeHeight),
       ]);
       if (cancelled) return;
       if (c.length) setChain(c);
@@ -3154,11 +3188,9 @@ export default function BlobChainApp() {
         });
         setNewBlock({ ...b, isMine: b.winner === walletRef.current?.address });
         setTimeout(() => setNewBlock(null), 5000);
-        // entries from a closed block no longer apply to the new round
-        if (b.height >= currentHeightRef.current - 1) {
-          setEntries([]);
-          setMyEntry(null);
-        }
+        // A new block was sealed → the round it belonged to is over.
+        setEntries([]);
+        setMyEntry(null);
       },
       onTx: (t) => {
         setMempool(prev => prev.find(x => x.id === t.id) ? prev : [...prev, t]);
@@ -3167,7 +3199,10 @@ export default function BlobChainApp() {
         setMempool(prev => prev.filter(x => x.id !== id));
       },
       onEntry: (en) => {
-        if (en.block_height !== currentHeightRef.current) return;
+        // Only entries for the currently-active height are relevant.
+        const tip = chainRef.current[chainRef.current.length - 1];
+        const activeH = (tip ? Number(tip.height) : 0) + 1;
+        if (en.block_height !== activeH) return;
         setEntries(prev => {
           const i = prev.findIndex(x => x.address === en.address);
           if (i === -1) return [...prev, en];
@@ -3178,7 +3213,8 @@ export default function BlobChainApp() {
     return () => { cancelled = true; unsub(); };
   }, []);
 
-  // When the height ticks, refresh entries for the new round from the relay
+  // When the active height changes (a new block was sealed), refresh entries
+  // for the new round from the relay.
   useEffect(() => {
     (async () => {
       const e = await Relay.fetchEntries(blockInfo.height);
@@ -3186,28 +3222,30 @@ export default function BlobChainApp() {
     })();
   }, [blockInfo.height]);
 
-  // Block sealing — server-side only. We just trigger seal-block for the
-  // closed height; the realtime onBlock handler will deliver the new block.
-  const prevHeightRef = useRef(blockInfo.height);
+  // Block sealing — only triggered when BOTH conditions hold:
+  //   1. The block's 120s window has elapsed.
+  //   2. At least one mining entry exists for this block.
+  // If nobody mines, the block stays open indefinitely (proof-of-gaming halt).
+  const sealingRef = useRef(false);
   useEffect(() => {
-    const prevHeight = prevHeightRef.current;
-    if (blockInfo.height === prevHeight) return;
-    const closedHeight = blockInfo.height - 1;
-    prevHeightRef.current = blockInfo.height;
-    if (closedHeight < 1) return;
+    if (sealingRef.current) return;
+    if (!blockInfo.overdue) return;
+    if (entries.length === 0) return; // awaiting miner
+    const targetHeight = blockInfo.height;
+    if (chainRef.current.find(b => b.height === targetHeight)) return;
 
+    sealingRef.current = true;
     (async () => {
-      // Avoid hammering: only call seal if we don't already have it locally
-      if (chainRef.current.find(b => b.height === closedHeight)) return;
-      // Small jitter so multiple tabs don't all fire at the same instant
-      await new Promise(r => setTimeout(r, Math.random() * 1500));
-      if (chainRef.current.find(b => b.height === closedHeight)) return;
-      await Relay.sealBlock(closedHeight);
-      // Reset entries for the new round; the realtime feed will populate the new block
-      setEntries([]);
-      setMyEntry(null);
+      try {
+        // Small jitter so multiple tabs don't all fire at once
+        await new Promise(r => setTimeout(r, Math.random() * 1500));
+        if (chainRef.current.find(b => b.height === targetHeight)) return;
+        await Relay.sealBlock(targetHeight);
+      } finally {
+        sealingRef.current = false;
+      }
     })();
-  }, [blockInfo.height]);
+  }, [blockInfo.overdue, blockInfo.height, entries.length]);
 
   const onEntrySubmit = useCallback(entry => {
     setMyEntry(entry);

@@ -35,7 +35,7 @@ function verifySig(pubHex: string, sigHex: string, data: string): boolean {
 
 const BLOCK_TIME = 120;
 const GENESIS_TIME_MS = 1776731760000;
-function currentHeight() {
+function timeBasedHeight() {
   const now = Math.floor(Date.now() / 1000);
   const genesis = Math.floor(GENESIS_TIME_MS / 1000);
   return Math.floor(Math.max(0, now - genesis) / BLOCK_TIME) + 1;
@@ -67,9 +67,21 @@ Deno.serve(async (req) => {
     const derived = pubKeyToAddress(publicKey.toLowerCase());
     if (derived !== address) return bad("address does not match publicKey");
 
-    // Block height must be current (no backfill, no future)
-    const cur = currentHeight();
-    if (block_height !== cur) return bad("stale block_height");
+    // Block height must be the active (unsealed) block: lastSealedHeight + 1.
+    // This allows late miners to rescue a stalled (overdue) block, but rejects
+    // any future heights that haven't opened yet.
+    const supaCheck = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    const { data: tip } = await supaCheck
+      .from("blob_chain").select("height").order("height", { ascending: false }).limit(1).maybeSingle();
+    const activeHeight = Number(tip?.height ?? 0) + 1;
+    const tHeight = timeBasedHeight();
+    // Reject futures (a height beyond what wall-clock has opened) and stale
+    // (anything at or below the latest sealed block).
+    if (block_height !== activeHeight) return bad(`stale block_height (active is #${activeHeight})`);
+    if (block_height > tHeight) return bad("block not yet open");
 
     // Verify signature over canonical entry payload
     const payload = `${block_height}:${address}:${Math.floor(sc)}`;

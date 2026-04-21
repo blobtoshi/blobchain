@@ -66,9 +66,6 @@ Deno.serve(async (req) => {
     if (!Number.isFinite(targetHeight) || targetHeight < 1)
       return bad("invalid height");
 
-    // Refuse to seal future or current (still-mining) blocks
-    if (targetHeight >= currentHeight()) return bad("block not yet closed");
-
     const supa = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -79,18 +76,36 @@ Deno.serve(async (req) => {
       .from("blob_chain").select("height").eq("height", targetHeight).maybeSingle();
     if (existing) return ok_({ already: true });
 
-    // Pull the previous block hash
+    // Sequential progression: a block can only be sealed if its predecessor exists.
+    // Combined with the "must have entries" rule below, the chain halts on an unmined block.
     const { data: prev } = await supa
-      .from("blob_chain").select("hash,total_supply")
-      .lt("height", targetHeight).order("height", { ascending: false }).limit(1).maybeSingle();
+      .from("blob_chain").select("hash,total_supply,height,timestamp")
+      .order("height", { ascending: false }).limit(1).maybeSingle();
+    const prevHeight = Number(prev?.height ?? 0);
+    if (targetHeight !== prevHeight + 1) {
+      return bad(`out-of-order seal (expected #${prevHeight + 1}, got #${targetHeight})`);
+    }
     const previousHash = prev?.hash ?? GENESIS_HASH;
     const prevSupply = Number(prev?.total_supply ?? 0);
+
+    // Enforce minimum 120s block window since the previous block (or genesis).
+    const prevTs = prev?.timestamp ? Number(prev.timestamp) : GENESIS_TIME_MS;
+    const elapsedMs = Date.now() - prevTs;
+    if (elapsedMs < BLOCK_TIME * 1000) {
+      return bad(`block window not elapsed (${Math.ceil((BLOCK_TIME * 1000 - elapsedMs) / 1000)}s remaining)`);
+    }
 
     // Verified entries (only those that passed signature check at write time)
     const { data: entriesRaw } = await supa
       .from("blob_entries").select("address,username,score,signature")
       .eq("block_height", targetHeight);
     const entries = entriesRaw ?? [];
+
+    // PROOF-OF-GAMING: refuse to seal a block with no miners.
+    // The block stays open indefinitely until at least one player submits a score.
+    if (entries.length === 0) {
+      return bad("awaiting miner (no entries submitted)");
+    }
 
     const seedNum = targetHeight * 6364136223846793 + 1442695040888963407;
     const seed = Math.abs(seedNum % 2147483647);

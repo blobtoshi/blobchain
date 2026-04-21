@@ -1166,6 +1166,8 @@ type ExplorerTx = {
   toUsername?: string;
   amount: number;
   fee: number;
+  feeRate?: number;
+  memo?: string;
   timestamp: number;
   status: "confirmed" | "pending";
   block?: number;
@@ -1199,6 +1201,8 @@ function flattenChainTxs(chain: any[]): ExplorerTx[] {
         toUsername: tx.toUsername,
         amount: Number(tx.amount),
         fee: Number(tx.fee || 0),
+        feeRate: tx.feeRate != null ? Number(tx.feeRate) : undefined,
+        memo: tx.memo || "",
         timestamp: tx.timestamp || b.timestamp,
         status: "confirmed",
         block: b.height,
@@ -1219,6 +1223,8 @@ function mempoolToTxs(mempool: any[]): ExplorerTx[] {
     fromUsername: tx.fromUsername,
     amount: Number(tx.amount),
     fee: Number(tx.fee || 0),
+    feeRate: tx.feeRate != null ? Number(tx.feeRate) : undefined,
+    memo: tx.memo || "",
     timestamp: tx.timestamp,
     status: "pending" as const,
     signature: tx.signature,

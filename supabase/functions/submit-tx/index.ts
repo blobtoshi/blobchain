@@ -8,6 +8,7 @@ import { ripemd160 } from "npm:@noble/hashes@1.5.0/ripemd160";
 import { base58check } from "npm:@scure/base@1.1.9";
 
 const TX_FEE = 0.001;
+const MAX_TX_SIZE = 100_000; // 100 KB, Bitcoin standard tx limit
 const enc = new TextEncoder();
 const b58check = base58check(sha256);
 

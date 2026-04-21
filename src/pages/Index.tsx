@@ -563,7 +563,7 @@ function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry }) {
               signature: sig,
               submitted_at: new Date().toISOString(),
             };
-            Relay.pushEntry(entry);
+            Relay.pushEntry({ ...entry, publicKey: wallet.publicKey });
             onEntrySubmit(entry);
             setGs(prev => ({ ...prev, status: "dead", score: finalScore }));
             draw(); return;
@@ -662,19 +662,21 @@ function SendTxForm({ wallet, chain, onBroadcast, onSent }: any) {
     if (amount + TX_FEE > balance) { setErr(`Insufficient balance (need ${(amount + TX_FEE).toFixed(6)})`); return; }
     setSt("signing");
     try {
-      const txid = await sha256hex(`${wallet.address}${to}${amount}${Date.now()}`);
-      const data = `${wallet.address}→${to}:${amount}@${Date.now()}`;
+      const ts = Date.now();
+      const txid = await sha256hex(`${wallet.address}${to}${amount}${ts}`);
+      const data = `${wallet.address}→${to}:${amount}@${ts}`;
       const sig = await signData(wallet.privateKey, data);
       const tx = {
         id: `0x${txid.slice(0, 40)}`,
         from: wallet.address, fromUsername: wallet.username,
         to, amount, fee: TX_FEE,
         signature: sig, publicKey: wallet.publicKey,
-        timestamp: Date.now(),
+        timestamp: ts,
         status: "pending",
       };
       setSt("broadcasting");
-      await Relay.pushTx(tx);
+      const res = await Relay.pushTx(tx);
+      if (!res.ok) { setErr(res.error || "Broadcast failed"); setSt("idle"); return; }
       onBroadcast(tx);
       setSt("sent"); setTo(""); setAmt("");
       setTimeout(() => { setSt("idle"); onSent?.(); }, 1500);

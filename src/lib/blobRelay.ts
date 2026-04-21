@@ -27,9 +27,17 @@ export type Tx = {
   to: string;
   amount: number;
   fee?: number;
+  feeRate?: number;
+  memo?: string;
   signature: string;
   publicKey: string;
   timestamp: number;
+};
+
+export type FeeInfo = {
+  recommendedFeeRate: number;
+  minFeeRate: number;
+  baseFeeRate: number;
 };
 
 export type Entry = {
@@ -94,7 +102,9 @@ function txFromRow(r: any): Tx {
     fromUsername: r.from_username,
     to: r.to_address,
     amount: Number(r.amount),
-    fee: Number(r.fee ?? 0.001),
+    fee: Number(r.fee ?? 0),
+    feeRate: r.fee_rate != null ? Number(r.fee_rate) : undefined,
+    memo: r.memo ?? "",
     signature: r.signature,
     publicKey: r.public_key,
     timestamp: Number(r.timestamp),
@@ -108,7 +118,21 @@ export async function fetchMempool(): Promise<Tx[]> {
   return (data ?? []).map(txFromRow);
 }
 
-export async function pushTx(tx: Tx): Promise<{ ok: boolean; error?: string }> {
+export async function fetchFeeInfo(): Promise<FeeInfo | null> {
+  try {
+    const url = `${(import.meta as any).env.VITE_SUPABASE_URL}/functions/v1/submit-tx`;
+    const res = await fetch(url, {
+      headers: { apikey: (import.meta as any).env.VITE_SUPABASE_PUBLISHABLE_KEY },
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as FeeInfo;
+  } catch (e) {
+    console.error("[relay] fetchFeeInfo", e);
+    return null;
+  }
+}
+
+export async function pushTx(tx: Tx): Promise<{ ok: boolean; error?: string; fee?: number; bytes?: number }> {
   const { data, error } = await supabase.functions.invoke("submit-tx", {
     body: {
       id: tx.id,
@@ -116,6 +140,8 @@ export async function pushTx(tx: Tx): Promise<{ ok: boolean; error?: string }> {
       fromUsername: tx.fromUsername,
       to: tx.to,
       amount: tx.amount,
+      feeRate: tx.feeRate,
+      memo: tx.memo ?? "",
       signature: tx.signature,
       publicKey: tx.publicKey,
       timestamp: tx.timestamp,
@@ -126,7 +152,7 @@ export async function pushTx(tx: Tx): Promise<{ ok: boolean; error?: string }> {
     return { ok: false, error: error.message };
   }
   if ((data as any)?.error) return { ok: false, error: (data as any).error };
-  return { ok: true };
+  return { ok: true, fee: (data as any)?.fee, bytes: (data as any)?.bytes };
 }
 
 // ── ENTRIES ─────────────────────────────────────────────────────────────

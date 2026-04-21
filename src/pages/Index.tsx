@@ -1855,6 +1855,14 @@ export default function BlobChainApp() {
       const w: any = await generateWallet();
       w.username = name;
       await Vault.saveEncryptedWallet(w, pass1);
+      // Register in the player registry so the address appears in Explorer
+      // immediately, even before mining or any transaction.
+      const ts = Date.now();
+      const sig = await signData(w.privateKey, `register:${w.address}:${name}:${ts}`);
+      const reg = await Relay.registerPlayer({
+        address: w.address, username: name, publicKey: w.publicKey, signature: sig, timestamp: ts,
+      });
+      if (!reg.ok) { setConnectErr(reg.error || "Failed to register wallet"); return; }
       setVaultPub({ address: w.address, publicKey: w.publicKey, username: w.username });
       setWallet(w);
       setConnectOpen(false);
@@ -1890,6 +1898,12 @@ export default function BlobChainApp() {
     const w: any = { address, publicKey, privateKey: priv, username: name };
     try {
       await Vault.saveEncryptedWallet(w, pass1);
+      const ts = Date.now();
+      const sig = await signData(priv, `register:${address}:${name}:${ts}`);
+      const reg = await Relay.registerPlayer({
+        address, username: name, publicKey, signature: sig, timestamp: ts,
+      });
+      if (!reg.ok) { setConnectErr(reg.error || "Failed to register wallet"); return; }
       setVaultPub({ address: w.address, publicKey: w.publicKey, username: w.username });
       setWallet(w);
       setConnectOpen(false);

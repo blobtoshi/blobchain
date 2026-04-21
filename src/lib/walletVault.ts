@@ -31,10 +31,14 @@ function unb64(s: string) {
 
 async function deriveKey(passphrase: string, salt: Uint8Array, iter: number) {
   const baseKey = await crypto.subtle.importKey(
-    "raw", enc.encode(passphrase), { name: "PBKDF2" }, false, ["deriveKey"]
+    "raw",
+    enc.encode(passphrase) as BufferSource,
+    { name: "PBKDF2" },
+    false,
+    ["deriveKey"],
   );
   return crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt, iterations: iter, hash: "SHA-256" },
+    { name: "PBKDF2", salt: salt as BufferSource, iterations: iter, hash: "SHA-256" },
     baseKey,
     { name: "AES-GCM", length: 256 },
     false,

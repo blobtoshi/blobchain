@@ -1016,7 +1016,8 @@ function flattenChainTxs(chain: any[]): ExplorerTx[] {
       });
     }
   }
-  return out;
+  // newest first
+  return out.sort((a, b) => b.timestamp - a.timestamp);
 }
 
 function mempoolToTxs(mempool: any[]): ExplorerTx[] {
@@ -1394,7 +1395,7 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
                 {t.kind === "reward"
                   ? <Trophy className="w-3.5 h-3.5 text-[hsl(var(--warning))]" />
                   : <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground" />}
-                <span className="text-foreground/80 truncate">{t.kind === "reward" ? "coinbase" : (t.fromUsername || shortHash(t.from, 6))}</span>
+                <span className="text-foreground/80 truncate">{t.kind === "reward" ? "Network Mint" : (t.fromUsername || shortHash(t.from, 6))}</span>
                 <span className="hidden sm:block text-foreground/80 truncate">{t.toUsername || shortHash(t.to, 6)}</span>
                 <span className="num text-primary/80">{t.amount} ⬡</span>
                 <span className="num text-muted-foreground">{t.status === "pending" ? "—" : `#${t.block}`}</span>
@@ -1408,7 +1409,7 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
                   <div className="grid grid-cols-[80px_1fr] gap-2">
                     <span className="label-eyebrow">From</span>
                     <button onClick={() => { setTab("addresses"); setSelAddr(t.from); }} className="num text-[hsl(var(--warning))] hover:underline text-left break-all">
-                      {t.kind === "reward" ? "coinbase (block reward)" : t.from}
+                      {t.kind === "reward" ? "Network Mint (block reward)" : t.from}
                     </button>
                   </div>
                   <div className="grid grid-cols-[80px_1fr] gap-2">
@@ -1511,7 +1512,7 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
                           ? <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                           : <ArrowDownLeft className="w-3.5 h-3.5 text-primary/80 shrink-0" />}
                       <span className="text-foreground/70 truncate flex-1">
-                        {t.from === selAddr ? `→ ${shortHash(t.to, 8)}` : `← ${t.kind === "reward" ? "coinbase" : shortHash(t.from, 8)}`}
+                        {t.from === selAddr ? `→ ${shortHash(t.to, 8)}` : `← ${t.kind === "reward" ? "Network Mint" : shortHash(t.from, 8)}`}
                       </span>
                       <span className={`num shrink-0 ${t.from === selAddr ? "text-muted-foreground" : "text-primary/80"}`}>
                         {t.from === selAddr ? "-" : "+"}{t.amount} ⬡

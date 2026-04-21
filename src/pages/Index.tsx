@@ -3155,18 +3155,18 @@ export default function BlobChainApp() {
                     <Lock className="w-5 h-5" />
                   </div>
                   <h1 className="text-3xl sm:text-5xl font-semibold tracking-tight mb-3">
-                    <span className="text-foreground">Connect to mine </span>
+                    <span className="text-foreground">{vaultPub ? "Unlock to mine " : "Connect to mine "}</span>
                     <span className="text-primary drop-shadow-[0_0_24px_hsl(var(--primary)/0.5)]">$BLOB</span>
                   </h1>
                   <div className="text-sm text-muted-foreground mb-8 max-w-md mx-auto leading-relaxed">
                     Blob Run requires a wallet to sign your score and receive block rewards.
                   </div>
                   <button
-                    onClick={openConnect}
+                    onClick={vaultPub ? () => { setUnlockErr(""); setUnlockPass(""); setUnlockOpen(true); } : openConnect}
                     className="inline-flex items-center gap-2 px-8 py-4 rounded-full bg-primary text-primary-foreground font-semibold text-sm tracking-wide hover:bg-primary/90 transition shadow-[0_0_40px_hsl(var(--primary)/0.4)]"
                   >
-                    <Wallet className="w-4 h-4" />
-                    Connect wallet
+                    {vaultPub ? <Lock className="w-4 h-4" /> : <Wallet className="w-4 h-4" />}
+                    {vaultPub ? "Unlock wallet" : "Connect wallet"}
                   </button>
                 </div>
               </div>

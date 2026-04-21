@@ -1649,13 +1649,65 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
 
       {tab === "txs" && (
         <div className="space-y-1.5">
+          <FilterPanel activeCount={txFiltersActive(txF)} onClear={() => setTxF(emptyTxFilters)}>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              <div className="col-span-2 sm:col-span-2">
+                <FieldLabel>Address (from / to)</FieldLabel>
+                <FInput value={txF.addr} onChange={e => setTxF({ ...txF, addr: e.target.value })} placeholder="address or @username" />
+              </div>
+              <div>
+                <FieldLabel>Side</FieldLabel>
+                <FSelect value={txF.addrSide} onChange={v => setTxF({ ...txF, addrSide: v as any })}
+                  options={[{ v: "any", l: "Either" }, { v: "from", l: "Sender (from)" }, { v: "to", l: "Recipient (to)" }]} />
+              </div>
+              <div>
+                <FieldLabel>Type</FieldLabel>
+                <FSelect value={txF.kind} onChange={v => setTxF({ ...txF, kind: v as any })}
+                  options={[{ v: "all", l: "All" }, { v: "transfer", l: "Transfers" }, { v: "reward", l: "Block rewards" }]} />
+              </div>
+              <div>
+                <FieldLabel>Min amount ⬡</FieldLabel>
+                <FInput type="number" value={txF.minAmount} onChange={e => setTxF({ ...txF, minAmount: e.target.value })} placeholder="0" />
+              </div>
+              <div>
+                <FieldLabel>Max amount ⬡</FieldLabel>
+                <FInput type="number" value={txF.maxAmount} onChange={e => setTxF({ ...txF, maxAmount: e.target.value })} placeholder="∞" />
+              </div>
+              <div>
+                <FieldLabel>From date</FieldLabel>
+                <FInput type="date" value={txF.dateFrom} onChange={e => setTxF({ ...txF, dateFrom: e.target.value })} />
+              </div>
+              <div>
+                <FieldLabel>To date</FieldLabel>
+                <FInput type="date" value={txF.dateTo} onChange={e => setTxF({ ...txF, dateTo: e.target.value })} />
+              </div>
+              <div>
+                <FieldLabel>Status</FieldLabel>
+                <FSelect value={txF.status} onChange={v => setTxF({ ...txF, status: v as any })}
+                  options={[{ v: "all", l: "All" }, { v: "confirmed", l: "Confirmed" }, { v: "pending", l: "Pending" }]} />
+              </div>
+              <div>
+                <FieldLabel>Sort by</FieldLabel>
+                <FSelect value={txF.sort} onChange={v => setTxF({ ...txF, sort: v as any })}
+                  options={[{ v: "newest", l: "Newest" }, { v: "oldest", l: "Oldest" }, { v: "amount-desc", l: "Largest amount" }, { v: "amount-asc", l: "Smallest amount" }]} />
+              </div>
+            </div>
+          </FilterPanel>
+          <div className="flex items-center justify-between px-1 text-[10px] text-muted-foreground num">
+            <span>{txsFiltered.length} of {txsAll.length} transactions</span>
+            {txsFiltered.length > 0 && (
+              <span>volume {txsFiltered.reduce((s, t) => s + t.amount, 0).toFixed(2)} ⬡</span>
+            )}
+          </div>
           <div className="grid grid-cols-[18px_1fr_70px_60px_60px] sm:grid-cols-[18px_1fr_1fr_80px_70px_80px] gap-2 px-3 py-1">
             {["", "From", "To", "Amount", "Block", "Time"].slice(0, window.innerWidth < 640 ? 5 : 6).map(h => <div key={h} className="label-eyebrow">{h}</div>)}
           </div>
-          {[...memTxs, ...allTxs].length === 0 && (
-            <div className="glass text-center py-10 text-sm text-muted-foreground">No transactions yet</div>
+          {txsFiltered.length === 0 && (
+            <div className="glass text-center py-10 text-sm text-muted-foreground">
+              {txsAll.length === 0 ? "No transactions yet" : "No transactions match these filters"}
+            </div>
           )}
-          {[...memTxs, ...allTxs].slice(pTxs * PAGE_SIZE, (pTxs + 1) * PAGE_SIZE).map(t => (
+          {txsFiltered.slice(pTxs * PAGE_SIZE, (pTxs + 1) * PAGE_SIZE).map(t => (
             <div key={t.id}>
               <div onClick={() => setSelTx(selTx === t.id ? null : t.id)}
                 className="glass px-3 py-2.5 cursor-pointer hover:bg-secondary/30 transition grid grid-cols-[18px_1fr_70px_60px_60px] sm:grid-cols-[18px_1fr_1fr_80px_70px_80px] gap-2 items-center text-xs">

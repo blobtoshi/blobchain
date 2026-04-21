@@ -265,51 +265,112 @@ function drawBG(ctx, frame, nodes) {
 
 function drawBlob(ctx, x, y, action, wob, sq, blink) {
   const duck = action === "duck";
-  const rx = duck ? 32 : 22, ry = duck ? 16 : 28;
-  const wb = Math.sin(wob * .12) * (duck ? 1.5 : 2.5);
+  const jumping = action === "jump";
+  const rx = duck ? 34 : 24, ry = duck ? 15 : 30;
+  const wb = Math.sin(wob * .12) * (duck ? 1.5 : 2.8);
+  const bob = Math.sin(wob * .18) * (duck ? 0 : 1.2);
+
   ctx.save();
-  ctx.translate(x, y);
+  ctx.translate(x, y + bob);
   ctx.scale(1, sq);
 
-  // Soft outer glow
+  // Soft outer aura
   ctx.shadowColor = "#00ffcc";
-  ctx.shadowBlur = 24;
+  ctx.shadowBlur = 28;
 
-  // Body gradient
-  const bodyGrad = ctx.createRadialGradient(-4, -6, 2, 0, 0, rx + 6);
-  bodyGrad.addColorStop(0, "#7dffe0");
-  bodyGrad.addColorStop(1, "#00d6a8");
+  // Antenna wiggle (only when not ducking)
+  if (!duck) {
+    ctx.save();
+    ctx.shadowBlur = 14;
+    ctx.strokeStyle = "rgba(0, 255, 204, 0.85)";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    const ax = Math.sin(wob * .14) * 4;
+    ctx.beginPath();
+    ctx.moveTo(0, -ry + 2);
+    ctx.quadraticCurveTo(ax, -ry - 8, ax * 1.3, -ry - 16);
+    ctx.stroke();
+    // Antenna bulb
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = "#aaffe8";
+    ctx.beginPath();
+    ctx.arc(ax * 1.3, -ry - 18, 2.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.shadowColor = "#00ffcc";
+    ctx.shadowBlur = 28;
+  }
+
+  // Body — soft blob with gradient
+  const bodyGrad = ctx.createRadialGradient(-5, -8, 3, 0, 2, rx + 8);
+  bodyGrad.addColorStop(0, "#a8ffe8");
+  bodyGrad.addColorStop(0.55, "#3eecbf");
+  bodyGrad.addColorStop(1, "#00b896");
   ctx.fillStyle = bodyGrad;
   ctx.beginPath();
   ctx.moveTo(0, -ry);
-  ctx.bezierCurveTo(rx + wb, -ry * .7, rx + wb, ry * .7, 0, ry);
-  ctx.bezierCurveTo(-rx - wb, ry * .7, -rx - wb, -ry * .7, 0, -ry);
+  ctx.bezierCurveTo(rx + wb, -ry * .75, rx + wb * 1.2, ry * .65, 2, ry);
+  ctx.bezierCurveTo(-rx - wb * 1.2, ry * .65, -rx - wb, -ry * .75, 0, -ry);
   ctx.fill();
 
+  // Inner rim shadow for depth
   ctx.shadowBlur = 0;
-  // Highlight
-  ctx.fillStyle = "rgba(255,255,255,.22)";
+  ctx.strokeStyle = "rgba(0, 80, 60, 0.25)";
+  ctx.lineWidth = 1.4;
+  ctx.stroke();
+
+  // Glossy top highlight
+  ctx.fillStyle = "rgba(255,255,255,.32)";
   ctx.beginPath();
-  ctx.ellipse(-5, -9, rx * .42, ry * .28, -.3, 0, Math.PI * 2);
+  ctx.ellipse(-6, -11, rx * .48, ry * .26, -.32, 0, Math.PI * 2);
   ctx.fill();
+
+  // Tiny secondary highlight
+  ctx.fillStyle = "rgba(255,255,255,.55)";
+  ctx.beginPath();
+  ctx.ellipse(8, -14, 2.4, 1.4, .2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Cheek blush
+  if (!duck) {
+    ctx.fillStyle = "rgba(255, 120, 160, 0.45)";
+    ctx.beginPath(); ctx.ellipse(-13, 2, 4, 2.4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(13, 2, 4, 2.4, 0, 0, Math.PI * 2); ctx.fill();
+  }
 
   if (!duck) {
     if (!blink) {
+      // Eye whites (large kawaii eyes)
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath(); ctx.ellipse(-8, -8, 5.6, 7, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(8, -8, 5.6, 7, 0, 0, Math.PI * 2); ctx.fill();
+      // Pupils — drift slightly forward when jumping
+      const pdx = jumping ? 1.2 : 0.6;
       ctx.fillStyle = "#001510";
-      ctx.beginPath(); ctx.ellipse(-8, -8, 4.5, 6, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(8, -8, 4.5, 6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(-8 + pdx, -7, 3.2, 4.4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(8 + pdx, -7, 3.2, 4.4, 0, 0, Math.PI * 2); ctx.fill();
+      // Catchlights
       ctx.fillStyle = "#fff";
-      ctx.beginPath(); ctx.arc(-6.5, -10, 2, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(9.5, -10, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(-7 + pdx, -9, 1.4, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(9 + pdx, -9, 1.4, 0, Math.PI * 2); ctx.fill();
     } else {
       ctx.strokeStyle = "#001510"; ctx.lineWidth = 2.2; ctx.lineCap = "round";
-      ctx.beginPath(); ctx.moveTo(-12, -8); ctx.lineTo(-4, -8); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(4, -8); ctx.lineTo(12, -8); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-12, -8); ctx.quadraticCurveTo(-8, -5, -4, -8); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(4, -8); ctx.quadraticCurveTo(8, -5, 12, -8); ctx.stroke();
     }
+    // Little smile
+    ctx.strokeStyle = "#001510";
+    ctx.lineWidth = 1.8;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(-4, 3);
+    ctx.quadraticCurveTo(0, 7, 4, 3);
+    ctx.stroke();
   } else {
-    ctx.fillStyle = "#001510";
-    ctx.beginPath(); ctx.ellipse(-8, 0, 4.5, 2.5, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(8, 0, 4.5, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+    // Squinty determined eyes when ducking
+    ctx.strokeStyle = "#001510"; ctx.lineWidth = 2.4; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(-12, -1); ctx.lineTo(-4, 1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(4, 1); ctx.lineTo(12, -1); ctx.stroke();
   }
   ctx.restore();
 }

@@ -2687,7 +2687,7 @@ export default function BlobChainApp() {
                   <DialogHeader>
                     <DialogTitle className="text-sm font-medium">Send $BLOB</DialogTitle>
                   </DialogHeader>
-                  <SendTxForm wallet={wallet} chain={chain} onBroadcast={onTxBroadcast} />
+                  <SendTxForm wallet={wallet} chain={chain} mempool={mempool} onBroadcast={onTxBroadcast} />
                 </DialogContent>
               </Dialog>
             )}

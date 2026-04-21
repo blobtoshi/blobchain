@@ -1078,19 +1078,74 @@ function ExplorerTabBtn({ active, onClick, children, count }: any) {
   );
 }
 
+const PAGE_SIZE = 100;
+
+function Pager({ page, setPage, total, label }: { page: number; setPage: (n: number) => void; total: number; label: string }) {
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  if (total <= PAGE_SIZE) return null;
+  const start = page * PAGE_SIZE + 1;
+  const end = Math.min((page + 1) * PAGE_SIZE, total);
+  return (
+    <div className="glass flex items-center justify-between px-3 py-2 text-xs">
+      <span className="text-muted-foreground num">{start}–{end} of {total} {label}</span>
+      <div className="flex items-center gap-1">
+        <button onClick={() => setPage(0)} disabled={page === 0}
+          className="px-2 py-1 hover:bg-secondary/40 disabled:opacity-30 disabled:cursor-not-allowed transition">«</button>
+        <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
+          className="px-2 py-1 hover:bg-secondary/40 disabled:opacity-30 disabled:cursor-not-allowed transition">‹</button>
+        <span className="num text-muted-foreground px-2">page {page + 1} / {pages}</span>
+        <button onClick={() => setPage(Math.min(pages - 1, page + 1))} disabled={page >= pages - 1}
+          className="px-2 py-1 hover:bg-secondary/40 disabled:opacity-30 disabled:cursor-not-allowed transition">›</button>
+        <button onClick={() => setPage(pages - 1)} disabled={page >= pages - 1}
+          className="px-2 py-1 hover:bg-secondary/40 disabled:opacity-30 disabled:cursor-not-allowed transition">»</button>
+      </div>
+    </div>
+  );
+}
+
 function BlockExplorer({ chain, blockInfo, mempool }: any) {
   const [tab, setTab] = useState<"overview" | "blocks" | "txs" | "mempool" | "addresses">("overview");
   const [query, setQuery] = useState("");
   const [selBlock, setSelBlock] = useState<number | null>(null);
   const [selTx, setSelTx] = useState<string | null>(null);
   const [selAddr, setSelAddr] = useState<string | null>(null);
+  const [players, setPlayers] = useState<Relay.Player[]>([]);
+
+  // Pagination per tab
+  const [pBlocks, setPBlocks] = useState(0);
+  const [pTxs, setPTxs] = useState(0);
+  const [pMem, setPMem] = useState(0);
+  const [pAddr, setPAddr] = useState(0);
+  // Reset page when switching tabs or when an address detail opens
+  useEffect(() => { setPBlocks(0); setPTxs(0); setPMem(0); setPAddr(0); }, [tab]);
+
+  // Pull every registered player so addresses without any tx history still
+  // appear in the explorer (e.g. freshly-created wallets that haven't mined
+  // a block yet but have already been seen by the network).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const p = await Relay.fetchPlayers();
+      if (!cancelled) setPlayers(p);
+    })();
+    return () => { cancelled = true; };
+  }, [chain.length, mempool.length]);
 
   const allTxs = useMemo(() => flattenChainTxs(chain), [chain]);
   const memTxs = useMemo(() => mempoolToTxs(mempool || []), [mempool]);
 
-  // Aggregate addresses
+  // Aggregate addresses — start from the player registry (so zero-balance
+  // addresses are still listed), then layer on tx-derived stats.
   const addressBook = useMemo(() => {
     const m = new Map<string, { address: string; username?: string; sent: number; received: number; mined: number; txCount: number; lastSeen: number }>();
+    for (const p of players) {
+      m.set(p.address, {
+        address: p.address,
+        username: p.username,
+        sent: 0, received: 0, mined: 0, txCount: 0,
+        lastSeen: p.lastActive ? new Date(p.lastActive).getTime() : 0,
+      });
+    }
     const touch = (addr: string, username?: string) => {
       if (!addr || addr === "coinbase") return;
       if (!m.has(addr)) m.set(addr, { address: addr, username, sent: 0, received: 0, mined: 0, txCount: 0, lastSeen: 0 });

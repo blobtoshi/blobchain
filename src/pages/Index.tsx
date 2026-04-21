@@ -678,14 +678,14 @@ function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry }) {
 }
 
 // 9. SEND TX FORM ──────────────────────────────────────────────────────────────
-function SendTxForm({ wallet, chain, onBroadcast, onSent }: any) {
+function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent }: any) {
   const [to, setTo] = useState("");
   const [amt, setAmt] = useState("");
   const [st, setSt] = useState("idle");
   const [err, setErr] = useState("");
   const [resolved, setResolved] = useState<{ address: string; username?: string } | null>(null);
   const [resolving, setResolving] = useState(false);
-  const balance = calcBalance(wallet.address, chain);
+  const balance = calcBalance(wallet.address, chain, mempool);
 
   const ADDR_RE = /^[1][1-9A-HJ-NP-Za-km-z]{25,34}$/;
   const USER_RE = /^[A-Za-z0-9_]{3,24}$/;

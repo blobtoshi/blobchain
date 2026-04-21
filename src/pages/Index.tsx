@@ -784,7 +784,7 @@ function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent }: any) {
     <div className="space-y-3">
       <div className="flex items-center justify-between text-xs">
         <span className="text-muted-foreground">Available</span>
-        <span className="num text-primary">{balance.toFixed(6)} $BLOB</span>
+        <span className="num text-primary">{balance.toFixed(BLOB_DECIMALS)} $BLOB</span>
       </div>
       <div className="space-y-2">
         <label className="label-eyebrow block">Recipient</label>
@@ -822,8 +822,8 @@ function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent }: any) {
             onChange={e => setAmt(e.target.value)}
             type="number"
             min="0"
-            step="0.000001"
-            placeholder="0.00"
+            step="0.00000001"
+            placeholder="0.00000000"
             className="w-full px-4 py-3 pr-20 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm num placeholder:text-muted-foreground/60"
           />
           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$BLOB</span>
@@ -2049,11 +2049,11 @@ function WalletScreen({ wallet, chain, mempool, onBroadcast }: any) {
             <div>
               <div className="label-eyebrow mb-2">Balance</div>
               <div className="num text-4xl sm:text-6xl font-semibold leading-none text-primary drop-shadow-[0_0_24px_hsl(var(--primary)/0.4)]">
-                {balance.toFixed(6)}
+                {balance.toFixed(BLOB_DECIMALS)}
                 <span className="text-base sm:text-lg text-muted-foreground ml-2 font-normal">$BLOB</span>
               </div>
               {pending > 0 && (
-                <div className="text-xs text-muted-foreground num mt-2">+{pending.toFixed(6)} incoming</div>
+                <div className="text-xs text-muted-foreground num mt-2">+{pending.toFixed(BLOB_DECIMALS)} incoming</div>
               )}
             </div>
             <div className="flex items-center gap-2 max-w-full">

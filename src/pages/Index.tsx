@@ -1484,16 +1484,27 @@ export default function BlobChainApp() {
                 className="num w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-[11px] leading-relaxed resize-none"
               />
             </div>
+            <div>
+              <label className="label-eyebrow block mb-2">Passphrase</label>
+              <input
+                type="password"
+                value={pass1}
+                onChange={e => setPass1(e.target.value)}
+                placeholder="At least 6 characters"
+                className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm"
+              />
+            </div>
+            <div>
+              <label className="label-eyebrow block mb-2">Confirm passphrase</label>
+              <input
+                type="password"
+                value={pass2}
+                onChange={e => setPass2(e.target.value)}
+                placeholder="Repeat passphrase"
+                className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm"
+              />
+            </div>
             {connectErr && <div className="text-xs text-destructive">{connectErr}</div>}
-            <div className="flex gap-2">
-              <button
-                onClick={() => setConnectMode("choose")}
-                className="px-4 py-3 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition"
-              >
-                Back
-              </button>
-              <button
-                onClick={importWallet}
                 className="flex-1 py-3 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition"
               >
                 Import wallet

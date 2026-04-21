@@ -8,6 +8,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import * as Relay from "@/lib/blobRelay";
 import * as Vault from "@/lib/walletVault";
+import * as secp from "@noble/secp256k1";
+import { sha256 } from "@noble/hashes/sha256";
+import { ripemd160 } from "@noble/hashes/ripemd160";
+import { base58check } from "@scure/base";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Send, Play, Wallet, Plus, Download, Lock } from "lucide-react";
 import runnerArt from "@/assets/runner.png";
@@ -34,29 +38,44 @@ async function sha256hex(str: string) {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function generateWallet() {
-  const kp = await crypto.subtle.generateKey(
-    { name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]
-  );
-  const pub = await crypto.subtle.exportKey("jwk", kp.publicKey);
-  const priv = await crypto.subtle.exportKey("jwk", kp.privateKey);
-  const pubStr = JSON.stringify(pub);
-  const privStr = JSON.stringify(priv);
-  const addrHash = await sha256hex(pubStr);
-  const address = "0x" + addrHash.slice(0, 40);
-  return { address, publicKey: pubStr, privateKey: privStr };
+// Bitcoin-style secp256k1 wallet.
+//   privateKey : 64-char hex (32 bytes)
+//   publicKey  : 66-char hex (33-byte compressed SEC1 point)
+//   address    : Base58Check P2PKH ("1..." mainnet-style version 0x00)
+const b58check = base58check(sha256);
+
+function bytesToHex(b: Uint8Array) {
+  let s = ""; for (let i = 0; i < b.length; i++) s += b[i].toString(16).padStart(2, "0"); return s;
+}
+function hexToBytes(h: string) {
+  const out = new Uint8Array(h.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(h.substr(i * 2, 2), 16);
+  return out;
 }
 
-async function signData(privKeyStr, data) {
+function pubKeyToAddress(pubHex: string) {
+  const pub = hexToBytes(pubHex);
+  const h160 = ripemd160(sha256(pub));
+  const payload = new Uint8Array(1 + 20);
+  payload[0] = 0x00; // P2PKH version byte
+  payload.set(h160, 1);
+  return b58check.encode(payload);
+}
+
+async function generateWallet() {
+  const priv = secp.utils.randomPrivateKey();
+  const pub = secp.getPublicKey(priv, true); // compressed
+  const privateKey = bytesToHex(priv);
+  const publicKey = bytesToHex(pub);
+  const address = pubKeyToAddress(publicKey);
+  return { address, publicKey, privateKey };
+}
+
+async function signData(privHex: string, data: string) {
   try {
-    const key = await crypto.subtle.importKey(
-      "jwk", JSON.parse(privKeyStr),
-      { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]
-    );
-    const sig = await crypto.subtle.sign(
-      { name: "ECDSA", hash: "SHA-256" }, key, enc.encode(data)
-    );
-    return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+    const msgHash = sha256(enc.encode(data));
+    const sig = await secp.signAsync(msgHash, hexToBytes(privHex));
+    return sig.toCompactHex(); // 128 hex chars (r||s)
   } catch { return ""; }
 }
 
@@ -658,7 +677,9 @@ function SendTxForm({ wallet, chain, onBroadcast, onSent }: any) {
   async function send() {
     setErr("");
     const amount = parseFloat(amt);
-    if (!to.startsWith("0x") || to.length < 10) { setErr("Invalid address"); return; }
+    if (!to || to.length < 26 || to.length > 35 || !/^[1][1-9A-HJ-NP-Za-km-z]+$/.test(to)) {
+      setErr("Invalid address"); return;
+    }
     if (!amount || amount <= 0) { setErr("Invalid amount"); return; }
     if (amount + TX_FEE > balance) { setErr(`Insufficient balance (need ${(amount + TX_FEE).toFixed(6)})`); return; }
     setSt("signing");
@@ -668,7 +689,7 @@ function SendTxForm({ wallet, chain, onBroadcast, onSent }: any) {
       const data = `${wallet.address}→${to}:${amount}@${ts}`;
       const sig = await signData(wallet.privateKey, data);
       const tx = {
-        id: `0x${txid.slice(0, 40)}`,
+        id: txid.slice(0, 40),
         from: wallet.address, fromUsername: wallet.username,
         to, amount, fee: TX_FEE,
         signature: sig, publicKey: wallet.publicKey,
@@ -1042,7 +1063,7 @@ function WalletScreen({ wallet, chain, mempool, onBroadcast }: any) {
         </div>
 
         <div className="glass p-4">
-          <div className="label-eyebrow mb-2">Public key (JWK)</div>
+          <div className="label-eyebrow mb-2">Public key (secp256k1, compressed)</div>
           <div className="num text-[10px] text-muted-foreground/80 break-all leading-relaxed">
             {wallet.publicKey}
           </div>
@@ -1206,10 +1227,16 @@ export default function BlobChainApp() {
       setConnectErr("Missing address / publicKey / privateKey");
       return;
     }
+    if (!/^[0-9a-fA-F]{64}$/.test(parsed.privateKey)) { setConnectErr("privateKey must be 64 hex chars"); return; }
+    if (!/^[0-9a-fA-F]{66}$/.test(parsed.publicKey)) { setConnectErr("publicKey must be 66 hex chars (compressed)"); return; }
+    try {
+      const derived = pubKeyToAddress(parsed.publicKey.toLowerCase());
+      if (derived !== parsed.address) { setConnectErr("address does not match publicKey"); return; }
+    } catch { setConnectErr("Invalid public key"); return; }
     const w: any = {
       address: parsed.address,
-      publicKey: parsed.publicKey,
-      privateKey: parsed.privateKey,
+      publicKey: parsed.publicKey.toLowerCase(),
+      privateKey: parsed.privateKey.toLowerCase(),
       username: nameIn.trim().slice(0, 24),
     };
     try {
@@ -1457,7 +1484,7 @@ export default function BlobChainApp() {
               </button>
             </div>
             <div className="text-[11px] text-muted-foreground/70 text-center pt-1">
-              ECDSA P-256 keypair generated in your browser
+              secp256k1 keypair generated in your browser (Bitcoin curve)
             </div>
           </div>
         )}
@@ -1479,7 +1506,7 @@ export default function BlobChainApp() {
               <textarea
                 value={importJson}
                 onChange={e => setImportJson(e.target.value)}
-                placeholder='{"address":"0x…","publicKey":"…","privateKey":"…"}'
+                placeholder='{"address":"1…","publicKey":"02… (66 hex)","privateKey":"… (64 hex)"}'
                 rows={5}
                 className="num w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-[11px] leading-relaxed resize-none"
               />

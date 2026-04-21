@@ -10,8 +10,8 @@
 //     enc: { salt: <b64>, iv: <b64>, ct: <b64>, iter: 250000 }
 //   }
 
-const VAULT_KEY = "blob_wallet_vault_v1";
-const LEGACY_KEY = "blob_wallet_v2"; // plaintext storage we are retiring
+const VAULT_KEY = "blob_wallet_vault_v2"; // v2: secp256k1 hex keys (Bitcoin-style)
+const LEGACY_KEYS = ["blob_wallet_v2", "blob_wallet_vault_v1"]; // older formats to purge
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -80,8 +80,8 @@ export async function saveEncryptedWallet(w: WalletPlain, passphrase: string) {
     enc: { salt: b64(salt), iv: b64(iv), ct: b64(ct), iter },
   };
   localStorage.setItem(VAULT_KEY, JSON.stringify(vault));
-  // Make sure no plaintext copy lingers
-  localStorage.removeItem(LEGACY_KEY);
+  // Make sure no copies in older-format slots linger
+  for (const k of LEGACY_KEYS) localStorage.removeItem(k);
 }
 
 export function getStoredWalletPublic(): WalletPublic | null {
@@ -120,13 +120,13 @@ export async function unlockWallet(passphrase: string): Promise<WalletPlain> {
 
 export function clearWallet() {
   localStorage.removeItem(VAULT_KEY);
-  localStorage.removeItem(LEGACY_KEY);
+  for (const k of LEGACY_KEYS) localStorage.removeItem(k);
 }
 
-// One-time cleanup: remove the legacy plaintext wallet from any browser that
-// still has it from before encryption was introduced.
+// One-time cleanup: remove legacy/older-format wallets from any browser that
+// still has them. Old (P-256/JWK) wallets can't sign for the new chain anyway.
 export function purgeLegacyPlaintextWallet() {
-  if (localStorage.getItem(LEGACY_KEY)) {
-    localStorage.removeItem(LEGACY_KEY);
+  for (const k of LEGACY_KEYS) {
+    if (localStorage.getItem(k)) localStorage.removeItem(k);
   }
 }

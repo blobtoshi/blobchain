@@ -734,16 +734,18 @@ function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent }: any) {
 
   async function send() {
     setErr("");
-    const amount = parseFloat(amt);
+    const parsed = parseFloat(amt);
     const raw = to.trim().replace(/^@/, "");
     if (!raw) { setErr("Enter a recipient (address or @username)"); return; }
-    let toAddress: string | null = null;
-    if (ADDR_RE.test(raw)) toAddress = raw;
-    else if (resolved?.address) toAddress = resolved.address;
+    let toAddress = "";
+    if (raw.startsWith("1") && raw.length >= 26) toAddress = raw;
+    else if ((window as any).__resolveUsername) toAddress = await (window as any).__resolveUsername(raw);
     else { setErr("Recipient not found"); return; }
     if (toAddress === wallet.address) { setErr("Cannot send to yourself"); return; }
-    if (!amount || amount <= 0) { setErr("Invalid amount"); return; }
-    if (amount + TX_FEE > balance) { setErr(`Insufficient balance (need ${(amount + TX_FEE).toFixed(6)})`); return; }
+    if (!Number.isFinite(parsed) || parsed <= 0) { setErr("Invalid amount"); return; }
+    const amount = to8(parsed);
+    if (amount <= 0) { setErr(`Minimum amount is ${(1 / BLOB_UNIT).toFixed(BLOB_DECIMALS)} $BLOB`); return; }
+    if (amount + TX_FEE > balance) { setErr(`Insufficient balance (need ${(amount + TX_FEE).toFixed(BLOB_DECIMALS)})`); return; }
     setSt("signing");
     try {
       const ts = Date.now();

@@ -124,7 +124,12 @@ Deno.serve(async (req) => {
 
     const baseReward = getRewardForHeight(targetHeight);
     const feeTotal = txs.reduce((s, t) => s + (Number(t.fee) || 0), 0);
-    const reward = winner ? baseReward + feeTotal : 0;
+    // Hard supply cap: clamp the coinbase portion so total_supply never exceeds MAX_SUPPLY.
+    // Fees are recycled value (not new issuance), so they're always paid to the winner.
+    const remainingIssuance = Math.max(0, MAX_SUPPLY - prevSupply);
+    const coinbase = winner ? Math.min(baseReward, remainingIssuance) : 0;
+    const reward = winner ? to8(coinbase + feeTotal) : 0;
+    const newSupply = to8(prevSupply + coinbase);
 
     const block = {
       height: targetHeight,
@@ -138,7 +143,7 @@ Deno.serve(async (req) => {
       reward,
       seed: String(targetHeight),
       node_count: 1,
-      total_supply: prevSupply + reward,
+      total_supply: newSupply,
       hash: "",
     };
     block.hash = await sha256hex([

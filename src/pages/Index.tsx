@@ -264,7 +264,57 @@ function drawBG(ctx, frame, nodes) {
   ctx.restore();
 }
 
+// Sprite image for the player blob — loaded once at module init.
+const _blobImg: HTMLImageElement | null = (() => {
+  if (typeof window === "undefined") return null;
+  const img = new Image();
+  img.src = blobSprite;
+  return img;
+})();
+
 function drawBlob(ctx, x, y, action, wob, sq, blink) {
+  const duck = action === "duck";
+  const jumping = action === "jump";
+  const baseW = duck ? 78 : 64;
+  const baseH = duck ? 46 : 72;
+  const wb = Math.sin(wob * .12) * (duck ? 1.2 : 2.2);
+  const bob = Math.sin(wob * .18) * (duck ? 0 : 1.2);
+
+  ctx.save();
+  ctx.translate(x + wb * 0.4, y + bob);
+  ctx.scale(1, sq);
+
+  // Soft outer aura
+  ctx.save();
+  ctx.shadowColor = "#00d8ff";
+  ctx.shadowBlur = 26;
+  ctx.fillStyle = "rgba(0, 200, 255, 0.18)";
+  ctx.beginPath();
+  ctx.ellipse(0, 0, baseW * 0.45, baseH * 0.45, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  if (jumping) ctx.rotate(-0.08);
+
+  if (_blobImg && _blobImg.complete && _blobImg.naturalWidth > 0) {
+    ctx.drawImage(_blobImg, -baseW / 2, -baseH / 2 - 4, baseW, baseH);
+  } else {
+    ctx.fillStyle = "#3eecbf";
+    ctx.beginPath();
+    ctx.ellipse(0, 0, baseW * 0.4, baseH * 0.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Blink overlay across the eye area
+  if (blink && !duck) {
+    ctx.fillStyle = "rgba(0, 30, 50, 0.55)";
+    ctx.beginPath();
+    ctx.ellipse(-2, -10, baseW * 0.32, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
   const duck = action === "duck";
   const jumping = action === "jump";
   const rx = duck ? 34 : 24, ry = duck ? 15 : 30;

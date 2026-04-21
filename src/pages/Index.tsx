@@ -3226,26 +3226,43 @@ export default function BlobChainApp() {
   //   1. The block's 120s window has elapsed.
   //   2. At least one mining entry exists for this block.
   // If nobody mines, the block stays open indefinitely (proof-of-gaming halt).
+  //
+  // We attempt to seal both reactively (on state change) AND on a 10s interval
+  // safety net — so a stalled overdue block gets sealed by whichever client
+  // happens to load the page next, even if no local state changes.
   const sealingRef = useRef(false);
-  useEffect(() => {
+  const attemptSeal = useCallback(async () => {
     if (sealingRef.current) return;
-    if (!blockInfo.overdue) return;
-    if (entries.length === 0) return; // awaiting miner
-    const targetHeight = blockInfo.height;
+    const tip = chainRef.current[chainRef.current.length - 1];
+    const prevHeight = tip ? Number(tip.height) : 0;
+    const prevTs = tip ? Number(tip.timestamp) : GENESIS_TIME_MS;
+    const elapsedMs = Date.now() - prevTs;
+    if (elapsedMs < BLOCK_TIME * 1000) return;
+    if (entriesRef.current.length === 0) return;
+    const targetHeight = prevHeight + 1;
     if (chainRef.current.find(b => b.height === targetHeight)) return;
 
     sealingRef.current = true;
-    (async () => {
-      try {
-        // Small jitter so multiple tabs don't all fire at once
-        await new Promise(r => setTimeout(r, Math.random() * 1500));
-        if (chainRef.current.find(b => b.height === targetHeight)) return;
-        await Relay.sealBlock(targetHeight);
-      } finally {
-        sealingRef.current = false;
-      }
-    })();
-  }, [blockInfo.overdue, blockInfo.height, entries.length]);
+    try {
+      await new Promise(r => setTimeout(r, Math.random() * 1500));
+      if (chainRef.current.find(b => b.height === targetHeight)) return;
+      await Relay.sealBlock(targetHeight);
+    } finally {
+      sealingRef.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (blockInfo.overdue && entries.length > 0) attemptSeal();
+    const iv = setInterval(attemptSeal, 10_000);
+    return () => clearInterval(iv);
+  }, [blockInfo.overdue, blockInfo.height, entries.length, attemptSeal]);
+
+  // After a fresh load, the entries fetch for the current active height may
+  // arrive after blockInfo settles — try a seal once entries land.
+  useEffect(() => {
+    if (entries.length > 0) attemptSeal();
+  }, [entries.length, attemptSeal]);
 
   const onEntrySubmit = useCallback(entry => {
     setMyEntry(entry);

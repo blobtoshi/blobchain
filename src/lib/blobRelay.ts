@@ -170,6 +170,38 @@ export async function pushEntry(
   return { ok: true };
 }
 
+// ── PLAYERS ─────────────────────────────────────────────────────────────
+export type Player = {
+  address: string;
+  username: string;
+  publicKey?: string;
+  blocksWon?: number;
+  totalMined?: number;
+  bestScore?: number;
+  gamesPlayed?: number;
+  firstSeen?: string | null;
+  lastActive?: string | null;
+};
+
+export async function fetchPlayers(): Promise<Player[]> {
+  const { data, error } = await supabase
+    .from("blob_players")
+    .select("address,username,public_key,blocks_won,total_mined,best_score,games_played,first_seen,last_active")
+    .order("first_seen", { ascending: true });
+  if (error) { console.error("[relay] fetchPlayers", error); return []; }
+  return (data ?? []).map((r: any) => ({
+    address: r.address,
+    username: r.username,
+    publicKey: r.public_key ?? undefined,
+    blocksWon: Number(r.blocks_won ?? 0),
+    totalMined: Number(r.total_mined ?? 0),
+    bestScore: Number(r.best_score ?? 0),
+    gamesPlayed: Number(r.games_played ?? 0),
+    firstSeen: r.first_seen ?? null,
+    lastActive: r.last_active ?? null,
+  }));
+}
+
 // ── REALTIME ────────────────────────────────────────────────────────────
 export type RelayHandlers = {
   onBlock?: (b: Block) => void;

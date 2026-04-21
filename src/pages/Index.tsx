@@ -3275,10 +3275,8 @@ export default function BlobChainApp() {
         </DialogContent>
       </Dialog>
 
-      <footer className="fixed bottom-0 left-0 right-0 backdrop-blur-xl bg-background/70 border-t border-border px-5 py-2 flex justify-between items-center text-[10px] text-muted-foreground/70 num">
-        <span className="hidden sm:inline">⬡ BLOB CHAIN · Proof-of-Gaming</span>
-        <span>Block #{blockInfo.height} · {blockInfo.remaining}s</span>
-        <span>{chain.length - 1} blocks · {calcTotalSupply(chain).toFixed(2)} / {MAX_SUPPLY.toLocaleString()}</span>
+      <footer className="mt-12 py-6 text-center text-[11px] text-muted-foreground/60 num">
+        Blob Chain © 2026
       </footer>
     </div>
   );

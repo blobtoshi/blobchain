@@ -272,44 +272,48 @@ const _blobImg: HTMLImageElement | null = (() => {
   return img;
 })();
 
-function drawBlob(ctx, x, y, action, wob, sq, blink) {
+function drawBlob(ctx, x, y, action, wob, sq, _blink) {
   const duck = action === "duck";
-  const jumping = action === "jump";
   const baseW = duck ? 78 : 64;
   const baseH = duck ? 46 : 72;
-  const wb = Math.sin(wob * .12) * (duck ? 1.2 : 2.2);
-  const bob = Math.sin(wob * .18) * (duck ? 0 : 1.2);
+  // Floating motion — gentle vertical bob + subtle horizontal sway
+  const t = wob * 0.08;
+  const floatY = duck ? 0 : Math.sin(t) * 5;
+  const floatX = duck ? 0 : Math.sin(t * 0.7) * 1.5;
+  // Pulsing aura
+  const auraPulse = 0.85 + Math.sin(t * 1.3) * 0.15;
 
   ctx.save();
-  ctx.translate(x + wb * 0.4, y + bob);
+  ctx.translate(x + floatX, y + floatY - (duck ? 0 : 4));
   ctx.scale(1, sq);
 
-  // Soft outer aura
+  // Soft pulsing outer aura
   ctx.save();
   ctx.shadowColor = "#00d8ff";
-  ctx.shadowBlur = 26;
-  ctx.fillStyle = "rgba(0, 200, 255, 0.18)";
+  ctx.shadowBlur = 28 * auraPulse;
+  ctx.fillStyle = `rgba(0, 200, 255, ${0.18 * auraPulse})`;
   ctx.beginPath();
-  ctx.ellipse(0, 0, baseW * 0.45, baseH * 0.45, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, 0, baseW * 0.5 * auraPulse, baseH * 0.5 * auraPulse, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 
-  if (jumping) ctx.rotate(-0.08);
+  // Tiny shadow on the ground beneath the floating sprite
+  if (!duck) {
+    ctx.save();
+    ctx.fillStyle = `rgba(0, 0, 0, ${0.25 - Math.abs(floatY) * 0.015})`;
+    ctx.beginPath();
+    ctx.ellipse(0, baseH * 0.55 + 6, baseW * 0.32, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
 
   if (_blobImg && _blobImg.complete && _blobImg.naturalWidth > 0) {
-    ctx.drawImage(_blobImg, -baseW / 2, -baseH / 2 - 4, baseW, baseH);
+    ctx.imageSmoothingEnabled = false; // keep pixel-art crispness
+    ctx.drawImage(_blobImg, -baseW / 2, -baseH / 2, baseW, baseH);
   } else {
     ctx.fillStyle = "#3eecbf";
     ctx.beginPath();
     ctx.ellipse(0, 0, baseW * 0.4, baseH * 0.4, 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // Blink overlay across the eye area
-  if (blink && !duck) {
-    ctx.fillStyle = "rgba(0, 30, 50, 0.55)";
-    ctx.beginPath();
-    ctx.ellipse(-2, -10, baseW * 0.32, 3, 0, 0, Math.PI * 2);
     ctx.fill();
   }
 

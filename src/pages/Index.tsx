@@ -3124,12 +3124,16 @@ export default function BlobChainApp() {
     setGameLaunched(false);
   }
 
+  // Tick block info every second. blockInfo derives from the chain tip
+  // and current entries, so the countdown only advances after a real
+  // miner submits a score.
   useEffect(() => {
-    const iv = setInterval(() => setBlock(getBlockInfo()), 1000);
+    setBlock(getBlockInfo(chain, entries.length > 0));
+    const iv = setInterval(() => setBlock(getBlockInfo(chain, entries.length > 0)), 1000);
     return () => clearInterval(iv);
-  }, []);
+  }, [chain, entries.length]);
 
-  // Keep latest values available to the sealing effect (avoid stale closures)
+  // Keep latest values available to async effects (avoid stale closures)
   const entriesRef = useRef(entries);
   const mempoolRef = useRef(mempool);
   const chainRef = useRef(chain);
@@ -3146,10 +3150,13 @@ export default function BlobChainApp() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [c, m, e] = await Promise.all([
-        Relay.fetchChain(),
+      const c = await Relay.fetchChain();
+      if (cancelled) return;
+      const tipHeight = c.length ? c[c.length - 1].height : 0;
+      const activeHeight = tipHeight + 1;
+      const [m, e] = await Promise.all([
         Relay.fetchMempool(),
-        Relay.fetchEntries(currentHeightRef.current),
+        Relay.fetchEntries(activeHeight),
       ]);
       if (cancelled) return;
       if (c.length) setChain(c);
@@ -3165,11 +3172,9 @@ export default function BlobChainApp() {
         });
         setNewBlock({ ...b, isMine: b.winner === walletRef.current?.address });
         setTimeout(() => setNewBlock(null), 5000);
-        // entries from a closed block no longer apply to the new round
-        if (b.height >= currentHeightRef.current - 1) {
-          setEntries([]);
-          setMyEntry(null);
-        }
+        // A new block was sealed → the round it belonged to is over.
+        setEntries([]);
+        setMyEntry(null);
       },
       onTx: (t) => {
         setMempool(prev => prev.find(x => x.id === t.id) ? prev : [...prev, t]);
@@ -3178,7 +3183,10 @@ export default function BlobChainApp() {
         setMempool(prev => prev.filter(x => x.id !== id));
       },
       onEntry: (en) => {
-        if (en.block_height !== currentHeightRef.current) return;
+        // Only entries for the currently-active height are relevant.
+        const tip = chainRef.current[chainRef.current.length - 1];
+        const activeH = (tip ? Number(tip.height) : 0) + 1;
+        if (en.block_height !== activeH) return;
         setEntries(prev => {
           const i = prev.findIndex(x => x.address === en.address);
           if (i === -1) return [...prev, en];
@@ -3189,7 +3197,8 @@ export default function BlobChainApp() {
     return () => { cancelled = true; unsub(); };
   }, []);
 
-  // When the height ticks, refresh entries for the new round from the relay
+  // When the active height changes (a new block was sealed), refresh entries
+  // for the new round from the relay.
   useEffect(() => {
     (async () => {
       const e = await Relay.fetchEntries(blockInfo.height);
@@ -3197,28 +3206,30 @@ export default function BlobChainApp() {
     })();
   }, [blockInfo.height]);
 
-  // Block sealing — server-side only. We just trigger seal-block for the
-  // closed height; the realtime onBlock handler will deliver the new block.
-  const prevHeightRef = useRef(blockInfo.height);
+  // Block sealing — only triggered when BOTH conditions hold:
+  //   1. The block's 120s window has elapsed.
+  //   2. At least one mining entry exists for this block.
+  // If nobody mines, the block stays open indefinitely (proof-of-gaming halt).
+  const sealingRef = useRef(false);
   useEffect(() => {
-    const prevHeight = prevHeightRef.current;
-    if (blockInfo.height === prevHeight) return;
-    const closedHeight = blockInfo.height - 1;
-    prevHeightRef.current = blockInfo.height;
-    if (closedHeight < 1) return;
+    if (sealingRef.current) return;
+    if (!blockInfo.overdue) return;
+    if (entries.length === 0) return; // awaiting miner
+    const targetHeight = blockInfo.height;
+    if (chainRef.current.find(b => b.height === targetHeight)) return;
 
+    sealingRef.current = true;
     (async () => {
-      // Avoid hammering: only call seal if we don't already have it locally
-      if (chainRef.current.find(b => b.height === closedHeight)) return;
-      // Small jitter so multiple tabs don't all fire at the same instant
-      await new Promise(r => setTimeout(r, Math.random() * 1500));
-      if (chainRef.current.find(b => b.height === closedHeight)) return;
-      await Relay.sealBlock(closedHeight);
-      // Reset entries for the new round; the realtime feed will populate the new block
-      setEntries([]);
-      setMyEntry(null);
+      try {
+        // Small jitter so multiple tabs don't all fire at once
+        await new Promise(r => setTimeout(r, Math.random() * 1500));
+        if (chainRef.current.find(b => b.height === targetHeight)) return;
+        await Relay.sealBlock(targetHeight);
+      } finally {
+        sealingRef.current = false;
+      }
     })();
-  }, [blockInfo.height]);
+  }, [blockInfo.overdue, blockInfo.height, entries.length]);
 
   const onEntrySubmit = useCallback(entry => {
     setMyEntry(entry);

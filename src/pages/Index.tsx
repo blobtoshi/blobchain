@@ -1275,8 +1275,19 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
   const [pTxs, setPTxs] = useState(0);
   const [pMem, setPMem] = useState(0);
   const [pAddr, setPAddr] = useState(0);
-  // Reset page when switching tabs or when an address detail opens
+
+  // Filters per tab
+  const [txF, setTxF] = useState<TxFilters>(emptyTxFilters);
+  const [memF, setMemF] = useState<TxFilters>(emptyTxFilters);
+  const [blkF, setBlkF] = useState<BlockFilters>(emptyBlockFilters);
+  const [addrF, setAddrF] = useState<AddrFilters>(emptyAddrFilters);
+
+  // Reset page when switching tabs or when filters change
   useEffect(() => { setPBlocks(0); setPTxs(0); setPMem(0); setPAddr(0); }, [tab]);
+  useEffect(() => { setPTxs(0); }, [txF]);
+  useEffect(() => { setPMem(0); }, [memF]);
+  useEffect(() => { setPBlocks(0); }, [blkF]);
+  useEffect(() => { setPAddr(0); }, [addrF]);
 
   // Pull every registered player so addresses without any tx history still
   // appear in the explorer (e.g. freshly-created wallets that haven't mined

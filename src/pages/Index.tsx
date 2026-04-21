@@ -1282,60 +1282,26 @@ export default function BlobChainApp() {
     })();
   }, [blockInfo.height]);
 
-  // Block sealing — leader-elects locally, persists to relay (idempotent on PK)
+  // Block sealing — server-side only. We just trigger seal-block for the
+  // closed height; the realtime onBlock handler will deliver the new block.
   const prevHeightRef = useRef(blockInfo.height);
   useEffect(() => {
     const prevHeight = prevHeightRef.current;
     if (blockInfo.height === prevHeight) return;
     const closedHeight = blockInfo.height - 1;
     prevHeightRef.current = blockInfo.height;
+    if (closedHeight < 1) return;
 
     (async () => {
-      // Pull the authoritative entry set for the closed block from the relay
-      // so every node converges on the same winner.
-      const closedEntries = await Relay.fetchEntries(closedHeight);
-      const currentChain = chainRef.current;
-      const currentMempool = mempoolRef.current;
-      const currentWallet = walletRef.current;
-      if (currentChain.find(b => b.height === closedHeight)) return; // already sealed
-      const prevBlock = currentChain.find(b => b.height === closedHeight - 1)
-        || currentChain[currentChain.length - 1];
-      const seedNum = closedHeight * 6364136223846793 + 1442695040888963407;
-      const winner = pickWinner(closedEntries, Math.abs(seedNum % 2147483647));
-      const txsToInclude = currentMempool.slice(0, 50);
-      const baseReward = getRewardForHeight(closedHeight);
-      const feeTotal = txsToInclude.reduce((s, t) => s + (Number(t.fee) || 0), 0);
-      const reward = winner ? baseReward + feeTotal : 0;
-
-      const newB: any = {
-        height: closedHeight,
-        previousHash: prevBlock?.hash || GENESIS.hash,
-        timestamp: Date.now(),
-        transactions: txsToInclude,
-        miningEntries: closedEntries,
-        winner: winner?.address || null,
-        winnerUsername: winner?.username || null,
-        winnerScore: winner?.score || 0,
-        reward,
-        seed: String(closedHeight),
-        nodeCount,
-        totalSupply: calcTotalSupply(currentChain) + reward,
-      };
-      newB.hash = await computeBlockHash(newB);
-
-      setChain(c => {
-        if (c.find(b => b.height === closedHeight)) return c;
-        return [...c, newB].sort((a, b2) => a.height - b2.height);
-      });
-      setMempool(m => m.filter(t => !txsToInclude.find(x => x.id === t.id)));
-      setNewBlock({ ...newB, isMine: winner?.address === currentWallet?.address });
-      setTimeout(() => setNewBlock(null), 5000);
+      // Avoid hammering: only call seal if we don't already have it locally
+      if (chainRef.current.find(b => b.height === closedHeight)) return;
+      // Small jitter so multiple tabs don't all fire at the same instant
+      await new Promise(r => setTimeout(r, Math.random() * 1500));
+      if (chainRef.current.find(b => b.height === closedHeight)) return;
+      await Relay.sealBlock(closedHeight);
+      // Reset entries for the new round; the realtime feed will populate the new block
       setEntries([]);
       setMyEntry(null);
-
-      // Best-effort persistence; PK collision is fine (another node won the race).
-      Relay.pushBlock(newB);
-      if (txsToInclude.length) Relay.clearTxs(txsToInclude.map(t => t.id));
     })();
   }, [blockInfo.height]);
 

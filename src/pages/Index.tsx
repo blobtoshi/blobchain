@@ -2857,18 +2857,30 @@ function NetworkView({ nodeCount, chain, blockInfo, mempool = [] }: any) {
       </div>
 
       {/* Next block countdown */}
-      <div className="glass p-5 rounded-md">
+      <div className={`glass p-5 rounded-md ${blockInfo.awaitingMiner ? "ring-1 ring-[hsl(var(--warning)/0.4)]" : ""}`}>
         <div className="flex items-center justify-between mb-3">
           <div>
-            <div className="label-eyebrow">Next block</div>
+            <div className="label-eyebrow">{blockInfo.awaitingMiner ? "Awaiting miner" : "Next block"}</div>
             <div className="text-sm text-foreground/60 mt-0.5">Block #{blockInfo.height} · {BLOCK_TIME}s target</div>
           </div>
-          <div className="num text-3xl font-semibold tabular-nums tracking-tight text-primary">{mm}:{ss}</div>
+          {blockInfo.awaitingMiner ? (
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[hsl(var(--warning))] opacity-70" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[hsl(var(--warning))]" />
+              </span>
+              <div className="num text-xl font-semibold tabular-nums tracking-tight text-[hsl(var(--warning))]">
+                +{Math.floor(blockInfo.overtime / 60).toString().padStart(2, "0")}:{(blockInfo.overtime % 60).toString().padStart(2, "0")}
+              </div>
+            </div>
+          ) : (
+            <div className="num text-3xl font-semibold tabular-nums tracking-tight text-primary">{mm}:{ss}</div>
+          )}
         </div>
-        <Bar pct={elapsedPct} />
+        <Bar pct={blockInfo.awaitingMiner ? 100 : elapsedPct} tone={blockInfo.awaitingMiner ? "bg-[hsl(var(--warning))]" : "bg-primary"} />
         <div className="flex justify-between text-[11px] text-foreground/50 mt-1.5 num">
           <span>{blockInfo.elapsed}s elapsed</span>
-          <span>{remaining}s remaining</span>
+          <span>{blockInfo.awaitingMiner ? "needs ≥1 miner to seal" : `${remaining}s remaining`}</span>
         </div>
       </div>
 

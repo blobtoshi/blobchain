@@ -3183,13 +3183,12 @@ export default function BlobChainApp() {
             <WalletScreen wallet={wallet} chain={chain} mempool={mempool} onBroadcast={onTxBroadcast} />
           ) : (
             <div className="glass-hi p-10 text-center space-y-4">
-              <div className="text-sm text-muted-foreground">No wallet connected</div>
+              <div className="text-sm text-muted-foreground">{vaultPub ? "Wallet locked" : "No wallet connected"}</div>
               <button
-                onClick={openConnect}
+                onClick={vaultPub ? () => { setUnlockErr(""); setUnlockPass(""); setUnlockOpen(true); } : openConnect}
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition"
               >
-                <Wallet className="w-4 h-4" />
-                Connect wallet
+                {vaultPub ? <><Lock className="w-4 h-4" /> Unlock wallet</> : <><Wallet className="w-4 h-4" /> Connect wallet</>}
               </button>
             </div>
           )

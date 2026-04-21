@@ -16,6 +16,8 @@ import { base58check } from "@scure/base";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Send, Play, Wallet, Plus, Download, Lock, Settings as SettingsIcon, LogOut, ChevronDown, ArrowDownLeft, ArrowUpRight, Trophy, Eye, EyeOff, Search, SlidersHorizontal, X, Zap, ArrowLeftRight, ExternalLink, Loader2, CheckCircle2, AlertCircle, Copy } from "lucide-react";
 import runnerArt from "@/assets/blob-sprite.png";
 import blobSprite from "@/assets/blob-sprite.png";

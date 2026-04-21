@@ -2442,7 +2442,7 @@ export default function BlobChainApp() {
     setMempool(m => [...m, tx]);
   }, []);
 
-  const balance = wallet ? calcBalance(wallet.address, chain) : 0;
+  const balance = wallet ? calcBalance(wallet.address, chain, mempool) : 0;
   const nav = [
     { id: "mine", text: "Mine" },
     { id: "wallet", text: "Wallet" },

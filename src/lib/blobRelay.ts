@@ -170,7 +170,23 @@ export async function pushEntry(
   return { ok: true };
 }
 
-// ── PLAYERS ─────────────────────────────────────────────────────────────
+// Register a wallet in the player registry so its address shows up in the
+// explorer immediately, even before the user mines or transacts.
+export async function registerPlayer(p: {
+  address: string;
+  username: string;
+  publicKey: string;
+  signature: string;
+  timestamp: number;
+}): Promise<{ ok: boolean; error?: string }> {
+  const { data, error } = await supabase.functions.invoke("register-player", { body: p });
+  if (error) {
+    console.error("[relay] registerPlayer", error);
+    return { ok: false, error: error.message };
+  }
+  if ((data as any)?.error) return { ok: false, error: (data as any).error };
+  return { ok: true };
+}
 export type Player = {
   address: string;
   username: string;

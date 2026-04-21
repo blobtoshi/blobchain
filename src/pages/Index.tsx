@@ -1555,6 +1555,43 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
 
       {tab === "blocks" && (
         <div className="space-y-1.5">
+          <FilterPanel activeCount={blockFiltersActive(blkF)} onClear={() => setBlkF(emptyBlockFilters)}>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              <div className="col-span-2 sm:col-span-3 lg:col-span-2">
+                <FieldLabel>Winner (address or username)</FieldLabel>
+                <FInput value={blkF.winner} onChange={e => setBlkF({ ...blkF, winner: e.target.value })} placeholder="address or @username" />
+              </div>
+              <div>
+                <FieldLabel>Min height</FieldLabel>
+                <FInput type="number" value={blkF.minHeight} onChange={e => setBlkF({ ...blkF, minHeight: e.target.value })} placeholder="0" />
+              </div>
+              <div>
+                <FieldLabel>Max height</FieldLabel>
+                <FInput type="number" value={blkF.maxHeight} onChange={e => setBlkF({ ...blkF, maxHeight: e.target.value })} placeholder="∞" />
+              </div>
+              <div>
+                <FieldLabel>From date</FieldLabel>
+                <FInput type="date" value={blkF.dateFrom} onChange={e => setBlkF({ ...blkF, dateFrom: e.target.value })} />
+              </div>
+              <div>
+                <FieldLabel>To date</FieldLabel>
+                <FInput type="date" value={blkF.dateTo} onChange={e => setBlkF({ ...blkF, dateTo: e.target.value })} />
+              </div>
+              <div>
+                <FieldLabel>Has transactions</FieldLabel>
+                <FSelect value={blkF.hasTxs} onChange={v => setBlkF({ ...blkF, hasTxs: v as any })}
+                  options={[{ v: "all", l: "Any" }, { v: "yes", l: "With txs" }, { v: "no", l: "Empty blocks" }]} />
+              </div>
+              <div>
+                <FieldLabel>Sort by</FieldLabel>
+                <FSelect value={blkF.sort} onChange={v => setBlkF({ ...blkF, sort: v as any })}
+                  options={[{ v: "newest", l: "Newest" }, { v: "oldest", l: "Oldest" }, { v: "reward-desc", l: "Highest reward" }, { v: "score-desc", l: "Highest score" }]} />
+              </div>
+            </div>
+          </FilterPanel>
+          <div className="flex items-center justify-between px-1 text-[10px] text-muted-foreground num">
+            <span>{blocksFiltered.length} of {chain.length} blocks</span>
+          </div>
           <div className="glass-hi px-3 py-2.5 ring-1 ring-[hsl(var(--warning)/0.2)] grid grid-cols-[50px_1fr_60px_70px_40px] sm:grid-cols-[60px_1fr_80px_100px_50px] gap-2 items-center text-xs">
             <span className="num text-[hsl(var(--warning))]">#{blockInfo.height}</span>
             <span className="text-muted-foreground">⏳ mining · {blockInfo.remaining}s</span>
@@ -1565,7 +1602,7 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
           <div className="grid grid-cols-[50px_1fr_60px_70px_40px] sm:grid-cols-[60px_1fr_80px_100px_50px] gap-2 px-3 py-1">
             {["Height", "Winner", "Score", "Reward", "Tx"].map(h => <div key={h} className="label-eyebrow">{h}</div>)}
           </div>
-          {[...chain].reverse().slice(pBlocks * PAGE_SIZE, (pBlocks + 1) * PAGE_SIZE).map((b: any) => (
+          {blocksFiltered.slice(pBlocks * PAGE_SIZE, (pBlocks + 1) * PAGE_SIZE).map((b: any) => (
             <div key={b.height}>
               <div onClick={() => setSelBlock(selBlock === b.height ? null : b.height)}
                 className="glass px-3 py-2.5 cursor-pointer hover:bg-secondary/30 transition grid grid-cols-[50px_1fr_60px_70px_40px] sm:grid-cols-[60px_1fr_80px_100px_50px] gap-2 items-center text-xs">

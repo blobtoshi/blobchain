@@ -2068,7 +2068,7 @@ function WalletScreen({ wallet, chain, mempool, onBroadcast }: any) {
         <div className="lg:col-span-1 order-1 lg:order-2">
           <div className="glass-hi p-5 sm:p-6 lg:sticky lg:top-20">
             <div className="label-eyebrow mb-4">Send $BLOB</div>
-            <SendTxForm wallet={wallet} chain={chain} onBroadcast={onBroadcast} />
+            <SendTxForm wallet={wallet} chain={chain} mempool={mempool} onBroadcast={onBroadcast} />
           </div>
         </div>
 

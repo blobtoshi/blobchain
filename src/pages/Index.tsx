@@ -1768,15 +1768,30 @@ export default function BlobChainApp() {
     setConnectErr("");
   }
 
+  // Username = global handle. Validate format & check the network for
+  // collisions before we commit so users get instant feedback.
+  const USERNAME_RE = /^[A-Za-z0-9_]{3,24}$/;
+  async function validateUsername(name: string, ownAddress?: string): Promise<string | null> {
+    const u = name.trim();
+    if (!USERNAME_RE.test(u)) return "Username must be 3–24 chars (letters, numbers, _)";
+    const { data } = await supabase.rpc("resolve_username", { p_username: u });
+    const row = (data as any[])?.[0];
+    if (row && row.address !== ownAddress) return `Username "${u}" is taken`;
+    return null;
+  }
+
   async function createWallet() {
-    if (!nameIn.trim()) return;
+    const name = nameIn.trim();
+    if (!name) return;
     if (pass1.length < 6) { setConnectErr("Passphrase must be at least 6 characters"); return; }
     if (pass1 !== pass2) { setConnectErr("Passphrases do not match"); return; }
     setCreating(true);
     setConnectErr("");
     try {
+      const nameErr = await validateUsername(name);
+      if (nameErr) { setConnectErr(nameErr); return; }
       const w: any = await generateWallet();
-      w.username = nameIn.trim().slice(0, 24);
+      w.username = name;
       await Vault.saveEncryptedWallet(w, pass1);
       setVaultPub({ address: w.address, publicKey: w.publicKey, username: w.username });
       setWallet(w);
@@ -1791,7 +1806,8 @@ export default function BlobChainApp() {
 
   async function importWallet() {
     setConnectErr("");
-    if (!nameIn.trim()) { setConnectErr("Enter a miner name"); return; }
+    const name = nameIn.trim();
+    if (!name) { setConnectErr("Enter a miner name"); return; }
     if (pass1.length < 6) { setConnectErr("Passphrase must be at least 6 characters"); return; }
     if (pass1 !== pass2) { setConnectErr("Passphrases do not match"); return; }
     const priv = importJson.trim().toLowerCase().replace(/^0x/, "");
@@ -1806,12 +1822,10 @@ export default function BlobChainApp() {
     } catch (e: any) {
       setConnectErr("Invalid private key"); return;
     }
-    const w: any = {
-      address,
-      publicKey,
-      privateKey: priv,
-      username: nameIn.trim().slice(0, 24),
-    };
+    // Allow re-using the existing handle for THIS address; reject if taken by another.
+    const nameErr = await validateUsername(name, address);
+    if (nameErr) { setConnectErr(nameErr); return; }
+    const w: any = { address, publicKey, privateKey: priv, username: name };
     try {
       await Vault.saveEncryptedWallet(w, pass1);
       setVaultPub({ address: w.address, publicKey: w.publicKey, username: w.username });
@@ -1822,7 +1836,6 @@ export default function BlobChainApp() {
       setConnectErr(String(e?.message || e));
     }
   }
-
   async function unlockExisting() {
     setUnlockErr("");
     setUnlocking(true);

@@ -1882,13 +1882,52 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
             })()
           ) : (
             <>
+              <FilterPanel activeCount={addrFiltersActive(addrF)} onClear={() => setAddrF(emptyAddrFilters)}>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  <div className="col-span-2">
+                    <FieldLabel>Address or username</FieldLabel>
+                    <FInput value={addrF.q} onChange={e => setAddrF({ ...addrF, q: e.target.value })} placeholder="search…" />
+                  </div>
+                  <div>
+                    <FieldLabel>Min balance ⬡</FieldLabel>
+                    <FInput type="number" value={addrF.minBalance} onChange={e => setAddrF({ ...addrF, minBalance: e.target.value })} placeholder="0" />
+                  </div>
+                  <div>
+                    <FieldLabel>Has mined</FieldLabel>
+                    <FSelect value={addrF.hasMined} onChange={v => setAddrF({ ...addrF, hasMined: v as any })}
+                      options={[{ v: "all", l: "Any" }, { v: "yes", l: "Miners only" }, { v: "no", l: "Non-miners" }]} />
+                  </div>
+                  <div>
+                    <FieldLabel>Has transactions</FieldLabel>
+                    <FSelect value={addrF.hasTxs} onChange={v => setAddrF({ ...addrF, hasTxs: v as any })}
+                      options={[{ v: "all", l: "Any" }, { v: "yes", l: "Active" }, { v: "no", l: "Idle" }]} />
+                  </div>
+                  <div>
+                    <FieldLabel>Sort by</FieldLabel>
+                    <FSelect value={addrF.sort} onChange={v => setAddrF({ ...addrF, sort: v as any })}
+                      options={[
+                        { v: "balance-desc", l: "Highest balance" },
+                        { v: "balance-asc", l: "Lowest balance" },
+                        { v: "mined-desc", l: "Most mined" },
+                        { v: "tx-desc", l: "Most active" },
+                        { v: "recent", l: "Recently seen" },
+                        { v: "username", l: "Username A→Z" },
+                      ]} />
+                  </div>
+                </div>
+              </FilterPanel>
+              <div className="flex items-center justify-between px-1 text-[10px] text-muted-foreground num">
+                <span>{addrFiltered.length} of {addressBook.length} addresses</span>
+              </div>
               <div className="grid grid-cols-[1fr_80px_80px_60px] sm:grid-cols-[1fr_1fr_100px_100px_60px] gap-2 px-3 py-1">
                 {["Address", "Username", "Balance", "Mined", "Tx"].slice(0, window.innerWidth < 640 ? 4 : 5).map(h => <div key={h} className="label-eyebrow">{h}</div>)}
               </div>
-              {addressBook.length === 0 && (
+              {addressBook.length === 0 ? (
                 <div className="glass text-center py-10 text-xs text-muted-foreground">No addresses tracked yet</div>
+              ) : addrFiltered.length === 0 && (
+                <div className="glass text-center py-10 text-xs text-muted-foreground">No addresses match these filters</div>
               )}
-              {addressBook.slice(pAddr * PAGE_SIZE, (pAddr + 1) * PAGE_SIZE).map(a => {
+              {addrFiltered.slice(pAddr * PAGE_SIZE, (pAddr + 1) * PAGE_SIZE).map(a => {
                 const balance = a.received + a.mined - a.sent;
                 return (
                   <button key={a.address} onClick={() => setSelAddr(a.address)}
@@ -1901,7 +1940,7 @@ function BlockExplorer({ chain, blockInfo, mempool }: any) {
                   </button>
                 );
               })}
-              <Pager page={pAddr} setPage={setPAddr} total={addressBook.length} label="addresses" />
+              <Pager page={pAddr} setPage={setPAddr} total={addrFiltered.length} label="addresses" />
             </>
           )}
         </div>

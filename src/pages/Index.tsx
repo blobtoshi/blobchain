@@ -1063,7 +1063,7 @@ function WalletScreen({ wallet, chain, mempool, onBroadcast }: any) {
         </div>
 
         <div className="glass p-4">
-          <div className="label-eyebrow mb-2">Public key (JWK)</div>
+          <div className="label-eyebrow mb-2">Public key (secp256k1, compressed)</div>
           <div className="num text-[10px] text-muted-foreground/80 break-all leading-relaxed">
             {wallet.publicKey}
           </div>
@@ -1478,7 +1478,7 @@ export default function BlobChainApp() {
               </button>
             </div>
             <div className="text-[11px] text-muted-foreground/70 text-center pt-1">
-              ECDSA P-256 keypair generated in your browser
+              secp256k1 keypair generated in your browser (Bitcoin curve)
             </div>
           </div>
         )}
@@ -1500,7 +1500,7 @@ export default function BlobChainApp() {
               <textarea
                 value={importJson}
                 onChange={e => setImportJson(e.target.value)}
-                placeholder='{"address":"0x…","publicKey":"…","privateKey":"…"}'
+                placeholder='{"address":"1…","publicKey":"02… (66 hex)","privateKey":"… (64 hex)"}'
                 rows={5}
                 className="num w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-[11px] leading-relaxed resize-none"
               />

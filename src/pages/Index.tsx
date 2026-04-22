@@ -1,6 +1,6 @@
 // @ts-nocheck
 // ═══════════════════════════════════════════════════════════════════════════════
-// ⬡ BLOB CHAIN — Proof-of-Gaming Blockchain
+// BLOB CHAIN — Proof-of-Gaming Blockchain
 // Thin orchestrator. State lives in hooks (useBlockchain, useWalletVault),
 // UI lives in src/components/blob/*, pure logic lives in src/lib/blob/*.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -59,7 +59,7 @@ export default function BlobChainApp() {
   const [connectErr, setConnectErr] = useState("");
   const [creating, setCreating] = useState(false);
 
-  useEffect(() => { document.title = "⬡ BLOB CHAIN — Proof-of-Gaming"; }, []);
+  useEffect(() => { document.title = "BLOB CHAIN — Proof-of-Gaming"; }, []);
 
   // Reset wallet-launch state on disconnect.
   useEffect(() => { if (!wallet) setGameLaunched(false); }, [wallet]);
@@ -296,7 +296,7 @@ export default function BlobChainApp() {
           }`}
         >
           <span className={`text-sm font-semibold tracking-wide ${newBlock.isMine ? "text-primary" : "text-[hsl(var(--warning))]"}`}>
-            {newBlock.isMine ? "🏆 You mined block" : "⬡ New block"} #{newBlock.height}
+            {newBlock.isMine ? "🏆 You mined block" : "New block"} #{newBlock.height}
           </span>
           <span className="text-xs text-muted-foreground">
             Winner: {newBlock.winnerUsername || "—"} · Score: <span className="num">{newBlock.winnerScore?.toLocaleString()}</span> · Reward: <span className="num text-foreground/80">{newBlock.reward} BLOB</span>

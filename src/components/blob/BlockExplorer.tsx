@@ -769,8 +769,8 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                     className="w-full text-left glass px-3 py-2.5 hover:bg-secondary/30 transition grid grid-cols-[1fr_1fr_80px_60px] sm:grid-cols-[1fr_1fr_100px_100px_60px] gap-2 items-center text-xs">
                     <span className="num text-foreground/80 truncate">{shortHash(a.address, 8)}</span>
                     <span className="text-muted-foreground truncate">{a.username || "—"}</span>
-                    <span className="num text-primary/80">{balance.toFixed(2)} BLOB</span>
-                    <span className="num text-muted-foreground">{a.mined.toFixed(2)}</span>
+                    <span className="num text-primary/80">{balance.toFixed(8)} BLOB</span>
+                    <span className="num text-muted-foreground">{a.mined.toFixed(8)}</span>
                     <span className="hidden sm:block num text-right text-muted-foreground">{a.txCount}</span>
                   </button>
                 );

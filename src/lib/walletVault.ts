@@ -1,21 +1,10 @@
+import { base64 } from "@scure/base";
+
 const VAULT_KEY = "blob_wallet_vault_v2"; // v2: secp256k1 hex keys (Bitcoin-style)
 const LEGACY_KEYS = ["blob_wallet_v2", "blob_wallet_vault_v1"]; // older formats to purge
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
-
-function b64(buf: ArrayBuffer | Uint8Array) {
-  const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
-  let s = "";
-  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
-  return btoa(s);
-}
-function unb64(s: string) {
-  const bin = atob(s);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
 
 async function deriveKey(passphrase: string, salt: Uint8Array, iter: number) {
   const baseKey = await crypto.subtle.importKey(
@@ -53,15 +42,21 @@ export async function saveEncryptedWallet(w: WalletPlain, passphrase: string) {
   }
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const iter = 250_000;
+  const iter = 600_000; // OWASP 2023 recommendation for PBKDF2-HMAC-SHA256
   const key = await deriveKey(passphrase, salt, iter);
-  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, enc.encode(w.privateKey));
+  const ctBuf = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, enc.encode(w.privateKey));
+  const ct = new Uint8Array(ctBuf);
   const vault = {
     v: 1,
     address: w.address,
     publicKey: w.publicKey,
     username: w.username,
-    enc: { salt: b64(salt), iv: b64(iv), ct: b64(ct), iter },
+    enc: {
+      salt: base64.encode(salt),
+      iv: base64.encode(iv),
+      ct: base64.encode(ct),
+      iter,
+    },
   };
   localStorage.setItem(VAULT_KEY, JSON.stringify(vault));
   // Make sure no copies in older-format slots linger
@@ -83,15 +78,50 @@ export function getStoredWalletPublic(): WalletPublic | null {
 export async function unlockWallet(passphrase: string): Promise<WalletPlain> {
   const raw = localStorage.getItem(VAULT_KEY);
   if (!raw) throw new Error("No wallet stored");
-  const v = JSON.parse(raw);
-  if (v?.v !== 1) throw new Error("Unsupported vault version");
-  const salt = unb64(v.enc.salt);
-  const iv = unb64(v.enc.iv);
-  const ct = unb64(v.enc.ct);
+
+  let v: any;
+  try {
+    v = JSON.parse(raw);
+  } catch {
+    throw new Error("Corrupt wallet vault");
+  }
+
+  if (!v || typeof v !== "object") throw new Error("Corrupt wallet vault");
+  if (v.v !== 1) throw new Error("Unsupported vault version");
+  if (typeof v.address !== "string") throw new Error("Corrupt wallet vault");
+  if (typeof v.publicKey !== "string") throw new Error("Corrupt wallet vault");
+  if (!v.enc || typeof v.enc !== "object") throw new Error("Corrupt wallet vault");
+  if (
+    typeof v.enc.salt !== "string" ||
+    typeof v.enc.iv !== "string" ||
+    typeof v.enc.ct !== "string"
+  ) {
+    throw new Error("Corrupt wallet vault");
+  }
+  if (v.enc.iter !== undefined && typeof v.enc.iter !== "number") {
+    throw new Error("Corrupt wallet vault");
+  }
+
+  let salt: Uint8Array;
+  let iv: Uint8Array;
+  let ct: Uint8Array;
+  try {
+    // Copy into fresh ArrayBuffer-backed Uint8Arrays to satisfy BufferSource typing.
+    salt = new Uint8Array(base64.decode(v.enc.salt));
+    iv = new Uint8Array(base64.decode(v.enc.iv));
+    ct = new Uint8Array(base64.decode(v.enc.ct));
+  } catch {
+    throw new Error("Corrupt wallet vault");
+  }
+
   const key = await deriveKey(passphrase, salt, v.enc.iter ?? 250_000);
   let plainBuf: ArrayBuffer;
   try {
-    plainBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
+    plainBuf = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: iv as unknown as BufferSource },
+      key,
+      ct as unknown as BufferSource,
+    );
   } catch {
     throw new Error("Wrong passphrase");
   }

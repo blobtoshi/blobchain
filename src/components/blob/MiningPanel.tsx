@@ -20,7 +20,7 @@ export default function MiningPanel({ blockInfo, entries, myEntry, chain }: any)
     <div className="space-y-5">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 px-1">
         <Stat label="Block" value={`#${blockInfo.height}`} accent="text-primary" />
-        <Stat label="Reward" value={`${blockInfo.reward} $BLOB`} />
+        <Stat label="Reward" value={`${blockInfo.reward} BLOB`} />
         <Stat
           label={blockInfo.awaitingMiner ? "Awaiting" : "Remaining"}
           value={blockInfo.awaitingMiner ? "miner" : `${blockInfo.remaining}s`}
@@ -31,7 +31,7 @@ export default function MiningPanel({ blockInfo, entries, myEntry, chain }: any)
 
       <div className="glass px-5 py-4">
         <div className="flex items-center justify-between mb-3 text-xs">
-          <span className="font-medium tracking-wide">$BLOB SUPPLY</span>
+          <span className="font-medium tracking-wide">BLOB SUPPLY</span>
           <span className="text-muted-foreground num">
             {supplyNow.toFixed(2)} / {MAX_SUPPLY.toLocaleString()} ({supplyPct.toFixed(5)}%)
           </span>

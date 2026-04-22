@@ -119,7 +119,7 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
       ctx.fillText(`SPEED ×${g.speed.toFixed(1)}`, CW - 26, 24);
       ctx.fillStyle = "#e7fff8";
       ctx.font = `600 14px ${MONO}`;
-      ctx.fillText(`${blockInfo.reward} $BLOB`, CW - 26, 42);
+      ctx.fillText(`${blockInfo.reward} BLOB`, CW - 26, 42);
 
       if (g.combo > 1) {
         ctx.textAlign = "left";

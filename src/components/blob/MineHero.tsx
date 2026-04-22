@@ -11,10 +11,10 @@ export default function MineHero({ blockInfo, onLaunch }: any) {
       <div className="relative">
         <h1 className="text-5xl sm:text-6xl font-semibold tracking-tight mb-3">
           <span className="text-foreground">MINE </span>
-          <span className="text-primary drop-shadow-[0_0_24px_hsl(var(--primary)/0.5)]">$BLOB</span>
+          <span className="text-primary drop-shadow-[0_0_24px_hsl(var(--primary)/0.5)]">BLOB</span>
         </h1>
         <div className="text-xs sm:text-sm text-muted-foreground mb-8 num">
-          Block #{blockInfo.height} · Reward: {blockInfo.reward} $BLOB · Level seed #{blockInfo.seed}
+          Block #{blockInfo.height} · Reward: {blockInfo.reward} BLOB · Level seed #{blockInfo.seed}
         </div>
         <div className="text-4xl sm:text-5xl font-light text-primary/90 mb-6 num">
           {time} remaining

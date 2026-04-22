@@ -2210,25 +2210,32 @@ function BridgeScreen({ wallet, chain, mempool, onBroadcast }: any) {
 
   const balance = calcBalance(wallet.address, chain, mempool);
 
-  // Load bridge config + fee info + history.
+  // Load bridge config + fee info + history. Config retries until success
+  // (the edge function can cold-start slowly).
   useEffect(() => {
     let cancelled = false;
+    let cfgTimer: any = null;
+    const loadConfig = async () => {
+      const cfg = await Relay.fetchBridgeConfig();
+      if (cancelled) return;
+      if (cfg) setConfig(cfg);
+      else cfgTimer = setTimeout(loadConfig, 2000);
+    };
     (async () => {
-      const [cfg, fi, hist] = await Promise.all([
-        Relay.fetchBridgeConfig(),
+      const [fi, hist] = await Promise.all([
         Relay.fetchFeeInfo(),
         Relay.fetchBridgeHistory(wallet.address),
       ]);
       if (cancelled) return;
-      if (cfg) setConfig(cfg);
       if (fi) setFeeInfo(fi);
       setHistory(hist);
     })();
+    loadConfig();
     const id = setInterval(async () => {
       const hist = await Relay.fetchBridgeHistory(wallet.address);
       if (!cancelled) setHistory(hist);
     }, 15_000);
-    return () => { cancelled = true; clearInterval(id); };
+    return () => { cancelled = true; clearInterval(id); if (cfgTimer) clearTimeout(cfgTimer); };
   }, [wallet.address]);
 
   // Poll the active request until it reaches a terminal state.

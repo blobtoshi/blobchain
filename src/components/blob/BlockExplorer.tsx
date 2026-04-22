@@ -303,7 +303,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                   <button key={t.id} onClick={() => { setTab("txs"); setSelTx(t.id); setQuery(""); }}
                     className="w-full text-left glass px-3 py-2 mb-1 hover:bg-secondary/30 transition flex items-center justify-between text-xs">
                     <span className="num text-muted-foreground">{shortHash(t.id, 8)}</span>
-                    <span className="num text-primary/80">{t.amount} ⬡</span>
+                    <span className="num text-primary/80">{t.amount} BLOB</span>
                     <span className={`text-[10px] ${t.status === "pending" ? "text-[hsl(var(--warning))]" : "text-foreground/60"}`}>
                       {t.status === "pending" ? "pending" : `block #${t.block}`}
                     </span>
@@ -319,7 +319,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                     className="w-full text-left glass px-3 py-2 mb-1 hover:bg-secondary/30 transition flex items-center justify-between text-xs">
                     <span className="text-foreground/80">{a.username || "anon"}</span>
                     <span className="num text-muted-foreground truncate mx-2">{shortHash(a.address, 8)}</span>
-                    <span className="num text-primary/80">{(a.received + a.mined - a.sent).toFixed(2)} ⬡</span>
+                    <span className="num text-primary/80">{(a.received + a.mined - a.sent).toFixed(2)} BLOB</span>
                   </button>
                 ))}
               </div>
@@ -342,7 +342,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             <ExplorerStat label="Latest block" value={`#${blockInfo.height - 1}`} sub={lastBlock ? timeAgo(lastBlock.timestamp) : "—"} />
             <ExplorerStat label="Total supply" value={`${totalSupply.toFixed(2)}`} sub="BLOB minted" />
-            <ExplorerStat label="Transactions" value={totalTxs} sub={`${totalVolume.toFixed(2)} ⬡ volume`} />
+            <ExplorerStat label="Transactions" value={totalTxs} sub={`${totalVolume.toFixed(2)} BLOB volume`} />
             <ExplorerStat label="Pending" value={memTxs.length} sub="in mempool" />
           </div>
 
@@ -358,7 +358,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                   <span className="num text-[hsl(var(--warning))] shrink-0">#{b.height}</span>
                   <span className="text-foreground/80 truncate flex-1">{b.winnerUsername || shortHash(b.winner, 6)}</span>
                   <span className="num text-muted-foreground shrink-0">{(b.transactions || []).length} tx</span>
-                  <span className="num text-primary/80 shrink-0">{Number(b.reward).toFixed(0)} ⬡</span>
+                  <span className="num text-primary/80 shrink-0">{Number(b.reward).toFixed(0)} BLOB</span>
                 </button>
               ))}
             </div>
@@ -375,7 +375,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                     ? <Trophy className="w-3.5 h-3.5 text-[hsl(var(--warning))] shrink-0" />
                     : <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
                   <span className="num text-muted-foreground truncate flex-1">{shortHash(t.id, 6)}</span>
-                  <span className="num text-primary/80 shrink-0">{t.amount} ⬡</span>
+                  <span className="num text-primary/80 shrink-0">{t.amount} BLOB</span>
                   <span className={`text-[10px] shrink-0 ${t.status === "pending" ? "text-[hsl(var(--warning))]" : "text-muted-foreground"}`}>
                     {t.status === "pending" ? "pending" : timeAgo(t.timestamp)}
                   </span>
@@ -432,7 +432,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
             <span className="num text-[hsl(var(--warning))]">#{blockInfo.height}</span>
             <span className="text-muted-foreground">{blockInfo.awaitingMiner ? "⏸ awaiting miner" : `⏳ mining · ${blockInfo.remaining}s`}</span>
             <span className="text-muted-foreground">—</span>
-            <span className="num text-[hsl(var(--warning))]">{blockInfo.reward} ⬡</span>
+            <span className="num text-[hsl(var(--warning))]">{blockInfo.reward} BLOB</span>
             <span className="num text-right text-muted-foreground">—</span>
           </div>
           <div className="grid grid-cols-[50px_1fr_60px_70px_40px] sm:grid-cols-[60px_1fr_80px_100px_50px] gap-2 px-3 py-1">
@@ -445,7 +445,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                 <span className="num text-muted-foreground">#{b.height}</span>
                 <span className="truncate text-foreground/80">{b.winnerUsername || shortHash(b.winner, 8)}</span>
                 <span className="num text-muted-foreground">{b.winnerScore > 0 ? b.winnerScore : "—"}</span>
-                <span className="num text-primary/80">{b.reward > 0 ? `${b.reward} ⬡` : "—"}</span>
+                <span className="num text-primary/80">{b.reward > 0 ? `${b.reward} BLOB` : "—"}</span>
                 <span className="num text-right text-muted-foreground">{(b.transactions || []).length}</span>
               </div>
               {selBlock === b.height && (
@@ -465,7 +465,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                       <div className="label-eyebrow mb-1">Transactions ({b.transactions.length})</div>
                       {b.transactions.map((tx: any, i: number) => (
                         <div key={i} className="num text-foreground/60 text-[11px]">
-                          {tx.fromUsername || shortHash(tx.from, 6)} → {tx.toUsername || shortHash(tx.to, 6)} · {tx.amount} ⬡ · fee {tx.fee || 0}
+                          {tx.fromUsername || shortHash(tx.from, 6)} → {tx.toUsername || shortHash(tx.to, 6)} · {tx.amount} BLOB · fee {tx.fee || 0}
                         </div>
                       ))}
                     </div>
@@ -502,11 +502,11 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                   options={[{ v: "all", l: "All" }, { v: "transfer", l: "Transfers" }, { v: "reward", l: "Block rewards" }]} />
               </div>
               <div>
-                <FieldLabel>Min amount ⬡</FieldLabel>
+                <FieldLabel>Min amount BLOB</FieldLabel>
                 <FInput type="number" value={txF.minAmount} onChange={e => setTxF({ ...txF, minAmount: e.target.value })} placeholder="0" />
               </div>
               <div>
-                <FieldLabel>Max amount ⬡</FieldLabel>
+                <FieldLabel>Max amount BLOB</FieldLabel>
                 <FInput type="number" value={txF.maxAmount} onChange={e => setTxF({ ...txF, maxAmount: e.target.value })} placeholder="∞" />
               </div>
               <div>
@@ -532,7 +532,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
           <div className="flex items-center justify-between px-1 text-[10px] text-muted-foreground num">
             <span>{txsFiltered.length} of {txsAll.length} transactions</span>
             {txsFiltered.length > 0 && (
-              <span>volume {txsFiltered.reduce((s, t) => s + t.amount, 0).toFixed(2)} ⬡</span>
+              <span>volume {txsFiltered.reduce((s, t) => s + t.amount, 0).toFixed(2)} BLOB</span>
             )}
           </div>
           <div className="grid grid-cols-[18px_1fr_70px_60px_60px] sm:grid-cols-[18px_1fr_1fr_80px_70px_80px] gap-2 px-3 py-1">
@@ -552,7 +552,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                   : <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground" />}
                 <span className="text-foreground/80 truncate">{t.kind === "reward" ? "Network Mint" : (t.fromUsername || shortHash(t.from, 6))}</span>
                 <span className="hidden sm:block text-foreground/80 truncate">{t.toUsername || shortHash(t.to, 6)}</span>
-                <span className="num text-primary/80">{t.amount} ⬡</span>
+                <span className="num text-primary/80">{t.amount} BLOB</span>
                 <span className="num text-muted-foreground">{t.status === "pending" ? "—" : `#${t.block}`}</span>
                 <span className={`num text-right ${t.status === "pending" ? "text-[hsl(var(--warning))]" : "text-muted-foreground"}`}>
                   {t.status === "pending" ? "pending" : timeAgo(t.timestamp)}
@@ -604,11 +604,11 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                   options={[{ v: "any", l: "Either" }, { v: "from", l: "Sender (from)" }, { v: "to", l: "Recipient (to)" }]} />
               </div>
               <div>
-                <FieldLabel>Min amount ⬡</FieldLabel>
+                <FieldLabel>Min amount BLOB</FieldLabel>
                 <FInput type="number" value={memF.minAmount} onChange={e => setMemF({ ...memF, minAmount: e.target.value })} placeholder="0" />
               </div>
               <div>
-                <FieldLabel>Max amount ⬡</FieldLabel>
+                <FieldLabel>Max amount BLOB</FieldLabel>
                 <FInput type="number" value={memF.maxAmount} onChange={e => setMemF({ ...memF, maxAmount: e.target.value })} placeholder="∞" />
               </div>
               <div>
@@ -629,7 +629,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
           <div className="glass-hi px-3 py-2.5 flex items-center justify-between text-xs">
             <span className="label-eyebrow">Pending pool</span>
             <span className="num text-muted-foreground">
-              {memFiltered.length}{memFiltered.length !== memTxs.length && ` of ${memTxs.length}`} unconfirmed · {memFiltered.reduce((s, t) => s + t.amount, 0).toFixed(2)} ⬡ queued
+              {memFiltered.length}{memFiltered.length !== memTxs.length && ` of ${memTxs.length}`} unconfirmed · {memFiltered.reduce((s, t) => s + t.amount, 0).toFixed(2)} BLOB queued
             </span>
           </div>
           {memTxs.length === 0 ? (
@@ -643,7 +643,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                   className="w-full text-left glass px-3 py-2.5 hover:bg-secondary/30 transition border-l-2 border-l-[hsl(var(--warning))]">
                   <div className="flex items-center justify-between mb-1 text-xs">
                     <span className="text-foreground/80">{t.fromUsername || shortHash(t.from, 8)} → {shortHash(t.to, 8)}</span>
-                    <span className="num text-primary/90">{t.amount} ⬡</span>
+                    <span className="num text-primary/90">{t.amount} BLOB</span>
                   </div>
                   <div className="flex items-center justify-between text-[10px] text-muted-foreground">
                     <span className="num">fee {t.fee}</span>
@@ -662,7 +662,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
               <button key={t.id} onClick={() => { setTab("txs"); setSelTx(t.id); }}
                 className="w-full text-left glass px-3 py-2 mb-1 hover:bg-secondary/30 transition flex items-center justify-between gap-2 text-xs">
                 <span className="text-foreground/70 truncate">{t.fromUsername || shortHash(t.from, 6)} → {t.toUsername || shortHash(t.to, 6)}</span>
-                <span className="num text-primary/80 shrink-0">{t.amount} ⬡</span>
+                <span className="num text-primary/80 shrink-0">{t.amount} BLOB</span>
                 <span className="num text-muted-foreground shrink-0">#{t.block}</span>
               </button>
             ))}
@@ -707,7 +707,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                         {t.from === selAddr ? `→ ${shortHash(t.to, 8)}` : `← ${t.kind === "reward" ? "Network Mint" : shortHash(t.from, 8)}`}
                       </span>
                       <span className={`num shrink-0 ${t.from === selAddr ? "text-muted-foreground" : "text-primary/80"}`}>
-                        {t.from === selAddr ? "-" : "+"}{t.amount} ⬡
+                        {t.from === selAddr ? "-" : "+"}{t.amount} BLOB
                       </span>
                       <span className="num text-muted-foreground shrink-0 text-[10px]">{t.status === "pending" ? "pending" : `#${t.block}`}</span>
                     </button>
@@ -724,7 +724,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                     <FInput value={addrF.q} onChange={e => setAddrF({ ...addrF, q: e.target.value })} placeholder="search…" />
                   </div>
                   <div>
-                    <FieldLabel>Min balance ⬡</FieldLabel>
+                    <FieldLabel>Min balance BLOB</FieldLabel>
                     <FInput type="number" value={addrF.minBalance} onChange={e => setAddrF({ ...addrF, minBalance: e.target.value })} placeholder="0" />
                   </div>
                   <div>
@@ -769,7 +769,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                     className="w-full text-left glass px-3 py-2.5 hover:bg-secondary/30 transition grid grid-cols-[1fr_1fr_80px_60px] sm:grid-cols-[1fr_1fr_100px_100px_60px] gap-2 items-center text-xs">
                     <span className="num text-foreground/80 truncate">{shortHash(a.address, 8)}</span>
                     <span className="text-muted-foreground truncate">{a.username || "—"}</span>
-                    <span className="num text-primary/80">{balance.toFixed(2)} ⬡</span>
+                    <span className="num text-primary/80">{balance.toFixed(2)} BLOB</span>
                     <span className="num text-muted-foreground">{a.mined.toFixed(2)}</span>
                     <span className="hidden sm:block num text-right text-muted-foreground">{a.txCount}</span>
                   </button>

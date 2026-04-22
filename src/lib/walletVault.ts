@@ -1,15 +1,3 @@
-// Wallet vault — encrypts the ECDSA P-256 private key (JWK) at rest in
-// localStorage using AES-GCM with a passphrase-derived key (PBKDF2-SHA256).
-//
-// Storage format (versioned so we can migrate later):
-//   {
-//     v: 1,
-//     address: "0x...",
-//     publicKey: "<JWK string>",
-//     username: "...",
-//     enc: { salt: <b64>, iv: <b64>, ct: <b64>, iter: 250000 }
-//   }
-
 const VAULT_KEY = "blob_wallet_vault_v2"; // v2: secp256k1 hex keys (Bitcoin-style)
 const LEGACY_KEYS = ["blob_wallet_v2", "blob_wallet_vault_v1"]; // older formats to purge
 
@@ -48,8 +36,8 @@ async function deriveKey(passphrase: string, salt: Uint8Array, iter: number) {
 
 export type WalletPlain = {
   address: string;
-  publicKey: string;   // JWK string
-  privateKey: string;  // JWK string
+  publicKey: string; // JWK string
+  privateKey: string; // JWK string
   username: string;
 };
 
@@ -67,11 +55,7 @@ export async function saveEncryptedWallet(w: WalletPlain, passphrase: string) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const iter = 250_000;
   const key = await deriveKey(passphrase, salt, iter);
-  const ct = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    key,
-    enc.encode(w.privateKey),
-  );
+  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, enc.encode(w.privateKey));
   const vault = {
     v: 1,
     address: w.address,
@@ -91,7 +75,9 @@ export function getStoredWalletPublic(): WalletPublic | null {
     const v = JSON.parse(raw);
     if (v?.v !== 1 || !v.address || !v.publicKey) return null;
     return { address: v.address, publicKey: v.publicKey, username: v.username ?? "anon" };
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 export async function unlockWallet(passphrase: string): Promise<WalletPlain> {

@@ -248,7 +248,7 @@ Deno.serve(async (req) => {
       return bad("invalid blob_tx_id");
     if (typeof sol_address !== "string" || !SOL_ADDR_RE.test(sol_address))
       return bad("invalid sol_address");
-    try { new PublicKey(sol_address); } catch { return bad("invalid sol_address"); }
+    try { const sol = await loadSol(); new sol.PublicKey(sol_address); } catch { return bad("invalid sol_address"); }
     if (typeof from_address !== "string" || !BLOB_ADDR_RE.test(from_address))
       return bad("invalid from_address");
     const amt = Number(amount);

@@ -199,7 +199,7 @@ export default function BridgeScreen({ wallet, chain, mempool, onBroadcast }: an
           </div>
           <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight">
             <span className="text-foreground">Bridge </span>
-            <span className="text-primary drop-shadow-[0_0_24px_hsl(var(--primary)/0.4)]">$BLOB</span>
+            <span className="text-primary drop-shadow-[0_0_24px_hsl(var(--primary)/0.4)]">BLOB</span>
             <span className="text-foreground"> to Solana</span>
           </h1>
           <div className="text-sm text-muted-foreground max-w-xl leading-relaxed">

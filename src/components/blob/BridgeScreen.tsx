@@ -203,7 +203,7 @@ export default function BridgeScreen({ wallet, chain, mempool, onBroadcast }: an
             <span className="text-foreground"> to Solana</span>
           </h1>
           <div className="text-sm text-muted-foreground max-w-xl leading-relaxed">
-            Send $BLOB to the bridge address — we mint the same amount of SPL tokens to your Solana
+            Send BLOB to the bridge address — we mint the same amount of SPL tokens to your Solana
             wallet, 1&nbsp;:&nbsp;1, no bridge fee. You only pay the standard network fee on Blob Chain.
           </div>
         </div>
@@ -213,7 +213,7 @@ export default function BridgeScreen({ wallet, chain, mempool, onBroadcast }: an
         {/* Form */}
         <div className="lg:col-span-2 space-y-4">
           <div className="glass-hi p-5 sm:p-6 space-y-4">
-            <div className="label-eyebrow">Bridge $BLOB → SPL</div>
+            <div className="label-eyebrow">Bridge BLOB → SPL</div>
 
             <div className="space-y-1.5">
               <Label className="text-[10px] tracking-widest uppercase text-muted-foreground font-normal">

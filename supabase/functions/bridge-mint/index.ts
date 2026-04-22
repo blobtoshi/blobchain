@@ -82,11 +82,18 @@ async function findConfirmedBridgeTx(
           tx.from === fromAddress &&
           tx.to === BRIDGE_ADDRESS &&
           Number(tx.amount) === Number(amount)) {
-        return { tx, height: Number((b as any).height) };
+        return { tx, height: Number((b as any).height), memo: typeof tx.memo === "string" ? tx.memo : "" };
       }
     }
   }
   return null;
+}
+
+// Extract the destination Solana address from a bridge tx memo (`sol:<addr>`).
+function extractSolFromMemo(memo: unknown): string {
+  if (typeof memo !== "string") return "";
+  const m = memo.match(/^sol:([1-9A-HJ-NP-Za-km-z]{32,44})$/);
+  return m ? m[1] : "";
 }
 
 // Check if the tx is still in the mempool (not yet sealed).
@@ -261,8 +268,15 @@ Deno.serve(async (req) => {
     const pending = await findPendingBridgeTx(supa, blob_tx_id, from_address, amt);
     const confirmed = pending ? null : await findConfirmedBridgeTx(supa, blob_tx_id, from_address, amt);
     if (!pending && !confirmed) {
-      return bad("matching $BLOB transaction not found in mempool or chain");
+      return bad("matching BLOB transaction not found in mempool or chain");
     }
+
+    // CRITICAL: the destination Solana address MUST match the `sol:<addr>` memo
+    // signed into the originating BLOB tx. Otherwise a mempool watcher could
+    // race the victim's POST and redirect the mint to their own wallet.
+    const memoSol = extractSolFromMemo(pending ? (pending as any).memo : (confirmed as any).memo);
+    if (!memoSol) return bad("originating tx is missing a valid sol: memo");
+    if (memoSol !== sol_address) return bad("sol_address does not match tx memo");
 
     // Upsert as pending. If a row already exists, keep its current status.
     const { data: existing } = await supa.from("bridge_requests")

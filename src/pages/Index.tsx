@@ -3501,11 +3501,11 @@ export default function BlobChainApp() {
       {/* Header */}
       <header className="sticky top-0 z-50 backdrop-blur-xl bg-background/70 border-b border-border">
         <div className="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between gap-4">
-          <h1 className="flex items-center">
+          <h1 className="flex items-center -my-4">
             <img
               src={blobLogo}
               alt="BLOB"
-              className="h-9 w-9 object-contain drop-shadow-[0_0_12px_hsl(var(--primary)/0.5)]"
+              className="h-20 w-20 sm:h-24 sm:w-24 object-contain drop-shadow-[0_0_16px_hsl(var(--primary)/0.6)]"
               style={{ imageRendering: "pixelated" }}
             />
           </h1>

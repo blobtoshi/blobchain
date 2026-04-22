@@ -152,10 +152,32 @@ async function mintSpl(
   return sig;
 }
 
-// Process a bridge request: confirm the originating $BLOB tx, then mint.
-// Idempotent — safe to call repeatedly while the client polls.
+// Background mint task — runs after the response is returned, so the heavy
+// solana-web3 + spl-token imports don't blow the request's CPU budget.
+async function backgroundMint(supa: Supa, blob_tx_id: string, sol_address: string, amount: number) {
+  try {
+    const sig = await mintSpl(sol_address, amount);
+    await supa.from("bridge_requests")
+      .update({
+        status: "minted",
+        sol_signature: sig,
+        minted_at: new Date().toISOString(),
+        error: null,
+      })
+      .eq("blob_tx_id", blob_tx_id);
+  } catch (e) {
+    const msg = String((e as Error)?.message ?? e).slice(0, 500);
+    console.error("[bridge-mint] mint failed", blob_tx_id, msg);
+    await supa.from("bridge_requests")
+      .update({ status: "confirmed", error: msg })
+      .eq("blob_tx_id", blob_tx_id);
+  }
+}
+
+// Process a bridge request: confirm the originating $BLOB tx, then dispatch
+// the mint as a background task. Idempotent — safe to call repeatedly.
 async function processRequest(supa: Supa, row: any) {
-  if (row.status === "minted" || row.status === "failed") return row;
+  if (row.status === "minted" || row.status === "failed" || row.status === "minting") return row;
 
   // Step 1: is the $BLOB tx confirmed yet?
   const confirmed = await findConfirmedBridgeTx(
@@ -174,40 +196,22 @@ async function processRequest(supa: Supa, row: any) {
     row.confirmed_at = new Date().toISOString();
   }
 
-  // Step 2: mint. Mark `minting` so concurrent polls don't double-mint.
+  // Atomically claim the row for minting so concurrent polls don't double-mint.
   const { data: claimed } = await supa.from("bridge_requests")
     .update({ status: "minting" })
     .eq("blob_tx_id", row.blob_tx_id)
     .eq("status", "confirmed")
     .select().maybeSingle();
   if (!claimed) {
-    // Another invocation already claimed it — refetch and return.
     const { data: latest } = await supa.from("bridge_requests")
       .select("*").eq("blob_tx_id", row.blob_tx_id).maybeSingle();
     return latest ?? row;
   }
 
-  try {
-    const sig = await mintSpl(row.sol_address, Number(row.amount));
-    const { data: updated } = await supa.from("bridge_requests")
-      .update({
-        status: "minted",
-        sol_signature: sig,
-        minted_at: new Date().toISOString(),
-        error: null,
-      })
-      .eq("blob_tx_id", row.blob_tx_id)
-      .select().maybeSingle();
-    return updated ?? { ...row, status: "minted", sol_signature: sig };
-  } catch (e) {
-    const msg = String((e as Error)?.message ?? e).slice(0, 500);
-    // On failure roll back to `confirmed` so a retry is possible, and surface the error.
-    const { data: failed } = await supa.from("bridge_requests")
-      .update({ status: "confirmed", error: msg })
-      .eq("blob_tx_id", row.blob_tx_id)
-      .select().maybeSingle();
-    return failed ?? { ...row, status: "confirmed", error: msg };
-  }
+  // Dispatch the heavy mint in the background and return immediately.
+  // @ts-ignore EdgeRuntime is provided by the Supabase Edge runtime.
+  EdgeRuntime.waitUntil(backgroundMint(supa, row.blob_tx_id, row.sol_address, Number(row.amount)));
+  return claimed;
 }
 
 Deno.serve(async (req) => {

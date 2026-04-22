@@ -82,11 +82,18 @@ async function findConfirmedBridgeTx(
           tx.from === fromAddress &&
           tx.to === BRIDGE_ADDRESS &&
           Number(tx.amount) === Number(amount)) {
-        return { tx, height: Number((b as any).height) };
+        return { tx, height: Number((b as any).height), memo: typeof tx.memo === "string" ? tx.memo : "" };
       }
     }
   }
   return null;
+}
+
+// Extract the destination Solana address from a bridge tx memo (`sol:<addr>`).
+function extractSolFromMemo(memo: unknown): string {
+  if (typeof memo !== "string") return "";
+  const m = memo.match(/^sol:([1-9A-HJ-NP-Za-km-z]{32,44})$/);
+  return m ? m[1] : "";
 }
 
 // Check if the tx is still in the mempool (not yet sealed).

@@ -116,7 +116,7 @@ export async function unlockWallet(passphrase: string): Promise<WalletPlain> {
   const key = await deriveKey(passphrase, salt, v.enc.iter ?? 250_000);
   let plainBuf: ArrayBuffer;
   try {
-    plainBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
+    plainBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct as BufferSource);
   } catch {
     throw new Error("Wrong passphrase");
   }

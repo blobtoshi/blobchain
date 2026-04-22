@@ -93,7 +93,7 @@ export default function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent
     if (toAddress === wallet.address) { setErr("Cannot send to yourself"); return; }
     if (!Number.isFinite(parsed) || parsed <= 0) { setErr("Invalid amount"); return; }
     const amount = to8(parsed);
-    if (amount <= 0) { setErr(`Minimum amount is ${(1 / BLOB_UNIT).toFixed(BLOB_DECIMALS)} $BLOB`); return; }
+    if (amount <= 0) { setErr(`Minimum amount is ${(1 / BLOB_UNIT).toFixed(BLOB_DECIMALS)} BLOB`); return; }
     if (memoOver) { setErr(`Memo too long (${memoLen}/${MAX_MEMO_BYTES} bytes)`); return; }
     if (!Number.isFinite(activeFeeRate) || activeFeeRate < MIN_FEE_RATE) {
       setErr(`Fee rate must be at least ${MIN_FEE_RATE} drops/byte`); return;
@@ -146,7 +146,7 @@ export default function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent
     <div className="space-y-3">
       <div className="flex items-center justify-between text-xs">
         <span className="text-muted-foreground">Available</span>
-        <span className="num text-primary">{balance.toFixed(BLOB_DECIMALS)} $BLOB</span>
+        <span className="num text-primary">{balance.toFixed(BLOB_DECIMALS)} BLOB</span>
       </div>
       <div className="space-y-2">
         <label className="label-eyebrow block">Recipient</label>
@@ -188,7 +188,7 @@ export default function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent
             placeholder="0.00000000"
             className="w-full px-4 py-3 pr-20 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm num placeholder:text-muted-foreground/60"
           />
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$BLOB</span>
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">BLOB</span>
         </div>
       </div>
 
@@ -279,11 +279,11 @@ export default function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent
         </div>
         <div className="flex items-center justify-between">
           <span className="text-muted-foreground">Network fee</span>
-          <span className="num text-foreground">{previewFee.toFixed(BLOB_DECIMALS)} $BLOB</span>
+          <span className="num text-foreground">{previewFee.toFixed(BLOB_DECIMALS)} BLOB</span>
         </div>
         <div className="flex items-center justify-between border-t border-border/60 pt-1 mt-1">
           <span className="text-muted-foreground">Total</span>
-          <span className="num text-primary">{previewTotal.toFixed(BLOB_DECIMALS)} $BLOB</span>
+          <span className="num text-primary">{previewTotal.toFixed(BLOB_DECIMALS)} BLOB</span>
         </div>
       </div>
 

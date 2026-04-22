@@ -101,7 +101,7 @@ export default function NetworkView({ nodeCount, chain, blockInfo, mempool = [] 
 
       <div className="grid grid-cols-2 gap-2">
         <Stat label="Chain height" value={height.toLocaleString()} sub={`${totalTxs} confirmed txs`} tone="text-primary" />
-        <Stat label="Block reward" value={`${blockInfo.reward} $BLOB`} sub={`Halving #${halvingsDone + 1} → ${nextReward} $BLOB`} tone="text-[hsl(var(--warning))]" />
+        <Stat label="Block reward" value={`${blockInfo.reward} BLOB`} sub={`Halving #${halvingsDone + 1} → ${nextReward} BLOB`} tone="text-[hsl(var(--warning))]" />
         <Stat label="Active nodes" value={nodeCount} sub="full validating" tone="text-[hsl(var(--info))]" />
         <Stat label="Mempool" value={mempool.length} sub={`${(mpBytes / 1024).toFixed(2)} KB queued`} tone={congestionTone} />
       </div>
@@ -172,7 +172,7 @@ export default function NetworkView({ nodeCount, chain, blockInfo, mempool = [] 
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center text-primary text-sm">⬡</div>
             <div>
-              <div className="text-sm font-semibold tracking-tight">$BLOB</div>
+              <div className="text-sm font-semibold tracking-tight">BLOB</div>
               <div className="text-[11px] text-foreground/50">Native asset · Proof-of-Gaming</div>
             </div>
           </div>
@@ -185,7 +185,7 @@ export default function NetworkView({ nodeCount, chain, blockInfo, mempool = [] 
         <div className="text-[11px] text-foreground/50 num mt-1.5">{supplyPct.toFixed(5)}% of max supply minted</div>
         <div className="mt-4 pt-4 border-t border-foreground/5">
           <Row k="Divisibility" v={`${BLOB_DECIMALS} decimals`} />
-          <Row k="Base unit" v="1 drop = 0.00000001 $BLOB" />
+          <Row k="Base unit" v="1 drop = 0.00000001 BLOB" />
           <Row k="Halving schedule" v={`Every ${HALVING_BLOCKS.toLocaleString()} blocks`} />
           <Row k="Halvings completed" v={halvingsDone} />
           <Row k="Blocks to next halving" v={blocksToNextHalving.toLocaleString()} />

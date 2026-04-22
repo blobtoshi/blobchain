@@ -278,7 +278,7 @@ export default function BridgeScreen({ wallet, chain, mempool, onBroadcast }: an
                   disabled={st !== "idle" && st !== "failed" && st !== "minted"}
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                  $BLOB
+                  BLOB
                 </span>
               </div>
             </div>
@@ -287,7 +287,7 @@ export default function BridgeScreen({ wallet, chain, mempool, onBroadcast }: an
               <div className="rounded-lg border border-border bg-card/30 p-3 text-[11px] space-y-1">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">You send</span>
-                  <span className="num">{parsedAmt.toFixed(BLOB_DECIMALS)} $BLOB</span>
+                  <span className="num">{parsedAmt.toFixed(BLOB_DECIMALS)} BLOB</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Network fee (~{previewBytes} B × {activeFeeRate} drops/B)</span>
@@ -341,7 +341,7 @@ export default function BridgeScreen({ wallet, chain, mempool, onBroadcast }: an
               <div className="grid grid-cols-2 gap-3 text-[11px]">
                 <div>
                   <div className="text-muted-foreground mb-0.5">Amount</div>
-                  <div className="num text-foreground">{Number(activeRequest.amount).toFixed(BLOB_DECIMALS)} $BLOB</div>
+                  <div className="num text-foreground">{Number(activeRequest.amount).toFixed(BLOB_DECIMALS)} BLOB</div>
                 </div>
                 <div>
                   <div className="text-muted-foreground mb-0.5">Solana recipient</div>
@@ -392,7 +392,7 @@ export default function BridgeScreen({ wallet, chain, mempool, onBroadcast }: an
               {history.map((h) => (
                 <div key={h.blob_tx_id} className="glass px-4 py-3 space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="num text-sm font-medium">{Number(h.amount).toFixed(BLOB_DECIMALS)} $BLOB</span>
+                    <span className="num text-sm font-medium">{Number(h.amount).toFixed(BLOB_DECIMALS)} BLOB</span>
                     <StatusPill status={h.status} />
                   </div>
                   <div className="num text-[10px] text-muted-foreground truncate">→ {h.sol_address}</div>

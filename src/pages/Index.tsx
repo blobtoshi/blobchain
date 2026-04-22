@@ -299,7 +299,7 @@ export default function BlobChainApp() {
             {newBlock.isMine ? "🏆 You mined block" : "⬡ New block"} #{newBlock.height}
           </span>
           <span className="text-xs text-muted-foreground">
-            Winner: {newBlock.winnerUsername || "—"} · Score: <span className="num">{newBlock.winnerScore?.toLocaleString()}</span> · Reward: <span className="num text-foreground/80">{newBlock.reward} $BLOB</span>
+            Winner: {newBlock.winnerUsername || "—"} · Score: <span className="num">{newBlock.winnerScore?.toLocaleString()}</span> · Reward: <span className="num text-foreground/80">{newBlock.reward} BLOB</span>
           </span>
         </div>
       )}
@@ -351,7 +351,7 @@ export default function BlobChainApp() {
                 </DialogTrigger>
                 <DialogContent className="glass-hi border-border max-w-md">
                   <DialogHeader>
-                    <DialogTitle className="text-sm font-medium">Send $BLOB</DialogTitle>
+                    <DialogTitle className="text-sm font-medium">Send BLOB</DialogTitle>
                   </DialogHeader>
                   <SendTxForm wallet={wallet} chain={chain} mempool={mempool} onBroadcast={onTxBroadcast} />
                 </DialogContent>
@@ -445,7 +445,7 @@ export default function BlobChainApp() {
                   </div>
                   <h1 className="text-3xl sm:text-5xl font-semibold tracking-tight mb-3">
                     <span className="text-foreground">{vaultPub ? "Unlock to mine " : "Connect to mine "}</span>
-                    <span className="text-primary drop-shadow-[0_0_24px_hsl(var(--primary)/0.5)]">$BLOB</span>
+                    <span className="text-primary drop-shadow-[0_0_24px_hsl(var(--primary)/0.5)]">BLOB</span>
                   </h1>
                   <div className="text-sm text-muted-foreground mb-8 max-w-md mx-auto leading-relaxed">
                     Blob Run requires a wallet to sign your score and receive block rewards.

@@ -341,7 +341,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
         <div className="space-y-3">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             <ExplorerStat label="Latest block" value={`#${blockInfo.height - 1}`} sub={lastBlock ? timeAgo(lastBlock.timestamp) : "—"} />
-            <ExplorerStat label="Total supply" value={`${totalSupply.toFixed(2)}`} sub="$BLOB minted" />
+            <ExplorerStat label="Total supply" value={`${totalSupply.toFixed(2)}`} sub="BLOB minted" />
             <ExplorerStat label="Transactions" value={totalTxs} sub={`${totalVolume.toFixed(2)} ⬡ volume`} />
             <ExplorerStat label="Pending" value={memTxs.length} sub="in mempool" />
           </div>
@@ -571,8 +571,8 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                     <span className="label-eyebrow">To</span>
                     <button onClick={() => { setTab("addresses"); setSelAddr(t.to); }} className="num text-[hsl(var(--warning))] hover:underline text-left break-all">{t.to}</button>
                   </div>
-                  <div className="grid grid-cols-[80px_1fr] gap-2"><span className="label-eyebrow">Amount</span><span className="num">{t.amount} $BLOB</span></div>
-                  <div className="grid grid-cols-[80px_1fr] gap-2"><span className="label-eyebrow">Fee</span><span className="num">{t.fee} $BLOB</span></div>
+                  <div className="grid grid-cols-[80px_1fr] gap-2"><span className="label-eyebrow">Amount</span><span className="num">{t.amount} BLOB</span></div>
+                  <div className="grid grid-cols-[80px_1fr] gap-2"><span className="label-eyebrow">Fee</span><span className="num">{t.fee} BLOB</span></div>
                   <div className="grid grid-cols-[80px_1fr] gap-2"><span className="label-eyebrow">Status</span>
                     <span className={t.status === "pending" ? "text-[hsl(var(--warning))]" : "text-foreground/70"}>
                       {t.status === "pending" ? "⧗ pending in mempool" : `✓ confirmed in block #${t.block}`}
@@ -689,7 +689,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                     {a?.username && <div className="text-xs text-muted-foreground">@{a.username}</div>}
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    <ExplorerStat label="Balance" value={`${balance.toFixed(4)}`} sub="$BLOB" />
+                    <ExplorerStat label="Balance" value={`${balance.toFixed(4)}`} sub="BLOB" />
                     <ExplorerStat label="Mined" value={(a?.mined || 0).toFixed(2)} sub="from blocks" />
                     <ExplorerStat label="Received" value={(a?.received || 0).toFixed(2)} />
                     <ExplorerStat label="Sent" value={(a?.sent || 0).toFixed(2)} />

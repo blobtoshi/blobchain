@@ -3562,7 +3562,7 @@ export default function BlobChainApp() {
                   <button className="flex items-center gap-2 px-3 py-2 rounded-full border border-border hover:border-primary/40 transition text-xs group">
                     <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
                     <span className="hidden md:inline text-muted-foreground max-w-[100px] truncate">{wallet.username}</span>
-                    <span className="num text-primary">{balance.toFixed(2)}</span>
+                    <span className="num text-primary">{(Math.floor(balance * 100) / 100).toFixed(2)}</span>
                     <ChevronDown className="w-3 h-3 text-muted-foreground group-hover:text-primary transition" />
                   </button>
                 </DropdownMenuTrigger>

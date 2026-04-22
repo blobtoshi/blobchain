@@ -18,19 +18,23 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
-// Heavy Solana deps are imported lazily inside mintSpl() / validation paths
-// so lightweight requests like GET /config don't blow the worker's boot
-// resource budget.
-async function loadSol() {
-  return await import("https://esm.sh/@solana/web3.js@1.95.4?target=denonext");
-}
-async function loadSpl() {
-  return await import("https://esm.sh/@solana/spl-token@0.4.9?target=denonext&deps=@solana/web3.js@1.95.4");
-}
-async function loadBs58() {
-  const m: any = await import("https://esm.sh/bs58@5.0.0?target=denonext");
-  return (m.default ?? m) as { decode: (s: string) => Uint8Array; encode: (b: Uint8Array) => string };
-}
+// Solana deps imported statically. The heavy mint work runs inside
+// EdgeRuntime.waitUntil() so it doesn't compete with the request handler
+// for the per-request CPU budget. (Boot-time module eval is allowed.)
+import {
+  Connection,
+  Keypair,
+  PublicKey,
+  sendAndConfirmTransaction,
+  Transaction,
+} from "https://esm.sh/@solana/web3.js@1.95.4?target=denonext";
+import {
+  createAssociatedTokenAccountIdempotentInstruction,
+  createMintToInstruction,
+  getAssociatedTokenAddress,
+  getMint,
+} from "https://esm.sh/@solana/spl-token@0.4.9?target=denonext&deps=@solana/web3.js@1.95.4";
+import bs58 from "https://esm.sh/bs58@5.0.0?target=denonext";
 
 // Bridge deposit address on Blob Chain.
 const BRIDGE_ADDRESS = "19xGuoUEng3w4Y2DjP6te2LLTSKt7fKs27";

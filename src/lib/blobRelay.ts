@@ -268,7 +268,7 @@ export type BridgeConfig = {
 
 export async function fetchBridgeConfig(): Promise<BridgeConfig | null> {
   try {
-    const url = `${(import.meta as any).env.VITE_SUPABASE_URL}/functions/v1/bridge-mint/config`;
+    const url = `${(import.meta as any).env.VITE_SUPABASE_URL}/functions/v1/bridge-config`;
     const res = await fetch(url, {
       headers: { apikey: (import.meta as any).env.VITE_SUPABASE_PUBLISHABLE_KEY },
     });

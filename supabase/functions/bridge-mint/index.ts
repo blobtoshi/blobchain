@@ -18,19 +18,22 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
-// Heavy Solana deps are imported lazily inside mintSpl() / validation paths
-// so lightweight requests like GET /config don't blow the worker's boot
-// resource budget.
-async function loadSol() {
-  return await import("https://esm.sh/@solana/web3.js@1.95.4?target=denonext");
-}
-async function loadSpl() {
-  return await import("https://esm.sh/@solana/spl-token@0.4.9?target=denonext&deps=@solana/web3.js@1.95.4");
-}
-async function loadBs58() {
-  const m: any = await import("https://esm.sh/bs58@5.0.0?target=denonext");
-  return (m.default ?? m) as { decode: (s: string) => Uint8Array; encode: (b: Uint8Array) => string };
-}
+// Solana deps via npm: specifier (Deno's native npm support — generally
+// lighter at boot than esm.sh shims).
+import {
+  Connection,
+  Keypair,
+  PublicKey,
+  sendAndConfirmTransaction,
+  Transaction,
+} from "npm:@solana/web3.js@1.95.4";
+import {
+  createAssociatedTokenAccountIdempotentInstruction,
+  createMintToInstruction,
+  getAssociatedTokenAddress,
+  getMint,
+} from "npm:@solana/spl-token@0.4.9";
+import bs58 from "npm:bs58@5.0.0";
 
 // Bridge deposit address on Blob Chain.
 const BRIDGE_ADDRESS = "19xGuoUEng3w4Y2DjP6te2LLTSKt7fKs27";
@@ -104,16 +107,14 @@ async function findPendingBridgeTx(
   return data;
 }
 
-async function loadMintAuthority() {
-  const sol = await loadSol();
+function loadMintAuthority(): Keypair {
   // Accept base58 (88 chars typical) OR JSON array (e.g. "[12,34,...]").
   const raw = SOLANA_MINT_AUTHORITY.trim();
   if (raw.startsWith("[")) {
     const arr = JSON.parse(raw);
-    return sol.Keypair.fromSecretKey(Uint8Array.from(arr));
+    return Keypair.fromSecretKey(Uint8Array.from(arr));
   }
-  const bs58 = await loadBs58();
-  return sol.Keypair.fromSecretKey(bs58.decode(raw));
+  return Keypair.fromSecretKey(bs58.decode(raw));
 }
 
 async function mintSpl(
@@ -124,38 +125,57 @@ async function mintSpl(
   if (!SOLANA_MINT_AUTHORITY) throw new Error("SOLANA_MINT_AUTHORITY_SECRET_KEY is not configured");
   if (!SOLANA_SPL_MINT_ADDRESS) throw new Error("SOLANA_SPL_MINT_ADDRESS is not configured");
 
-  const sol = await loadSol();
-  const spl = await loadSpl();
-
-  const conn = new sol.Connection(SOLANA_RPC_URL, "confirmed");
-  const authority = await loadMintAuthority();
-  const mintPub = new sol.PublicKey(SOLANA_SPL_MINT_ADDRESS);
-  const recipientPub = new sol.PublicKey(recipient);
+  const conn = new Connection(SOLANA_RPC_URL, "confirmed");
+  const authority = loadMintAuthority();
+  const mintPub = new PublicKey(SOLANA_SPL_MINT_ADDRESS);
+  const recipientPub = new PublicKey(recipient);
 
   // Read the SPL mint to know its decimals so we mint the correct base units.
-  const mintInfo = await spl.getMint(conn, mintPub);
+  const mintInfo = await getMint(conn, mintPub);
   const baseUnits = BigInt(Math.round(amount * 10 ** mintInfo.decimals));
   if (baseUnits <= 0n) throw new Error("Amount rounds to zero base units");
 
-  const ata = await spl.getAssociatedTokenAddress(mintPub, recipientPub, true);
+  const ata = await getAssociatedTokenAddress(mintPub, recipientPub, true);
 
-  const tx = new sol.Transaction().add(
-    spl.createAssociatedTokenAccountIdempotentInstruction(
+  const tx = new Transaction().add(
+    createAssociatedTokenAccountIdempotentInstruction(
       authority.publicKey, ata, recipientPub, mintPub,
     ),
-    spl.createMintToInstruction(mintPub, ata, authority.publicKey, baseUnits),
+    createMintToInstruction(mintPub, ata, authority.publicKey, baseUnits),
   );
 
-  const sig = await sol.sendAndConfirmTransaction(conn, tx, [authority], {
+  const sig = await sendAndConfirmTransaction(conn, tx, [authority], {
     commitment: "confirmed",
   });
   return sig;
 }
 
-// Process a bridge request: confirm the originating $BLOB tx, then mint.
-// Idempotent — safe to call repeatedly while the client polls.
+// Background mint task — runs after the response is returned, so the heavy
+// solana-web3 + spl-token imports don't blow the request's CPU budget.
+async function backgroundMint(supa: Supa, blob_tx_id: string, sol_address: string, amount: number) {
+  try {
+    const sig = await mintSpl(sol_address, amount);
+    await supa.from("bridge_requests")
+      .update({
+        status: "minted",
+        sol_signature: sig,
+        minted_at: new Date().toISOString(),
+        error: null,
+      })
+      .eq("blob_tx_id", blob_tx_id);
+  } catch (e) {
+    const msg = String((e as Error)?.message ?? e).slice(0, 500);
+    console.error("[bridge-mint] mint failed", blob_tx_id, msg);
+    await supa.from("bridge_requests")
+      .update({ status: "confirmed", error: msg })
+      .eq("blob_tx_id", blob_tx_id);
+  }
+}
+
+// Process a bridge request: confirm the originating $BLOB tx, then dispatch
+// the mint as a background task. Idempotent — safe to call repeatedly.
 async function processRequest(supa: Supa, row: any) {
-  if (row.status === "minted" || row.status === "failed") return row;
+  if (row.status === "minted" || row.status === "failed" || row.status === "minting") return row;
 
   // Step 1: is the $BLOB tx confirmed yet?
   const confirmed = await findConfirmedBridgeTx(
@@ -174,40 +194,22 @@ async function processRequest(supa: Supa, row: any) {
     row.confirmed_at = new Date().toISOString();
   }
 
-  // Step 2: mint. Mark `minting` so concurrent polls don't double-mint.
+  // Atomically claim the row for minting so concurrent polls don't double-mint.
   const { data: claimed } = await supa.from("bridge_requests")
     .update({ status: "minting" })
     .eq("blob_tx_id", row.blob_tx_id)
     .eq("status", "confirmed")
     .select().maybeSingle();
   if (!claimed) {
-    // Another invocation already claimed it — refetch and return.
     const { data: latest } = await supa.from("bridge_requests")
       .select("*").eq("blob_tx_id", row.blob_tx_id).maybeSingle();
     return latest ?? row;
   }
 
-  try {
-    const sig = await mintSpl(row.sol_address, Number(row.amount));
-    const { data: updated } = await supa.from("bridge_requests")
-      .update({
-        status: "minted",
-        sol_signature: sig,
-        minted_at: new Date().toISOString(),
-        error: null,
-      })
-      .eq("blob_tx_id", row.blob_tx_id)
-      .select().maybeSingle();
-    return updated ?? { ...row, status: "minted", sol_signature: sig };
-  } catch (e) {
-    const msg = String((e as Error)?.message ?? e).slice(0, 500);
-    // On failure roll back to `confirmed` so a retry is possible, and surface the error.
-    const { data: failed } = await supa.from("bridge_requests")
-      .update({ status: "confirmed", error: msg })
-      .eq("blob_tx_id", row.blob_tx_id)
-      .select().maybeSingle();
-    return failed ?? { ...row, status: "confirmed", error: msg };
-  }
+  // Dispatch the heavy mint in the background and return immediately.
+  // @ts-ignore EdgeRuntime is provided by the Supabase Edge runtime.
+  EdgeRuntime.waitUntil(backgroundMint(supa, row.blob_tx_id, row.sol_address, Number(row.amount)));
+  return claimed;
 }
 
 Deno.serve(async (req) => {

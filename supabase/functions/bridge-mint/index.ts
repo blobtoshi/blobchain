@@ -18,20 +18,19 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
-import {
-  Connection,
-  Keypair,
-  PublicKey,
-  sendAndConfirmTransaction,
-  Transaction,
-} from "https://esm.sh/@solana/web3.js@1.95.4?target=denonext";
-import {
-  createAssociatedTokenAccountIdempotentInstruction,
-  createMintToInstruction,
-  getAssociatedTokenAddress,
-  getMint,
-} from "https://esm.sh/@solana/spl-token@0.4.9?target=denonext&deps=@solana/web3.js@1.95.4";
-import bs58 from "https://esm.sh/bs58@5.0.0?target=denonext";
+// Heavy Solana deps are imported lazily inside mintSpl() / validation paths
+// so lightweight requests like GET /config don't blow the worker's boot
+// resource budget.
+async function loadSol() {
+  return await import("https://esm.sh/@solana/web3.js@1.95.4?target=denonext");
+}
+async function loadSpl() {
+  return await import("https://esm.sh/@solana/spl-token@0.4.9?target=denonext&deps=@solana/web3.js@1.95.4");
+}
+async function loadBs58() {
+  const m: any = await import("https://esm.sh/bs58@5.0.0?target=denonext");
+  return (m.default ?? m) as { decode: (s: string) => Uint8Array; encode: (b: Uint8Array) => string };
+}
 
 // Bridge deposit address on Blob Chain.
 const BRIDGE_ADDRESS = "19xGuoUEng3w4Y2DjP6te2LLTSKt7fKs27";
@@ -105,14 +104,16 @@ async function findPendingBridgeTx(
   return data;
 }
 
-function loadMintAuthority(): Keypair {
+async function loadMintAuthority() {
+  const sol = await loadSol();
   // Accept base58 (88 chars typical) OR JSON array (e.g. "[12,34,...]").
   const raw = SOLANA_MINT_AUTHORITY.trim();
   if (raw.startsWith("[")) {
     const arr = JSON.parse(raw);
-    return Keypair.fromSecretKey(Uint8Array.from(arr));
+    return sol.Keypair.fromSecretKey(Uint8Array.from(arr));
   }
-  return Keypair.fromSecretKey(bs58.decode(raw));
+  const bs58 = await loadBs58();
+  return sol.Keypair.fromSecretKey(bs58.decode(raw));
 }
 
 async function mintSpl(
@@ -123,26 +124,29 @@ async function mintSpl(
   if (!SOLANA_MINT_AUTHORITY) throw new Error("SOLANA_MINT_AUTHORITY_SECRET_KEY is not configured");
   if (!SOLANA_SPL_MINT_ADDRESS) throw new Error("SOLANA_SPL_MINT_ADDRESS is not configured");
 
-  const conn = new Connection(SOLANA_RPC_URL, "confirmed");
-  const authority = loadMintAuthority();
-  const mintPub = new PublicKey(SOLANA_SPL_MINT_ADDRESS);
-  const recipientPub = new PublicKey(recipient);
+  const sol = await loadSol();
+  const spl = await loadSpl();
+
+  const conn = new sol.Connection(SOLANA_RPC_URL, "confirmed");
+  const authority = await loadMintAuthority();
+  const mintPub = new sol.PublicKey(SOLANA_SPL_MINT_ADDRESS);
+  const recipientPub = new sol.PublicKey(recipient);
 
   // Read the SPL mint to know its decimals so we mint the correct base units.
-  const mintInfo = await getMint(conn, mintPub);
+  const mintInfo = await spl.getMint(conn, mintPub);
   const baseUnits = BigInt(Math.round(amount * 10 ** mintInfo.decimals));
   if (baseUnits <= 0n) throw new Error("Amount rounds to zero base units");
 
-  const ata = await getAssociatedTokenAddress(mintPub, recipientPub, true);
+  const ata = await spl.getAssociatedTokenAddress(mintPub, recipientPub, true);
 
-  const tx = new Transaction().add(
-    createAssociatedTokenAccountIdempotentInstruction(
+  const tx = new sol.Transaction().add(
+    spl.createAssociatedTokenAccountIdempotentInstruction(
       authority.publicKey, ata, recipientPub, mintPub,
     ),
-    createMintToInstruction(mintPub, ata, authority.publicKey, baseUnits),
+    spl.createMintToInstruction(mintPub, ata, authority.publicKey, baseUnits),
   );
 
-  const sig = await sendAndConfirmTransaction(conn, tx, [authority], {
+  const sig = await sol.sendAndConfirmTransaction(conn, tx, [authority], {
     commitment: "confirmed",
   });
   return sig;
@@ -244,7 +248,7 @@ Deno.serve(async (req) => {
       return bad("invalid blob_tx_id");
     if (typeof sol_address !== "string" || !SOL_ADDR_RE.test(sol_address))
       return bad("invalid sol_address");
-    try { new PublicKey(sol_address); } catch { return bad("invalid sol_address"); }
+    try { const sol = await loadSol(); new sol.PublicKey(sol_address); } catch { return bad("invalid sol_address"); }
     if (typeof from_address !== "string" || !BLOB_ADDR_RE.test(from_address))
       return bad("invalid from_address");
     const amt = Number(amount);

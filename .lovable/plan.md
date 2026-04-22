@@ -1,28 +1,43 @@
 
-## Remove "$" from "$BLOB" across the site
 
-Replace every occurrence of `$BLOB` with `BLOB` across the codebase (158 matches in 11 files).
+## Harden `src/lib/walletVault.ts`
 
-### Files to update
-- `src/components/blob/NetworkView.tsx`
-- `src/components/blob/SendTxForm.tsx`
-- `src/components/blob/BridgeScreen.tsx`
-- `src/components/blob/WalletScreen.tsx`
-- `src/components/blob/MiningPanel.tsx`
-- `src/components/blob/BlockExplorer.tsx`
-- `src/components/blob/BlobRunGame.tsx`
-- `src/components/blob/MineHero.tsx`
-- `src/hooks/useBlockchain.ts`
-- `src/pages/Index.tsx`
-- Plus any other file in the 11-match set
+Three small, focused improvements to the wallet vault — no behavior change for existing users who can still unlock their current vault.
 
-### Approach
-Use a single sed pass replacing the literal string `$BLOB` with `BLOB` across `src/**/*.{ts,tsx}`. This catches all UI labels, toast messages, suffixes in amount displays, and inline strings.
+### 1. Replace custom base64 with `@scure/base`
+
+`@scure/base` is already in the project (used by `src/lib/blob/crypto.ts`). Import its `base64` codec and replace the hand-rolled `b64` / `unb64` helpers, which use `String.fromCharCode` + `btoa` and can mis-handle bytes outside the Latin-1 range.
+
+```ts
+import { base64 } from "@scure/base";
+// b64(bytes)  -> base64.encode(bytes)
+// unb64(str)  -> base64.decode(str)
+```
+
+All call sites (`salt`, `iv`, `ct`) already pass `Uint8Array`, so the swap is direct.
+
+### 2. Bump PBKDF2 iterations to 600,000
+
+Change the default iteration count for **new** vaults from `250_000` to `600_000` (OWASP 2023 recommendation for PBKDF2-HMAC-SHA256). Existing vaults remain unlockable because `unlockWallet` already reads `v.enc.iter` from the stored vault and falls back per-record — only newly written vaults get the higher count.
+
+### 3. Validate vault structure before decrypting
+
+In `unlockWallet`, after `JSON.parse`, assert the shape before touching crypto so corrupt/foreign payloads fail fast with a clear error instead of a cryptic decode/decrypt exception:
+
+- `v.v === 1`
+- `typeof v.address === "string"`
+- `typeof v.publicKey === "string"`
+- `v.enc` is an object with string fields `salt`, `iv`, `ct`, and (optional) numeric `iter`
+
+Each missing/invalid field throws `new Error("Corrupt wallet vault")`. The existing "Wrong passphrase" branch is preserved for genuine decryption failures.
 
 ### Out of scope
-- The token symbol `BLOB` itself (unchanged).
-- Anything containing the word "blob" lowercase (e.g. variable names, "Blob Chain", "Blob Run").
-- The wrapped-token label `WBLOB` recently added on the bridge screen.
+
+- No changes to vault key name, version, or storage layout — current users keep their wallet.
+- No changes to `src/hooks/useWalletVault.ts` or any other consumer; the public API (`saveEncryptedWallet`, `unlockWallet`, `getStoredWalletPublic`, `clearWallet`, `purgeLegacyPlaintextWallet`, types) stays identical.
+- Legacy key purge logic is left as-is.
 
 ### Verification
-TypeScript build (`tsc --noEmit`) to confirm no syntax broke.
+
+`tsc --noEmit` to confirm types still line up.
+

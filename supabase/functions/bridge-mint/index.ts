@@ -108,16 +108,14 @@ async function findPendingBridgeTx(
   return data;
 }
 
-async function loadMintAuthority() {
-  const sol = await loadSol();
+function loadMintAuthority(): Keypair {
   // Accept base58 (88 chars typical) OR JSON array (e.g. "[12,34,...]").
   const raw = SOLANA_MINT_AUTHORITY.trim();
   if (raw.startsWith("[")) {
     const arr = JSON.parse(raw);
-    return sol.Keypair.fromSecretKey(Uint8Array.from(arr));
+    return Keypair.fromSecretKey(Uint8Array.from(arr));
   }
-  const bs58 = await loadBs58();
-  return sol.Keypair.fromSecretKey(bs58.decode(raw));
+  return Keypair.fromSecretKey(bs58.decode(raw));
 }
 
 async function mintSpl(
@@ -128,29 +126,26 @@ async function mintSpl(
   if (!SOLANA_MINT_AUTHORITY) throw new Error("SOLANA_MINT_AUTHORITY_SECRET_KEY is not configured");
   if (!SOLANA_SPL_MINT_ADDRESS) throw new Error("SOLANA_SPL_MINT_ADDRESS is not configured");
 
-  const sol = await loadSol();
-  const spl = await loadSpl();
-
-  const conn = new sol.Connection(SOLANA_RPC_URL, "confirmed");
-  const authority = await loadMintAuthority();
-  const mintPub = new sol.PublicKey(SOLANA_SPL_MINT_ADDRESS);
-  const recipientPub = new sol.PublicKey(recipient);
+  const conn = new Connection(SOLANA_RPC_URL, "confirmed");
+  const authority = loadMintAuthority();
+  const mintPub = new PublicKey(SOLANA_SPL_MINT_ADDRESS);
+  const recipientPub = new PublicKey(recipient);
 
   // Read the SPL mint to know its decimals so we mint the correct base units.
-  const mintInfo = await spl.getMint(conn, mintPub);
+  const mintInfo = await getMint(conn, mintPub);
   const baseUnits = BigInt(Math.round(amount * 10 ** mintInfo.decimals));
   if (baseUnits <= 0n) throw new Error("Amount rounds to zero base units");
 
-  const ata = await spl.getAssociatedTokenAddress(mintPub, recipientPub, true);
+  const ata = await getAssociatedTokenAddress(mintPub, recipientPub, true);
 
-  const tx = new sol.Transaction().add(
-    spl.createAssociatedTokenAccountIdempotentInstruction(
+  const tx = new Transaction().add(
+    createAssociatedTokenAccountIdempotentInstruction(
       authority.publicKey, ata, recipientPub, mintPub,
     ),
-    spl.createMintToInstruction(mintPub, ata, authority.publicKey, baseUnits),
+    createMintToInstruction(mintPub, ata, authority.publicKey, baseUnits),
   );
 
-  const sig = await sol.sendAndConfirmTransaction(conn, tx, [authority], {
+  const sig = await sendAndConfirmTransaction(conn, tx, [authority], {
     commitment: "confirmed",
   });
   return sig;

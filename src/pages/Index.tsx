@@ -2238,22 +2238,41 @@ function BridgeScreen({ wallet, chain, mempool, onBroadcast }: any) {
     return () => { cancelled = true; clearInterval(id); if (cfgTimer) clearTimeout(cfgTimer); };
   }, [wallet.address]);
 
+  // Resume polling after reload/navigation by rehydrating the newest in-flight request.
+  useEffect(() => {
+    const currentDone = !activeRequest || activeRequest.status === "minted" || activeRequest.status === "failed";
+    if (!currentDone) return;
+    const inflight = history.find((h) => h.status === "pending" || h.status === "confirmed" || h.status === "minting");
+    if (!inflight) return;
+    setActiveRequest(inflight);
+    setSt(inflight.status === "minting" || inflight.status === "confirmed" ? "minting" : "waiting");
+  }, [history, activeRequest]);
+
   // Poll the active request until it reaches a terminal state.
   useEffect(() => {
     if (!activeRequest) return;
     if (activeRequest.status === "minted" || activeRequest.status === "failed") return;
-    const id = setInterval(async () => {
+
+    let cancelled = false;
+    const poll = async () => {
       const r = await Relay.pollBridgeRequest(activeRequest.blob_tx_id);
-      if (!r) return;
+      if (!r || cancelled) return;
       setActiveRequest(r);
+      setHistory((prev) => {
+        const next = prev.filter((item) => item.blob_tx_id !== r.blob_tx_id);
+        return [r, ...next];
+      });
       if (r.status === "minted") setSt("minted");
       else if (r.status === "failed") { setSt("failed"); setErr(r.error || "Mint failed"); }
       else if (r.status === "minting") setSt("minting");
       else if (r.status === "confirmed") setSt("minting");
       else setSt("waiting");
-    }, 4000);
-    return () => clearInterval(id);
-  }, [activeRequest]);
+    };
+
+    poll();
+    const id = setInterval(poll, 4000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [activeRequest?.blob_tx_id, activeRequest?.status]);
 
   const recRate = feeInfo?.recommendedFeeRate ?? BASE_FEE_RATE;
   const activeFeeRate = Math.max(MIN_FEE_RATE, recRate);

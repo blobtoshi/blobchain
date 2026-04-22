@@ -170,7 +170,7 @@ export default function NetworkView({ nodeCount, chain, blockInfo, mempool = [] 
       <div className="glass p-5 rounded-md">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center text-primary text-sm">⬡</div>
+            <div className="w-8 h-8 rounded-full bg-primary/15 border border-primary/30" />
             <div>
               <div className="text-sm font-semibold tracking-tight">BLOB</div>
               <div className="text-[11px] text-foreground/50">Native asset · Proof-of-Gaming</div>

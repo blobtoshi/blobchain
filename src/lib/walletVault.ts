@@ -106,9 +106,10 @@ export async function unlockWallet(passphrase: string): Promise<WalletPlain> {
   let iv: Uint8Array;
   let ct: Uint8Array;
   try {
-    salt = base64.decode(v.enc.salt);
-    iv = base64.decode(v.enc.iv);
-    ct = base64.decode(v.enc.ct);
+    // Copy into fresh ArrayBuffer-backed Uint8Arrays to satisfy BufferSource typing.
+    salt = new Uint8Array(base64.decode(v.enc.salt));
+    iv = new Uint8Array(base64.decode(v.enc.iv));
+    ct = new Uint8Array(base64.decode(v.enc.ct));
   } catch {
     throw new Error("Corrupt wallet vault");
   }

@@ -9,6 +9,7 @@ import {
   applyTxFilters, txFiltersActive, blockFiltersActive, addrFiltersActive, dateToTs,
 } from "@/lib/blob/explorer";
 import { PAGE_SIZE } from "@/lib/blob/constants";
+import MempoolView from "./MempoolView";
 
 function ExplorerStat({ label, value, sub }: { label: string; value: React.ReactNode; sub?: React.ReactNode }) {
   return (
@@ -591,86 +592,16 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
       )}
 
       {tab === "mempool" && (
-        <div className="space-y-2">
-          <FilterPanel activeCount={txFiltersActive(memF)} onClear={() => setMemF(emptyTxFilters)}>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              <div className="col-span-2 sm:col-span-2">
-                <FieldLabel>Address (from / to)</FieldLabel>
-                <FInput value={memF.addr} onChange={e => setMemF({ ...memF, addr: e.target.value })} placeholder="address or @username" />
-              </div>
-              <div>
-                <FieldLabel>Side</FieldLabel>
-                <FSelect value={memF.addrSide} onChange={v => setMemF({ ...memF, addrSide: v as any })}
-                  options={[{ v: "any", l: "Either" }, { v: "from", l: "Sender (from)" }, { v: "to", l: "Recipient (to)" }]} />
-              </div>
-              <div>
-                <FieldLabel>Min amount BLOB</FieldLabel>
-                <FInput type="number" value={memF.minAmount} onChange={e => setMemF({ ...memF, minAmount: e.target.value })} placeholder="0" />
-              </div>
-              <div>
-                <FieldLabel>Max amount BLOB</FieldLabel>
-                <FInput type="number" value={memF.maxAmount} onChange={e => setMemF({ ...memF, maxAmount: e.target.value })} placeholder="∞" />
-              </div>
-              <div>
-                <FieldLabel>From date</FieldLabel>
-                <FInput type="date" value={memF.dateFrom} onChange={e => setMemF({ ...memF, dateFrom: e.target.value })} />
-              </div>
-              <div>
-                <FieldLabel>To date</FieldLabel>
-                <FInput type="date" value={memF.dateTo} onChange={e => setMemF({ ...memF, dateTo: e.target.value })} />
-              </div>
-              <div>
-                <FieldLabel>Sort by</FieldLabel>
-                <FSelect value={memF.sort} onChange={v => setMemF({ ...memF, sort: v as any })}
-                  options={[{ v: "newest", l: "Newest" }, { v: "oldest", l: "Oldest" }, { v: "amount-desc", l: "Largest amount" }, { v: "amount-asc", l: "Smallest amount" }]} />
-              </div>
-            </div>
-          </FilterPanel>
-          <div className="glass-hi px-3 py-2.5 flex items-center justify-between text-xs">
-            <span className="label-eyebrow">Pending pool</span>
-            <span className="num text-muted-foreground">
-              {memFiltered.length}{memFiltered.length !== memTxs.length && ` of ${memTxs.length}`} unconfirmed · {memFiltered.reduce((s, t) => s + t.amount, 0).toFixed(2)} BLOB queued
-            </span>
-          </div>
-          {memTxs.length === 0 ? (
-            <div className="glass text-center py-10 text-xs text-muted-foreground">Mempool is empty · all transactions confirmed</div>
-          ) : memFiltered.length === 0 ? (
-            <div className="glass text-center py-10 text-xs text-muted-foreground">No pending transactions match these filters</div>
-          ) : (
-            <>
-              {memFiltered.slice(pMem * PAGE_SIZE, (pMem + 1) * PAGE_SIZE).map(t => (
-                <button key={t.id} onClick={() => { setTab("txs"); setSelTx(t.id); }}
-                  className="w-full text-left glass px-3 py-2.5 hover:bg-secondary/30 transition border-l-2 border-l-[hsl(var(--warning))]">
-                  <div className="flex items-center justify-between mb-1 text-xs">
-                    <span className="text-foreground/80">{t.fromUsername || shortHash(t.from, 8)} → {shortHash(t.to, 8)}</span>
-                    <span className="num text-primary/90">{t.amount} BLOB</span>
-                  </div>
-                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                    <span className="num">fee {t.fee}</span>
-                    <span className="num">{shortHash(t.id, 8)}</span>
-                    <span className="text-[hsl(var(--warning))]">⧗ {timeAgo(t.timestamp)}</span>
-                  </div>
-                </button>
-              ))}
-              <Pager page={pMem} setPage={setPMem} total={memFiltered.length} label="pending" />
-            </>
-          )}
-
-          <div className="pt-2">
-            <div className="label-eyebrow mb-2 px-1">Recently confirmed</div>
-            {allTxs.filter(t => t.kind === "transfer").slice(0, 10).map(t => (
-              <button key={t.id} onClick={() => { setTab("txs"); setSelTx(t.id); }}
-                className="w-full text-left glass px-3 py-2 mb-1 hover:bg-secondary/30 transition flex items-center justify-between gap-2 text-xs">
-                <span className="text-foreground/70 truncate">{t.fromUsername || shortHash(t.from, 6)} → {t.toUsername || shortHash(t.to, 6)}</span>
-                <span className="num text-primary/80 shrink-0">{t.amount} BLOB</span>
-                <span className="num text-muted-foreground shrink-0">#{t.block}</span>
-              </button>
-            ))}
-            {allTxs.filter(t => t.kind === "transfer").length === 0 && (
-              <div className="text-[11px] text-muted-foreground text-center py-3">No confirmed transactions yet</div>
-            )}
-          </div>
-        </div>
+        <MempoolView
+          mempool={mempool}
+          chain={chain}
+          blockInfo={blockInfo}
+          memF={memF}
+          setMemF={setMemF}
+          pMem={pMem}
+          setPMem={setPMem}
+          onSelectTx={(id) => { setTab("txs"); setSelTx(id); }}
+        />
       )}
 
       {tab === "addresses" && (

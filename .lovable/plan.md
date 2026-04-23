@@ -1,97 +1,98 @@
 
+## Mempool.space-style Mempool UI
 
-## Heavy glass UI pass
+Rebuild the **Mempool tab** inside `BlockExplorer.tsx` into a rich, real-time visualization modeled on mempool.space. All other tabs (Overview, Blocks, Transactions, Addresses) stay as-is. Network tab stays as-is.
 
-Push the existing `.glass` / `.glass-hi` / `.surface` system much further so the whole app reads as layered frosted glass over the cobalt/cyan ambient gradient. No layout or component restructuring — just stronger glass tokens, a subtler base, and a richer ambient backdrop so the glass actually has something to refract.
+### Layout (top → bottom)
 
-### 1. `src/index.css` — token + utility upgrades
-
-**Base background** (let glass do the work, gradient becomes the hero):
 ```text
---background: 222 30% 16%   (was 222 22% 22%)  ← darker so glass panels pop
+┌─────────────────────────────────────────────────────────┐
+│ HEADER STRIP                                             │
+│  Pending • 12 txs   Vsize • 3.4 KB / 1 MB   Fees • 0.41 │
+│  Congestion bar [▓▓▓░░░░░░░] 28% Light                   │
+└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│ INCOMING / OUTGOING (last 60s)                           │
+│  ↑ in: 4 tx   ↓ confirmed: 2 tx   ⌀ rate 11.2 drops/B   │
+└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│ PROJECTED BLOCKS (next 1–3 blocks)                       │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐                    │
+│  │ ~12 d/B │ │  ~8 d/B │ │  ~3 d/B │                    │
+│  │ next    │ │ in 2    │ │ in 3    │                    │
+│  │ 2.1 KB  │ │ 0.9 KB  │ │ 0.4 KB  │                    │
+│  │ 7 tx    │ │ 3 tx    │ │ 2 tx    │                    │
+│  └─────────┘ └─────────┘ └─────────┘                    │
+└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│ FEE HISTOGRAM (drops/B buckets)                          │
+│      ▆                                                   │
+│   ▆  █  ▃                                                │
+│ ▂ █  █  █  ▁                                             │
+│ 1  5 10 20 50 100+   ← fee-rate buckets                  │
+└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│ MEMPOOL GOGGLES — block-fill preview                     │
+│  Each square = one pending tx, sized by vbytes,          │
+│  colored by fee-rate bucket. Hover/tap → tx detail.      │
+│  ┌──┬─┬───┬──┬─┐                                         │
+│  │  │ │   │  │ │                                         │
+│  └──┴─┴───┴──┴─┘                                         │
+└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│ LIVE TX STREAM (sortable: fee-rate ▼ / time / amount)    │
+│  ┌──────────────────────────────────────────────────┐    │
+│  │ ●12 d/B │ 0.50 BLOB │ Bob → BigBlobba │ 42 B │5s│    │
+│  │ ●10 d/B │ 1.00 BLOB │ Alice → Bob     │ 38 B │8s│    │
+│  └──────────────────────────────────────────────────┘    │
+│  (existing FilterPanel kept — addr / amount / sort)      │
+└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│ RECENTLY CONFIRMED (kept, condensed)                     │
+└─────────────────────────────────────────────────────────┘
 ```
 
-**Card / popover become translucent by default** so every Card across the app inherits glass:
-```text
---card:    220 24% 24% / 0.55
---popover: 222 26% 22% / 0.70
-```
-(Tailwind's `bg-card` already uses `hsl(var(--card))`, so alpha flows through.)
+### Concrete behavior
 
-**Borders brighter + cooler** to read as glass edges:
-```text
---border:       210 40% 80% / 0.16
---input:        220 22% 28% / 0.55
---glass-border: 200 60% 96% / 0.22
---glass-hi:     200 60% 96% / 0.32
---glass:        220 30% 32% / 0.38   ← lower alpha, more see-through
-```
+1. **Header strip** — pending count, total vbytes (sum of `estimateTxBytes`-style sizes from existing `memoBytes`/`canonicalTxBytes` in `src/lib/blob/fees.ts`), total fees in BLOB, congestion bar driven by `vbytes / MAX_BLOCK_SIZE` matching the existing Network tab logic.
 
-**Shadows** — replace flat drop shadow with a soft glow + crisp inner highlight stack:
-```text
---shadow-card: 0 1px 0 hsl(0 0% 100% / 0.06) inset,
-               0 8px 28px hsl(222 60% 4% / 0.45),
-               0 2px 8px hsl(215 95% 56% / 0.08)
-```
+2. **In/out counters** — track tx ids seen in the last 60s using a small `useRef<Map<id, ts>>` populated from prop changes; "confirmed in last 60s" derived from `chain` slice and matched against previously-seen mempool ids.
 
-**`.glass` utility** — heavier blur, saturation, and a top inner highlight:
-```css
-.glass {
-  background: linear-gradient(180deg,
-    hsl(220 40% 80% / 0.10) 0%,
-    hsl(220 30% 30% / 0.45) 100%);
-  backdrop-filter: blur(28px) saturate(180%);
-  -webkit-backdrop-filter: blur(28px) saturate(180%);
-  border: 1px solid hsl(var(--glass-border));
-  box-shadow:
-    inset 0 1px 0 hsl(0 0% 100% / 0.10),
-    inset 0 -1px 0 hsl(0 0% 0% / 0.20),
-    0 12px 40px hsl(222 60% 4% / 0.40);
-  border-radius: var(--radius);
-}
-.glass-hi { /* same recipe, blur(36px), brighter top highlight, ring-cyan-flair-lite */ }
-.surface  { /* upgrade to translucent: hsl(var(--card)) with 0.55 alpha + 1px hairline border */ }
-```
+3. **Projected blocks** — bucket `mempool` by descending `feeRate`, greedily pack into virtual blocks of `MAX_BLOCK_SIZE` bytes. Display up to 3 cards with median fee-rate, vbyte total, tx count, est. reward (sum of fees + `blockInfo.reward`). Click a card → filters the live stream to that bucket.
 
-**New `.glass-pane` utility** for hero panels (Wallet balance card, Mine hero, Bridge cards) — adds a second layered radial highlight in the top-left for a true "Vision Pro" feel.
+4. **Fee histogram** — fixed buckets `[1, 2-5, 6-10, 11-20, 21-50, 51-100, 100+]` drops/B. Pure SVG bars (no chart lib). Hover tooltip = tx count + vbytes. Bucket of the recommended fee-rate is highlighted in cyan.
 
-### 2. `body::before` ambient backdrop — richer so glass refracts something
+5. **Mempool goggles** — flex grid; each tx is a `<button>` with `width = clamp(8, vbytes/40, 60)px`, `height = 28px`, color from a 6-step cobalt→cyan→amber→red gradient mapped to fee-rate bucket. Title attribute shows quick info; click opens the existing tx detail by reusing `setSelTx`.
 
-Add a third radial + faint noise so frosted panels show subtle color shifts:
-```css
-body::before {
-  background:
-    radial-gradient(ellipse at 15% 0%,   hsl(215 95% 50% / 0.32), transparent 55%),
-    radial-gradient(ellipse at 85% 100%, hsl(188 95% 55% / 0.28), transparent 55%),
-    radial-gradient(circle at 50% 50%,   hsl(260 80% 55% / 0.10), transparent 60%);
-}
-body::after { /* 1.5% noise overlay via inline SVG data-uri, fixed, mix-blend-overlay */ }
-```
+6. **Live tx stream** — replaces the current pending-pool list. Adds a fee-rate column (computed from `t.feeRate ?? Math.ceil(t.fee*1e8 / vbytes)`), a vbytes column, and a sort toggle (`feeRate-desc | time-desc | amount-desc`). Existing `FilterPanel` for the mempool stays and just feeds the same list.
 
-### 3. Component-level nudges (minimal, surgical)
+7. **Per-tx row enhancements** — left-edge color stripe matches the histogram bucket. Pending duration shown as live ticker (already have `setTick` pattern in NetworkView; lift the same effect into BlockExplorer for the mempool tab only so other tabs don't re-render).
 
-Only where a component bypasses tokens with hard-coded solid backgrounds:
-
-- **`src/components/blob/WalletScreen.tsx`** — swap any `bg-card` hero block for `glass-pane`; add `glass` to the balance row.
-- **`src/components/blob/MineHero.tsx`** — wrap stat tiles in `glass`; HUD overlay gets `glass-hi`.
-- **`src/components/blob/MiningPanel.tsx`, `BridgeScreen.tsx`, `RedeemPanel.tsx`, `SendTxForm.tsx`, `NetworkView.tsx`** — replace any `bg-secondary/30` / `bg-muted` panel wrappers with `glass`; keep inner inputs as-is (they already use `--input` which is now translucent).
-- **`src/components/blob/BlockExplorer.tsx`** — list rows already use `glass`; bump the outer tab container to `glass-hi` so the layering is visible.
-- **`src/components/NavLink.tsx`** — active state gets a thin `glass-hi` pill instead of solid bg.
-- **`src/components/ui/dialog.tsx` / `sheet.tsx` / `popover.tsx` / `dropdown-menu.tsx`** — content surfaces switch from `bg-popover` to `bg-popover/70 backdrop-blur-2xl border-white/10` so overlays match the new glass language.
-
-### 4. Explicitly NOT changed
-
-- Brand cobalt (`215 95% 56%`) and cyan (`188 95% 55%`) untouched.
-- Blob Run game canvas keeps its opaque dark playfield (canvas pixels, not CSS).
-- Typography, spacing, radii, and component structure unchanged.
-- No new dependencies.
+8. **Empty / busy states** — when mempool is empty, show a calm "Mempool is clear · next block has no pending txs" panel with the projected-block skeleton dimmed out.
 
 ### Files touched
 
-- `src/index.css` (tokens + utilities + ambient)
-- 8 component files above (1–3 className tweaks each, no logic changes)
+- `src/components/blob/BlockExplorer.tsx` — replace the `tab === "mempool"` block (~lines 593–674) with the new layout. Add small local helpers (bucketing, vbyte estimate, projected-block packer) at the top of the file or as a new sibling util.
+- `src/lib/blob/explorer.ts` — add three pure helpers: `estimateMempoolTxBytes(t)`, `feeRateOf(t, bytes)`, `bucketForRate(rate)` returning `{ idx, label, color, ringClass }`. Keeps the component thin.
+- `src/lib/blob/constants.ts` — add `FEE_BUCKETS = [1,5,10,20,50,100]` (read-only).
 
-### Verification
+### Performance notes
 
-Spot-check Wallet, Mine, Network, Bridge, Block Explorer at 414×646 and desktop. Confirm: cards visibly float as frosted panes, cobalt/cyan ambient bleeds through edges, text contrast still passes, overlays/dialogs match.
+- Per-second tick is **scoped to the mempool tab only** (`useEffect` mounted inside the tab branch via a small `<MempoolTab/>` sub-component) so other tabs and the rest of the app don't re-render every second.
+- All derived data (`bucketed`, `projectedBlocks`, `histogram`, `goggleCells`) computed in a single `useMemo` keyed on `mempool` length + tick.
+
+### Explicitly NOT changed
+
+- No backend / table changes — uses only existing `blob_mempool` fields (`amount`, `fee`, `fee_rate`, `signature`, `memo`, `timestamp`, `from_address`, etc.).
+- No new dependencies.
+- Network tab, Wallet, Mine, Bridge, other Explorer tabs untouched.
+- Existing mempool filter panel and pagination kept.
+- Brand cobalt/cyan and the heavy-glass surfaces stay; new mempool panels use existing `glass` / `glass-hi` utilities.
+
+### Verification after apply
+
+At 414×646 mobile and desktop, with the live testnet (currently 1 chain row, mempool empty):
+- Empty state renders cleanly.
+- Manually broadcast a tx via Send → projected-block card appears, histogram bucket fills, goggle cell appears, live row shows ticking pending duration.
+- Block seal → row disappears from mempool, "confirmed in last 60s" counter increments.
 

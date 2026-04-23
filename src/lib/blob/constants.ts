@@ -30,6 +30,10 @@ export const SOL_ADDR_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 export const PAGE_SIZE = 100;
 
+// Fee-rate buckets (drops/byte) for mempool histogram & "goggles" coloring.
+// Each entry is the inclusive upper bound for the bucket; the last bucket is "+".
+export const FEE_BUCKETS = [1, 5, 10, 20, 50, 100];
+
 // Reverse bridge (WBLOB → BLOB) — fee deducted from the redeemed amount.
 // Sized to comfortably cover the server-signed credit tx network fee at peak congestion.
 export const BRIDGE_FEE_BLOB = 0.0015;

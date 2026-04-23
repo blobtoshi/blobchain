@@ -329,7 +329,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
       </div>
 
       {/* Tabs */}
-      <div className="glass flex items-center gap-1 px-2 overflow-x-auto">
+      <div className="glass-hi flex items-center gap-1 px-2 overflow-x-auto">
         <ExplorerTabBtn active={tab === "overview"} onClick={() => setTab("overview")}>Overview</ExplorerTabBtn>
         <ExplorerTabBtn active={tab === "blocks"} onClick={() => setTab("blocks")} count={chain.length}>Blocks</ExplorerTabBtn>
         <ExplorerTabBtn active={tab === "txs"} onClick={() => setTab("txs")} count={allTxs.length}>Transactions</ExplorerTabBtn>

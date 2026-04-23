@@ -6,7 +6,7 @@ export default function MineHero({ blockInfo, onLaunch }: any) {
   const s = blockInfo.remaining % 60;
   const time = m > 0 ? `${m}m ${s}s` : `${s}s`;
   return (
-    <div className="relative overflow-hidden rounded-3xl glass-hi px-6 py-12 sm:py-16 text-center">
+    <div className="relative overflow-hidden rounded-3xl glass-pane px-6 py-12 sm:py-16 text-center">
       <div className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[480px] h-[480px] rounded-full bg-primary/10 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-32 right-0 w-[360px] h-[360px] rounded-full bg-accent/10 blur-3xl" />
       <div className="relative">

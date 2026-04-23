@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import * as Relay from "@/lib/blobRelay";
 import { signData } from "@/lib/blob/crypto";
 import { CW, CH, GY, PX, GRAVITY, JUMP_V } from "@/lib/blob/constants";
-import { generateLevel, TYMAP, drawBG, drawBlob, drawFork, drawToken, _blobImg } from "@/lib/blob/level";
+import { generateLevel, TYMAP, drawBG, drawBlob, drawFork, drawLowBar, drawToken, _blobImg } from "@/lib/blob/level";
 
 export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry }) {
   const cvs = useRef(null);

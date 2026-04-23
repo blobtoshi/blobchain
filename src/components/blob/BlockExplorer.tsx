@@ -9,6 +9,7 @@ import {
   applyTxFilters, txFiltersActive, blockFiltersActive, addrFiltersActive, dateToTs,
 } from "@/lib/blob/explorer";
 import { PAGE_SIZE } from "@/lib/blob/constants";
+import MempoolView from "./MempoolView";
 
 function ExplorerStat({ label, value, sub }: { label: string; value: React.ReactNode; sub?: React.ReactNode }) {
   return (

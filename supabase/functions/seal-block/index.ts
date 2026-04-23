@@ -66,13 +66,13 @@ Deno.serve(async (req) => {
     if (!Number.isFinite(targetHeight) || targetHeight < 1)
       return bad("invalid height");
 
-    // Self-gating: only allow sealing the block that the wall clock has just
-    // opened. Any past or future height is rejected outright. Combined with the
-    // "previous block must exist" + "block window must have elapsed" checks,
-    // this removes the DB-load attack surface without needing client secrets.
+    // Self-gating: reject any future height. Past/catch-up heights are still
+    // bounded by the "previous block must exist" + "block window must have
+    // elapsed" + "must have entries" checks below, so the DB-load surface is
+    // bounded by the chain tip — not by client input.
     const wallHeight = currentHeight();
-    if (targetHeight !== wallHeight) {
-      return bad(`only the currently open block (#${wallHeight}) may be sealed`);
+    if (targetHeight > wallHeight) {
+      return bad(`block #${targetHeight} not yet open (current #${wallHeight})`);
     }
 
     const supa = createClient(

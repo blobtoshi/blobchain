@@ -312,6 +312,51 @@ export async function fetchBridgeHistory(address?: string): Promise<BridgeReques
   return (data ?? []) as BridgeRequest[];
 }
 
+// ── REVERSE BRIDGE (WBLOB → BLOB) ──────────────────────────────────────
+export type RedeemRequest = {
+  sol_signature: string;
+  blob_address: string;
+  amount: number;
+  credit_amount: number | null;
+  bridge_fee: number | null;
+  status: "pending" | "verified" | "crediting" | "credited" | "failed";
+  blob_tx_id: string | null;
+  error: string | null;
+  created_at: string;
+  verified_at: string | null;
+  credited_at: string | null;
+};
+
+export async function registerRedeem(p: {
+  sol_signature: string;
+  blob_address: string;
+  amount: number;
+}): Promise<{ ok: boolean; error?: string; data?: RedeemRequest }> {
+  const { data, error } = await supabase.functions.invoke("bridge-redeem", { body: p });
+  if (error) return { ok: false, error: error.message };
+  if ((data as any)?.error) return { ok: false, error: (data as any).error };
+  return { ok: true, data: data as RedeemRequest };
+}
+
+export async function pollRedeem(sol_signature: string): Promise<RedeemRequest | null> {
+  try {
+    const url = `${(import.meta as any).env.VITE_SUPABASE_URL}/functions/v1/bridge-redeem?sol_signature=${encodeURIComponent(sol_signature)}`;
+    const res = await fetch(url, {
+      headers: { apikey: (import.meta as any).env.VITE_SUPABASE_PUBLISHABLE_KEY },
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as RedeemRequest;
+  } catch { return null; }
+}
+
+export async function fetchRedeemHistory(blob_address?: string): Promise<RedeemRequest[]> {
+  let q = supabase.from("bridge_redeems").select("*").order("created_at", { ascending: false }).limit(50);
+  if (blob_address) q = q.eq("blob_address", blob_address);
+  const { data, error } = await q;
+  if (error) { console.error("[relay] fetchRedeemHistory", error); return []; }
+  return (data ?? []) as RedeemRequest[];
+}
+
 // ── REALTIME ────────────────────────────────────────────────────────────
 export type RelayHandlers = {
   onBlock?: (b: Block) => void;

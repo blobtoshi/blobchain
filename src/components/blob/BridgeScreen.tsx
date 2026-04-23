@@ -466,6 +466,6 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast, config: configProp
           )}
         </div>
       </div>
-    </div>
+    </>
   );
 }

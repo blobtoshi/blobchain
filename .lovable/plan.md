@@ -1,32 +1,51 @@
 
-## Fix Blob Run: duckable obstacles, ArrowDown scroll, mobile duck
 
-### 1. Add duckable (overhead) obstacles
-In `src/lib/blob/level.ts` `generateLevel`: add a new obstacle type `"low"` (a flying bar you must duck under). Roughly 25% of obstacles become `"low"`; the rest remain ground forks/tall/double.
-- Shape: `{ at, type: "low", w: 60, h: 18 }`.
+## Lighter, modern UI refresh (keep cobalt/cyan)
 
-In `src/components/blob/BlobRunGame.tsx` obstacle spawn loop: when `ev.type === "low"`, place it at `y = GY - 60` (clears running blob's head, but collides unless ducking — which lowers hitbox to `ph: 22` already). Use a different draw style so players can read it as "duck".
+Goal: lift the whole app out of near-black into a clean, modern "soft slate" palette with the same cobalt + cyan brand accents. Because every screen (Wallet, Mine, Network, Bridge, Block Explorer, Send Tx, Redeem) consumes the same semantic tokens, this is a **single-file change to `src/index.css`** and cascades everywhere automatically.
 
-In `src/lib/blob/level.ts`: add `drawLowBar(ctx, o)` — a horizontal cyan/cobalt glowing bar with a hazard pattern, exported and called from the game's draw loop when `o.type === "low"`.
+### What changes
 
-Tag obstacles with their `type` when pushed to `g.obstacles` so the renderer can pick `drawFork` vs `drawLowBar`.
+1. **Lighter base surfaces** — shift background/card/popover/secondary/muted from ~5–12% lightness up to ~14–22%. Still dark-mode, but soft slate instead of near-black.
+2. **Higher-contrast borders & inputs** — borders go from L=14% to L=22% so cards have visible edges on the lighter background.
+3. **Brighter foreground & muted text** — foreground L=94 → 96, muted-foreground L=58 → 68 for better readability on the lighter surfaces.
+4. **Brand colors unchanged** — cobalt primary (`215 95% 56%`) and cyan accent (`188 95% 55%`) stay as-is. Glow, gradient, and `text-brand-gradient` keep their punch against the lighter base.
+5. **Glass surfaces refreshed** — `--glass` lightness raised and alpha lowered so frosted panels read as light-on-light glass instead of dark-on-dark; `--glass-border` and `--glass-hi` brightened to match.
+6. **Softer shadows** — `--shadow-card` opacity reduced (0.6 → 0.35) so cards float gently instead of sitting in deep wells.
+7. **Background ambient gradient** — increase the cobalt + cyan radial-gradient alphas in `body::before` (0.10/0.08 → 0.16/0.14) so the lighter base still has brand atmosphere.
+8. **Sidebar tokens** — mirror the same lightness shift for `--sidebar-*` tokens.
+9. **`.dark` block** — apply the same updated values so explicit dark-mode contexts match.
 
-### 2. Stop ArrowDown from scrolling the page
-In the `kd` handler in `BlobRunGame.tsx`, call `e.preventDefault()` for `ArrowDown` too (matching the existing Space/ArrowUp handling). Only do this while the game is mounted (already scoped via the effect's add/remove).
+### New token values (HSL)
 
-### 3. Mobile duck control
-Replace the single full-canvas tap handler with a two-zone overlay on the canvas (only shown on touch devices / always present but transparent):
-- Left/upper 70% of canvas → tap = jump (current behavior).
-- Right/lower 30% of canvas, plus a small visible "DUCK" button pinned to the bottom-right of the game frame → press-and-hold sets `dRef.current = true`, release clears it.
+```text
+--background:    222 28% 14%   (was 222 35% 5%)
+--card:          220 26% 17%   (was 220 32% 7%)
+--popover:       222 28% 16%   (was 222 38% 6%)
+--secondary:     220 22% 22%   (was 220 28% 12%)
+--muted:         220 22% 20%   (was 220 28% 10%)
+--border:        220 20% 28%   (was 220 28% 14%)
+--input:         220 22% 22%   (was 220 28% 12%)
+--foreground:    210 30% 96%   (was 210 30% 94%)
+--muted-foreground: 215 16% 68% (was 215 18% 58%)
+--glass:         220 26% 20% / 0.55
+--glass-border:  200 40% 90% / 0.10
+--glass-hi:      200 40% 90% / 0.16
+--shadow-card:   0 8px 32px hsl(222 50% 4% / 0.35)
+```
 
-Implementation: keep the existing `onTouchStart` for jump on the canvas, and add an absolutely-positioned duck button (visible on all viewports, but primarily intended for touch) inside the game container with `onTouchStart`/`onTouchEnd`/`onMouseDown`/`onMouseUp`/`onMouseLeave` handlers that toggle `dRef.current`. Style: small rounded pill, bottom-right, semi-transparent, with a `↓ DUCK` label, so it's discoverable but unobtrusive on desktop.
+### What does NOT change
 
-### Files
+- No component files edited — semantic Tailwind classes (`bg-background`, `bg-card`, `border-border`, `text-muted-foreground`, `glass`, `surface`, `text-brand-gradient`) automatically pick up the new values across Wallet, Mine, Network, Bridge, Block Explorer, Send/Redeem.
+- The Blob Run game canvas keeps its dark playfield (it uses hard-coded `rgba(7,12,22,…)` for the in-game HUD so the gameplay area still feels immersive).
+- All cobalt/cyan brand elements, gradients, glow rings, and the `ring-cyan-flair` accent stay intact.
+- No layout, spacing, typography, or component-structure changes.
 
-- `src/lib/blob/level.ts` — add `"low"` obstacle generation + `drawLowBar` exported renderer.
-- `src/components/blob/BlobRunGame.tsx` — preventDefault on ArrowDown; spawn low obstacles at overhead Y; route to `drawLowBar` based on `o.type`; add on-screen duck button with press/release handlers.
+### File touched
 
-### Notes
+- `src/index.css` — `:root`, `.dark`, and `body::before` token values only.
 
-- Existing duck hitbox (`ph: 22`, lower y center) already lets the player slide under low obstacles, so no physics changes are needed once the bar is positioned correctly.
-- The new duck button reuses the same `dRef` ref the keyboard handler uses, so no game-loop changes are required for it to work.
+### Verification after apply
+
+Spot-check each tab (Wallet, Mine, Network, Bridge, Block Explorer) at the current 414×646 mobile viewport plus desktop to confirm: cards visibly separate from background, text remains readable, brand cobalt/cyan still pop, no element looks washed out.
+

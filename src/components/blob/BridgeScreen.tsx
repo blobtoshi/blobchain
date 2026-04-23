@@ -355,7 +355,7 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast, config: configProp
                 </div>
                 <div className="flex justify-between text-primary">
                   <span>You receive on Solana</span>
-                  <span className="num">{parsedAmt.toFixed(BLOB_DECIMALS)} SPL</span>
+                  <span className="num">{parsedAmt.toFixed(BLOB_DECIMALS)} WBLOB</span>
                 </div>
               </div>
             )}

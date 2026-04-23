@@ -69,7 +69,9 @@ export default function BridgeScreen(props: any) {
           <ForwardBridge {...props} config={config} />
         </TabsContent>
 
-        <TabsContent value="reverse" className="mt-0">
+        {/* forceMount keeps RedeemPanel + its polling alive across tab switches,
+            so in-flight redemptions don't get orphaned mid-verification. */}
+        <TabsContent value="reverse" className="mt-0 data-[state=inactive]:hidden" forceMount>
           <Suspense fallback={
             <div className="glass-hi p-10 flex items-center justify-center text-sm text-muted-foreground gap-2">
               <Loader2 className="w-4 h-4 animate-spin" /> Loading Solana wallet…

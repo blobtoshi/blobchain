@@ -286,9 +286,26 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
     <div className="space-y-2">
       <div className="relative rounded-2xl overflow-hidden border border-border/50" style={{ lineHeight: 0, boxShadow: "0 20px 60px hsl(220 50% 2% / 0.6)" }}>
         <canvas ref={cvs} width={CW} height={CH}
-          style={{ display: "block", width: "100%", height: "auto" }}
+          style={{ display: "block", width: "100%", height: "auto", touchAction: "none" }}
           onTouchStart={onTap} onTouchEnd={() => { jRef.current = false; }}
         />
+        {gs.status === "playing" && (
+          <button
+            type="button"
+            aria-label="Duck"
+            onTouchStart={(e) => { e.preventDefault(); dRef.current = true; }}
+            onTouchEnd={(e) => { e.preventDefault(); dRef.current = false; }}
+            onTouchCancel={() => { dRef.current = false; }}
+            onMouseDown={(e) => { e.preventDefault(); dRef.current = true; }}
+            onMouseUp={() => { dRef.current = false; }}
+            onMouseLeave={() => { dRef.current = false; }}
+            onContextMenu={(e) => e.preventDefault()}
+            className="absolute bottom-3 right-3 select-none px-4 py-2 rounded-full bg-background/60 backdrop-blur-sm border border-accent/40 text-accent text-xs font-semibold tracking-[0.2em] shadow-[0_0_18px_hsl(var(--accent)/0.25)] active:bg-accent/30 active:scale-95 transition"
+            style={{ touchAction: "none" }}
+          >
+            ↓ DUCK
+          </button>
+        )}
         {gs.status === "idle" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
             <div className="text-xs tracking-[0.3em] text-muted-foreground mb-2">READY</div>

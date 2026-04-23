@@ -92,12 +92,14 @@ Deno.serve(async (req) => {
     }, { onConflict: "address" });
     if (error) {
       if ((error as any).code === "23505") return bad(`username "${username}" is taken`);
-      return bad(error.message, 500);
+      console.error("[register-player] upsert failed", error);
+      return bad("internal error", 500);
     }
 
     return ok_({ address, username });
   } catch (e) {
-    return bad(String((e as Error)?.message ?? e), 500);
+    console.error("[register-player] unexpected error", e);
+    return bad("internal error", 500);
   }
 });
 

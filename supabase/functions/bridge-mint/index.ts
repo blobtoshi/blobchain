@@ -295,13 +295,17 @@ Deno.serve(async (req) => {
           confirmed_at: confirmed ? new Date().toISOString() : null,
         })
         .select().single();
-      if (insErr) return bad(insErr.message, 500);
+      if (insErr) {
+        console.error("[bridge-mint] request insert failed", insErr);
+        return bad("internal error", 500);
+      }
       row = inserted;
     }
 
     const updated = await processRequest(supa, row);
     return ok_(updated);
   } catch (e) {
-    return bad(String((e as Error)?.message ?? e), 500);
+    console.error("[bridge-mint] unexpected error", e);
+    return bad("internal error", 500);
   }
 });

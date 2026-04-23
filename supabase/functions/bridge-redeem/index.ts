@@ -348,7 +348,10 @@ Deno.serve(async (req) => {
           status: "pending",
         })
         .select().single();
-      if (insErr) return bad(insErr.message, 500);
+      if (insErr) {
+        console.error("[bridge-redeem] redeem insert failed", insErr);
+        return bad("internal error", 500);
+      }
       row = inserted;
     }
 
@@ -357,6 +360,7 @@ Deno.serve(async (req) => {
     EdgeRuntime.waitUntil(verifyAndCredit(supa, sol_signature));
     return ok_(row);
   } catch (e) {
-    return bad(String((e as Error)?.message ?? e), 500);
+    console.error("[bridge-redeem] unexpected error", e);
+    return bad("internal error", 500);
   }
 });

@@ -2,85 +2,94 @@
 @tailwind components;
 @tailwind utilities;
 
-/* BLOB CHAIN — glassy minimal dark design system. All colors HSL. */
+/* BLOB CHAIN — cobalt + cyan glassy minimal dark design system. All colors HSL. */
 
 @layer base {
   :root {
     /* Dark by default for this app */
-    --background: 220 30% 5%;
-    --foreground: 180 20% 92%;
+    --background: 222 35% 5%;
+    --foreground: 210 30% 94%;
 
-    --card: 220 30% 7%;
-    --card-foreground: 180 20% 92%;
+    --card: 220 32% 7%;
+    --card-foreground: 210 30% 94%;
 
-    --popover: 220 35% 6%;
-    --popover-foreground: 180 20% 92%;
+    --popover: 222 38% 6%;
+    --popover-foreground: 210 30% 94%;
 
-    --primary: 168 100% 50%;
+    /* Cobalt — primary brand */
+    --primary: 215 95% 56%;
     --primary-foreground: 220 40% 6%;
+    --primary-glow: 215 95% 66%;
 
-    --secondary: 220 25% 12%;
-    --secondary-foreground: 180 15% 85%;
+    --secondary: 220 28% 12%;
+    --secondary-foreground: 210 25% 88%;
 
-    --muted: 220 25% 10%;
-    --muted-foreground: 215 15% 55%;
+    --muted: 220 28% 10%;
+    --muted-foreground: 215 18% 58%;
 
-    --accent: 168 80% 45%;
+    /* Cyan — accent / flair */
+    --accent: 188 95% 55%;
     --accent-foreground: 220 40% 6%;
 
-    --destructive: 0 75% 55%;
+    --destructive: 0 78% 58%;
     --destructive-foreground: 0 0% 98%;
 
-    --warning: 45 100% 55%;
-    --info: 215 90% 60%;
+    --success: 142 70% 48%;
+    --success-foreground: 220 40% 6%;
+    --warning: 38 95% 58%;
+    --info: 215 95% 60%;
 
-    --border: 220 25% 14%;
-    --input: 220 25% 12%;
-    --ring: 168 100% 50%;
+    --border: 220 28% 14%;
+    --input: 220 28% 12%;
+    --ring: 215 95% 56%;
 
     --radius: 0.75rem;
 
     /* Glass surfaces */
-    --glass: 220 30% 8% / 0.6;
-    --glass-border: 180 30% 80% / 0.06;
-    --glass-hi: 180 30% 80% / 0.10;
+    --glass: 220 34% 8% / 0.6;
+    --glass-border: 200 40% 80% / 0.07;
+    --glass-hi: 200 40% 80% / 0.11;
 
-    --shadow-glow: 0 0 40px hsl(168 100% 50% / 0.15);
-    --shadow-card: 0 8px 32px hsl(220 50% 2% / 0.6);
+    --shadow-glow: 0 0 40px hsl(215 95% 56% / 0.18);
+    --shadow-card: 0 8px 32px hsl(222 50% 2% / 0.6);
+
+    /* Brand gradients */
+    --gradient-brand: linear-gradient(135deg, hsl(215 95% 56%), hsl(188 95% 55%));
+    --gradient-brand-soft: linear-gradient(135deg, hsl(215 95% 56% / 0.18), hsl(188 95% 55% / 0.12));
 
     --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
 
-    --sidebar-background: 220 30% 6%;
-    --sidebar-foreground: 180 15% 80%;
-    --sidebar-primary: 168 100% 50%;
+    --sidebar-background: 222 35% 6%;
+    --sidebar-foreground: 210 25% 82%;
+    --sidebar-primary: 215 95% 56%;
     --sidebar-primary-foreground: 220 40% 6%;
-    --sidebar-accent: 220 25% 12%;
-    --sidebar-accent-foreground: 180 15% 85%;
-    --sidebar-border: 220 25% 14%;
-    --sidebar-ring: 168 100% 50%;
+    --sidebar-accent: 220 28% 12%;
+    --sidebar-accent-foreground: 210 25% 88%;
+    --sidebar-border: 220 28% 14%;
+    --sidebar-ring: 215 95% 56%;
   }
 
   .dark {
-    --background: 220 30% 5%;
-    --foreground: 180 20% 92%;
-    --card: 220 30% 7%;
-    --card-foreground: 180 20% 92%;
-    --popover: 220 35% 6%;
-    --popover-foreground: 180 20% 92%;
-    --primary: 168 100% 50%;
+    --background: 222 35% 5%;
+    --foreground: 210 30% 94%;
+    --card: 220 32% 7%;
+    --card-foreground: 210 30% 94%;
+    --popover: 222 38% 6%;
+    --popover-foreground: 210 30% 94%;
+    --primary: 215 95% 56%;
     --primary-foreground: 220 40% 6%;
-    --secondary: 220 25% 12%;
-    --secondary-foreground: 180 15% 85%;
-    --muted: 220 25% 10%;
-    --muted-foreground: 215 15% 55%;
-    --accent: 168 80% 45%;
+    --secondary: 220 28% 12%;
+    --secondary-foreground: 210 25% 88%;
+    --muted: 220 28% 10%;
+    --muted-foreground: 215 18% 58%;
+    --accent: 188 95% 55%;
     --accent-foreground: 220 40% 6%;
-    --destructive: 0 75% 55%;
+    --destructive: 0 78% 58%;
     --destructive-foreground: 0 0% 98%;
-    --border: 220 25% 14%;
-    --input: 220 25% 12%;
-    --ring: 168 100% 50%;
+    --border: 220 28% 14%;
+    --input: 220 28% 12%;
+    --ring: 215 95% 56%;
   }
 }
 
@@ -130,16 +139,25 @@
     text-transform: uppercase;
     color: hsl(var(--muted-foreground));
   }
+  .text-brand-gradient {
+    background: var(--gradient-brand);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .ring-cyan-flair {
+    box-shadow: 0 0 0 1px hsl(var(--accent) / 0.45), 0 0 24px hsl(var(--accent) / 0.25);
+  }
 }
 
-/* Subtle background gradient */
+/* Subtle background gradient — cobalt + cyan duotone */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   background:
-    radial-gradient(ellipse at 20% 0%, hsl(168 100% 50% / 0.08), transparent 50%),
-    radial-gradient(ellipse at 80% 100%, hsl(215 90% 50% / 0.06), transparent 50%);
+    radial-gradient(ellipse at 18% 0%, hsl(215 95% 50% / 0.10), transparent 55%),
+    radial-gradient(ellipse at 82% 100%, hsl(188 95% 55% / 0.08), transparent 55%);
   pointer-events: none;
   z-index: 0;
 }

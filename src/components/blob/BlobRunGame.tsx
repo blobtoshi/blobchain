@@ -260,7 +260,13 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
         }
       }
       draw();
-      setGs(prev => ({ ...prev, score: g.score, combo: g.combo }));
+      // Avoid per-frame React re-renders. Score/combo are drawn directly on the
+      // canvas inside drawHUD, so React only needs updates on meaningful events
+      // (combo change, or a slow heartbeat for any external observers).
+      if (g.combo !== g._lastCombo) {
+        g._lastCombo = g.combo;
+        setGs(prev => ({ ...prev, score: g.score, combo: g.combo }));
+      }
       raf.current = requestAnimationFrame(loop);
     }
 

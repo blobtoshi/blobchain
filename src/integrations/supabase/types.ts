@@ -265,7 +265,39 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      blob_players_public: {
+        Row: {
+          address: string | null
+          best_score: number | null
+          blocks_won: number | null
+          first_seen: string | null
+          games_played: number | null
+          last_active: string | null
+          total_mined: number | null
+          username: string | null
+        }
+        Insert: {
+          address?: string | null
+          best_score?: number | null
+          blocks_won?: number | null
+          first_seen?: string | null
+          games_played?: number | null
+          last_active?: string | null
+          total_mined?: number | null
+          username?: string | null
+        }
+        Update: {
+          address?: string | null
+          best_score?: number | null
+          blocks_won?: number | null
+          first_seen?: string | null
+          games_played?: number | null
+          last_active?: string | null
+          total_mined?: number | null
+          username?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       get_block_leaderboard: {

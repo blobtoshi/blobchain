@@ -61,9 +61,13 @@ export default function RedeemPanel({
       try {
         const mintPub = new PublicKey(splMintAddress);
         const ata = await getAssociatedTokenAddress(mintPub, publicKey, true);
-        const bal = await connection.getTokenAccountBalance(ata).catch(() => null);
+        const bal = await connection.getTokenAccountBalance(ata).catch((e) => {
+          console.warn("[redeem] getTokenAccountBalance failed", e);
+          return null;
+        });
         if (!cancelled) setSplBalance(bal?.value?.uiAmount ?? 0);
-      } catch {
+      } catch (e) {
+        console.warn("[redeem] balance lookup failed", e);
         if (!cancelled) setSplBalance(0);
       }
     })();
@@ -119,7 +123,16 @@ export default function RedeemPanel({
     try {
       setSt("preparing");
       const mintPub = new PublicKey(splMintAddress);
-      const mintInfo = await getMint(connection, mintPub);
+      let mintInfo;
+      try {
+        mintInfo = await getMint(connection, mintPub);
+      } catch (e: any) {
+        const msg = String(e?.message ?? e);
+        if (msg.includes("403") || msg.toLowerCase().includes("forbidden")) {
+          throw new Error("Solana RPC unavailable (403). Ask the operator to configure a browser-friendly SOLANA_RPC_URL.");
+        }
+        throw new Error(`Failed to load mint info: ${msg}`);
+      }
       const ata = await getAssociatedTokenAddress(mintPub, publicKey, true);
       const baseUnits = BigInt(Math.round(parsedAmt * 10 ** mintInfo.decimals));
       if (baseUnits <= 0n) { setErr("Amount rounds to zero"); setSt("failed"); return; }

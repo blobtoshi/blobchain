@@ -16,6 +16,7 @@ Deno.serve((req) => {
     JSON.stringify({
       bridgeAddress: BRIDGE_ADDRESS,
       splMintAddress: Deno.env.get("SOLANA_SPL_MINT_ADDRESS") ?? null,
+      solanaRpcUrl: Deno.env.get("SOLANA_RPC_URL") ?? null,
     }),
     { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
   );

@@ -264,6 +264,7 @@ export type BridgeRequest = {
 export type BridgeConfig = {
   bridgeAddress: string;
   splMintAddress: string | null;
+  solanaRpcUrl?: string | null;
 };
 
 export async function fetchBridgeConfig(): Promise<BridgeConfig | null> {

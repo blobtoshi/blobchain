@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { useEffect, useMemo, useState } from "react";
 import * as Relay from "@/lib/blobRelay";
-import { ChevronDown, SlidersHorizontal, X, Search, Trophy, ArrowUpRight, ArrowDownLeft } from "lucide-react";
+import { ChevronDown, SlidersHorizontal, X, Search, HandCoins, ArrowUpRight, ArrowDownLeft, Trophy } from "lucide-react";
 import {
   ExplorerTx, flattenChainTxs, mempoolToTxs, shortHash, timeAgo,
   TxFilters, BlockFilters, AddrFilters,
@@ -372,7 +372,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                 <button key={t.id} onClick={() => { setTab("txs"); setSelTx(t.id); }}
                   className="w-full text-left glass px-3 py-2.5 hover:bg-secondary/30 transition flex items-center justify-between gap-2 text-xs">
                   {t.kind === "reward"
-                    ? <Trophy className="w-3.5 h-3.5 text-[hsl(var(--warning))] shrink-0" />
+                    ? <HandCoins className="w-3.5 h-3.5 text-[hsl(var(--warning))] shrink-0" />
                     : <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
                   <span className="num text-muted-foreground truncate flex-1">{shortHash(t.id, 6)}</span>
                   <span className="num text-primary/80 shrink-0">{t.amount} BLOB</span>
@@ -548,9 +548,9 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
               <div onClick={() => setSelTx(selTx === t.id ? null : t.id)}
                 className="glass px-3 py-2.5 cursor-pointer hover:bg-secondary/30 transition grid grid-cols-[18px_1fr_70px_60px_60px] sm:grid-cols-[18px_1fr_1fr_80px_70px_80px] gap-2 items-center text-xs">
                 {t.kind === "reward"
-                  ? <Trophy className="w-3.5 h-3.5 text-[hsl(var(--warning))]" />
+                  ? <HandCoins className="w-3.5 h-3.5 text-[hsl(var(--warning))]" />
                   : <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground" />}
-                <span className="text-foreground/80 truncate">{t.kind === "reward" ? "Network Mint" : (t.fromUsername || shortHash(t.from, 6))}</span>
+                <span className="text-foreground/80 truncate">{t.kind === "reward" ? "Block Reward" : (t.fromUsername || shortHash(t.from, 6))}</span>
                 <span className="hidden sm:block text-foreground/80 truncate">{t.toUsername || shortHash(t.to, 6)}</span>
                 <span className="num text-primary/80">{t.amount} BLOB</span>
                 <span className="num text-muted-foreground">{t.status === "pending" ? "—" : `#${t.block}`}</span>
@@ -564,7 +564,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                   <div className="grid grid-cols-[80px_1fr] gap-2">
                     <span className="label-eyebrow">From</span>
                     <button onClick={() => { setTab("addresses"); setSelAddr(t.from); }} className="num text-[hsl(var(--warning))] hover:underline text-left break-all">
-                      {t.kind === "reward" ? "Network Mint (block reward)" : t.from}
+                      {t.kind === "reward" ? "Block Reward" : t.from}
                     </button>
                   </div>
                   <div className="grid grid-cols-[80px_1fr] gap-2">
@@ -699,12 +699,12 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                     <button key={t.id} onClick={() => { setTab("txs"); setSelTx(t.id); }}
                       className="w-full text-left glass px-3 py-2.5 hover:bg-secondary/30 transition flex items-center justify-between gap-2 text-xs">
                       {t.kind === "reward"
-                        ? <Trophy className="w-3.5 h-3.5 text-[hsl(var(--warning))] shrink-0" />
+                        ? <HandCoins className="w-3.5 h-3.5 text-[hsl(var(--warning))] shrink-0" />
                         : t.from === selAddr
                           ? <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                           : <ArrowDownLeft className="w-3.5 h-3.5 text-primary/80 shrink-0" />}
                       <span className="text-foreground/70 truncate flex-1">
-                        {t.from === selAddr ? `→ ${shortHash(t.to, 8)}` : `← ${t.kind === "reward" ? "Network Mint" : shortHash(t.from, 8)}`}
+                        {t.from === selAddr ? `→ ${shortHash(t.to, 8)}` : `← ${t.kind === "reward" ? "Block Reward" : shortHash(t.from, 8)}`}
                       </span>
                       <span className={`num shrink-0 ${t.from === selAddr ? "text-muted-foreground" : "text-primary/80"}`}>
                         {t.from === selAddr ? "-" : "+"}{t.amount} BLOB

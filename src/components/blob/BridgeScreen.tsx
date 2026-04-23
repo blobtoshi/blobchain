@@ -261,28 +261,7 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast, config: configProp
   };
 
   return (
-    <div className="space-y-5">
-      {/* Hero */}
-      <div className="relative overflow-hidden rounded-3xl glass-hi px-5 sm:px-8 py-8 sm:py-10">
-        <div className="pointer-events-none absolute -top-32 right-0 w-[420px] h-[420px] rounded-full bg-primary/10 blur-3xl" />
-        <div className="relative flex flex-col gap-3">
-          <div className="flex items-center gap-2">
-            <div className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-primary/10 border border-primary/30 text-primary">
-              <ArrowLeftRight className="w-4 h-4" />
-            </div>
-            <span className="label-eyebrow">Bridge</span>
-          </div>
-          <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight">
-            <span className="text-foreground">Bridge </span>
-            <span className="text-primary drop-shadow-[0_0_24px_hsl(var(--primary)/0.4)]">BLOB</span>
-            <span className="text-foreground"> to Solana</span>
-          </h1>
-          <div className="text-sm text-muted-foreground max-w-xl leading-relaxed">
-            Send BLOB to the bridge address — we mint the same amount of Wrapped BLOB to your Solana wallet 1:1, no bridge fee. You only pay the network fee on Blob Chain.
-          </div>
-        </div>
-      </div>
-
+    <>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Form */}
         <div className="lg:col-span-2 space-y-4">

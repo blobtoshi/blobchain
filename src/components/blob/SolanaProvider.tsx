@@ -9,12 +9,21 @@ import { PhantomWalletAdapter } from "@solana/wallet-adapter-phantom";
 import { SolflareWalletAdapter } from "@solana/wallet-adapter-solflare";
 import "@solana/wallet-adapter-react-ui/styles.css";
 
-const DEFAULT_RPC = "https://api.mainnet-beta.solana.com";
+// Browser-friendly public fallback. The default `api.mainnet-beta.solana.com`
+// blocks browser-origin RPC calls with 403; publicnode allows CORS but is
+// rate-limited. Prefer a configured `SOLANA_RPC_URL` secret via bridge-config.
+const FALLBACK_RPC = "https://solana-rpc.publicnode.com";
 
-export default function SolanaProvider({ children }: { children: ReactNode }) {
+export default function SolanaProvider({
+  children,
+  endpoint: endpointProp,
+}: {
+  children: ReactNode;
+  endpoint?: string | null;
+}) {
   const endpoint = useMemo(
-    () => (import.meta as any).env.VITE_SOLANA_RPC_URL || DEFAULT_RPC,
-    [],
+    () => endpointProp || (import.meta as any).env.VITE_SOLANA_RPC_URL || FALLBACK_RPC,
+    [endpointProp],
   );
   const wallets = useMemo(
     () => [new PhantomWalletAdapter(), new SolflareWalletAdapter()],

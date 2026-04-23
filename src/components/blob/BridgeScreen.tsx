@@ -21,7 +21,7 @@ const RedeemPanel = lazy(() => import("./RedeemPanel"));
 
 export default function BridgeScreen(props: any) {
   const { wallet } = props;
-  const [config, setConfig] = useState<{ bridgeAddress: string; splMintAddress: string | null } | null>(null);
+  const [config, setConfig] = useState<{ bridgeAddress: string; splMintAddress: string | null; solanaRpcUrl?: string | null } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -75,7 +75,7 @@ export default function BridgeScreen(props: any) {
               <Loader2 className="w-4 h-4 animate-spin" /> Loading Solana wallet…
             </div>
           }>
-            <SolanaProvider>
+            <SolanaProvider endpoint={config?.solanaRpcUrl ?? null}>
               <RedeemPanel
                 splMintAddress={config?.splMintAddress ?? null}
                 defaultBlobAddress={wallet.address}

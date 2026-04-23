@@ -13,9 +13,10 @@ export function generateLevel(seed) {
     const gap = 240 + rng() * 280;
     pos += gap;
     const r = rng();
-    if (r < 0.5) obstacles.push({ at: pos, type: "fork", w: 36, h: 66 });
-    else if (r < 0.78) obstacles.push({ at: pos, type: "double", w: 36, h: 66 });
-    else obstacles.push({ at: pos, type: "tall", w: 40, h: 90 });
+    if (r < 0.38) obstacles.push({ at: pos, type: "fork", w: 36, h: 66 });
+    else if (r < 0.6) obstacles.push({ at: pos, type: "double", w: 36, h: 66 });
+    else if (r < 0.75) obstacles.push({ at: pos, type: "tall", w: 40, h: 90 });
+    else obstacles.push({ at: pos, type: "low", w: 60, h: 18 });
     if (rng() < 0.68) {
       const hs = ["low", "mid", "high"];
       tokens.push({ at: pos - gap * 0.4, height: hs[Math.floor(rng() * 3)] });

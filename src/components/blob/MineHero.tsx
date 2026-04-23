@@ -8,10 +8,11 @@ export default function MineHero({ blockInfo, onLaunch }: any) {
   return (
     <div className="relative overflow-hidden rounded-3xl glass-hi px-6 py-12 sm:py-16 text-center">
       <div className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[480px] h-[480px] rounded-full bg-primary/10 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-32 right-0 w-[360px] h-[360px] rounded-full bg-accent/10 blur-3xl" />
       <div className="relative">
         <h1 className="text-5xl sm:text-6xl font-semibold tracking-tight mb-3">
           <span className="text-foreground">MINE </span>
-          <span className="text-primary drop-shadow-[0_0_24px_hsl(var(--primary)/0.5)]">BLOB</span>
+          <span className="text-brand-gradient drop-shadow-[0_0_24px_hsl(var(--accent)/0.4)]">BLOB</span>
         </h1>
         <div className="text-xs sm:text-sm text-muted-foreground mb-8 num">
           Block #{blockInfo.height} · Reward: {blockInfo.reward} BLOB · Level seed #{blockInfo.seed}
@@ -31,7 +32,7 @@ export default function MineHero({ blockInfo, onLaunch }: any) {
         </div>
         <button
           onClick={onLaunch}
-          className="group relative inline-flex items-center gap-2 px-10 py-4 rounded-full bg-primary/10 border border-primary/40 text-primary font-semibold tracking-wide text-sm sm:text-base hover:bg-primary/20 transition-all shadow-[0_0_40px_hsl(var(--primary)/0.35)] hover:shadow-[0_0_60px_hsl(var(--primary)/0.55)]"
+          className="group relative inline-flex items-center gap-2 px-10 py-4 rounded-full bg-primary/10 border border-primary/40 text-primary font-semibold tracking-wide text-sm sm:text-base hover:bg-primary/20 hover:ring-1 hover:ring-accent/50 transition-all shadow-[0_0_40px_hsl(var(--primary)/0.35)] hover:shadow-[0_0_60px_hsl(var(--accent)/0.45)]"
         >
           <Play className="w-4 h-4 fill-primary" />
           LAUNCH BLOB RUN

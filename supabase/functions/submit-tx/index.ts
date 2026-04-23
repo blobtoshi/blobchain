@@ -120,7 +120,8 @@ Deno.serve(async (req) => {
         baseFeeRate: BASE_FEE_RATE,
       });
     } catch (e) {
-      return bad(String((e as Error)?.message ?? e), 500);
+      console.error("[submit-tx] fee-info error", e);
+      return bad("internal error", 500);
     }
   }
 
@@ -205,11 +206,15 @@ Deno.serve(async (req) => {
       timestamp: ts,
       status: "pending",
     });
-    if (error && (error as any).code !== "23505") return bad(error.message, 500);
+    if (error && (error as any).code !== "23505") {
+      console.error("[submit-tx] insert failed", error);
+      return bad("internal error", 500);
+    }
 
     return ok_({ id, fee, feeRate, bytes });
   } catch (e) {
-    return bad(String((e as Error)?.message ?? e), 500);
+    console.error("[submit-tx] unexpected error", e);
+    return bad("internal error", 500);
   }
 });
 

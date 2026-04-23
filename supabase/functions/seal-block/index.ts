@@ -66,6 +66,15 @@ Deno.serve(async (req) => {
     if (!Number.isFinite(targetHeight) || targetHeight < 1)
       return bad("invalid height");
 
+    // Self-gating: only allow sealing the block that the wall clock has just
+    // opened. Any past or future height is rejected outright. Combined with the
+    // "previous block must exist" + "block window must have elapsed" checks,
+    // this removes the DB-load attack surface without needing client secrets.
+    const wallHeight = currentHeight();
+    if (targetHeight !== wallHeight) {
+      return bad(`only the currently open block (#${wallHeight}) may be sealed`);
+    }
+
     const supa = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -185,7 +194,10 @@ Deno.serve(async (req) => {
     const { error } = await supa.from("blob_chain").insert(block);
     if (error) {
       // 23505 = duplicate height (raced with another sealer) — treat as success
-      if ((error as any).code !== "23505") return bad(error.message, 500);
+      if ((error as any).code !== "23505") {
+        console.error("[seal-block] insert failed", error);
+        return bad("internal error", 500);
+      }
     }
 
     // Clear included mempool txs
@@ -195,7 +207,8 @@ Deno.serve(async (req) => {
 
     return ok_({ height: targetHeight, winner: block.winner, reward });
   } catch (e) {
-    return bad(String((e as Error)?.message ?? e), 500);
+    console.error("[seal-block] unexpected error", e);
+    return bad("internal error", 500);
   }
 });
 

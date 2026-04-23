@@ -41,16 +41,18 @@ export default function BridgeScreen(props: any) {
       {/* Hero */}
       <div className="relative overflow-hidden rounded-3xl glass-hi px-5 sm:px-8 py-8 sm:py-10">
         <div className="pointer-events-none absolute -top-32 right-0 w-[420px] h-[420px] rounded-full bg-primary/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 -left-12 w-[320px] h-[320px] rounded-full bg-accent/10 blur-3xl" />
         <div className="relative flex flex-col gap-3">
           <div className="flex items-center gap-2">
-            <div className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-primary/10 border border-primary/30 text-primary">
-              <TrendingUpDown className="w-4 h-4" />
+            <div className="relative inline-flex items-center justify-center w-9 h-9 rounded-full bg-primary/10 border border-primary/30 text-primary shadow-[0_0_24px_hsl(var(--accent)/0.25)]">
+              <span className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_30%_30%,hsl(var(--accent)/0.35),transparent_70%)]" />
+              <TrendingUpDown className="relative w-4 h-4" />
             </div>
             <span className="label-eyebrow">Bridge</span>
           </div>
           <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight">
             <span className="text-foreground">Bridge </span>
-            <span className="text-primary drop-shadow-[0_0_24px_hsl(var(--primary)/0.4)]">BLOB</span>
+            <span className="text-brand-gradient drop-shadow-[0_0_24px_hsl(var(--accent)/0.35)]">BLOB</span>
             <span className="text-foreground"> ↔ Solana</span>
           </h1>
           <div className="text-sm text-muted-foreground max-w-xl leading-relaxed">

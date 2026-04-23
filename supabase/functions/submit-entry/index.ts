@@ -132,7 +132,10 @@ Deno.serve(async (req) => {
       signature,
     }, { onConflict: "address,block_height" });
 
-    if (error) return bad(error.message, 500);
+    if (error) {
+      console.error("[submit-entry] entry insert failed", error);
+      return bad("internal error", 500);
+    }
 
     const { error: pErr } = await supa.from("blob_players").upsert({
       address,
@@ -143,12 +146,14 @@ Deno.serve(async (req) => {
     if (pErr) {
       // 23505 = unique violation on lower(username)
       if ((pErr as any).code === "23505") return bad(`username "${username}" is taken`);
-      return bad(pErr.message, 500);
+      console.error("[submit-entry] player upsert failed", pErr);
+      return bad("internal error", 500);
     }
 
     return ok_({ address, block_height, score: finalScore });
   } catch (e) {
-    return bad(String((e as Error)?.message ?? e), 500);
+    console.error("[submit-entry] unexpected error", e);
+    return bad("internal error", 500);
   }
 });
 

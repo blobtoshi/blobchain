@@ -292,10 +292,10 @@ export default function BlobChainApp() {
       {newBlock && (
         <div
           className={`fixed top-16 left-0 right-0 z-[1000] px-6 py-3 backdrop-blur-xl border-b text-center flex justify-center items-center gap-5 ${
-            newBlock.isMine ? "bg-primary/15 border-primary/50" : "bg-card/80 border-[hsl(var(--warning)/0.4)]"
+            newBlock.isMine ? "bg-primary/15 border-primary/50 shadow-[0_0_40px_hsl(var(--primary)/0.35)]" : "bg-card/80 border-accent/40"
           }`}
         >
-          <span className={`text-sm font-semibold tracking-wide ${newBlock.isMine ? "text-primary" : "text-[hsl(var(--warning))]"}`}>
+          <span className={`text-sm font-semibold tracking-wide ${newBlock.isMine ? "text-primary" : "text-accent"}`}>
             {newBlock.isMine ? "🏆 You mined block" : "New block"} #{newBlock.height}
           </span>
           <span className="text-xs text-muted-foreground">
@@ -311,7 +311,7 @@ export default function BlobChainApp() {
             <img
               src={blobLogo}
               alt="BLOB"
-              className="h-20 w-20 sm:h-24 sm:w-24 object-contain drop-shadow-[0_0_16px_hsl(var(--primary)/0.6)]"
+              className="h-20 w-20 sm:h-24 sm:w-24 object-contain drop-shadow-[0_0_18px_hsl(var(--accent)/0.45)]"
               style={{ imageRendering: "pixelated" }}
             />
           </h1>
@@ -326,7 +326,12 @@ export default function BlobChainApp() {
                   className={`relative px-4 py-2 text-sm font-medium transition ${active ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
                 >
                   {n.text}
-                  {active && <span className="absolute left-3 right-3 -bottom-px h-px bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />}
+                  {active && (
+                    <>
+                      <span className="absolute left-3 right-5 -bottom-px h-[2px] bg-primary shadow-[0_0_10px_hsl(var(--primary))]" />
+                      <span className="absolute right-2.5 -bottom-[3px] w-1 h-1 rounded-full bg-accent shadow-[0_0_8px_hsl(var(--accent))]" />
+                    </>
+                  )}
                 </button>
               );
             })}

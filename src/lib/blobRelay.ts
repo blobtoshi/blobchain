@@ -228,15 +228,15 @@ export type Player = {
 };
 
 export async function fetchPlayers(): Promise<Player[]> {
-  const { data, error } = await supabase
-    .from("blob_players")
-    .select("address,username,public_key,blocks_won,total_mined,best_score,games_played,first_seen,last_active")
+  const { data, error } = await (supabase as any)
+    .from("blob_players_public")
+    .select("address,username,blocks_won,total_mined,best_score,games_played,first_seen,last_active")
     .order("first_seen", { ascending: true });
   if (error) { console.error("[relay] fetchPlayers", error); return []; }
   return (data ?? []).map((r: any) => ({
     address: r.address,
     username: r.username,
-    publicKey: r.public_key ?? undefined,
+    publicKey: undefined,
     blocksWon: Number(r.blocks_won ?? 0),
     totalMined: Number(r.total_mined ?? 0),
     bestScore: Number(r.best_score ?? 0),

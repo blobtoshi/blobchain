@@ -169,7 +169,7 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
       } else if (g.trail) {
         g.trail.length = 0;
       }
-      g.obstacles.forEach(o => drawFork(ctx, o));
+      g.obstacles.forEach(o => o.type === "low" ? drawLowBar(ctx, o) : drawFork(ctx, o));
       g.tokens.forEach(t => { if (t.alive) drawToken(ctx, t.x, t.y, g.frame); });
       g.parts.forEach(pt => {
         ctx.save(); ctx.globalAlpha = Math.max(0, pt.life);
@@ -206,9 +206,13 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
 
       while (obsIdx < lev.obstacles.length && g.dist >= lev.obstacles[obsIdx].at) {
         const ev = lev.obstacles[obsIdx++];
-        const ey = ev.type === "tall" ? GY - 90 : GY - 66;
-        g.obstacles.push({ x: CW + 8, y: ey, w: ev.w, h: ev.h });
-        if (ev.type === "double") g.obstacles.push({ x: CW + 190, y: ey, w: ev.w, h: ev.h });
+        if (ev.type === "low") {
+          g.obstacles.push({ x: CW + 8, y: GY - 60, w: ev.w, h: ev.h, type: "low" });
+        } else {
+          const ey = ev.type === "tall" ? GY - 90 : GY - 66;
+          g.obstacles.push({ x: CW + 8, y: ey, w: ev.w, h: ev.h, type: ev.type });
+          if (ev.type === "double") g.obstacles.push({ x: CW + 190, y: ey, w: ev.w, h: ev.h, type: ev.type });
+        }
       }
       while (tokIdx < lev.tokens.length && g.dist >= lev.tokens[tokIdx].at) {
         const ev = lev.tokens[tokIdx++];

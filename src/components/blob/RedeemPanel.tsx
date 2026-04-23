@@ -130,7 +130,7 @@ export default function RedeemPanel({
       const memoIx = new TransactionInstruction({
         keys: [{ pubkey: publicKey, isSigner: true, isWritable: false }],
         programId: new PublicKey(MEMO_PROGRAM_ID),
-        data: Buffer.from(`blob:${blobAddr.trim()}`, "utf8"),
+        data: new TextEncoder().encode(`blob:${blobAddr.trim()}`) as unknown as Buffer,
       });
 
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("finalized");

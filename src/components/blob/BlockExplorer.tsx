@@ -601,6 +601,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
           pMem={pMem}
           setPMem={setPMem}
           onSelectTx={(id) => { setTab("txs"); setSelTx(id); }}
+          onSelectBlock={(h) => { setTab("blocks"); setSelBlock(h); }}
         />
       )}
 

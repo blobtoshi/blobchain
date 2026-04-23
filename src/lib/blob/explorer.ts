@@ -244,6 +244,67 @@ export function bucketForRate(rate: number): FeeBucket {
 
 export function allBuckets(): FeeBucket[] { return BUCKET_DEFS; }
 
+// Per-block fee/size summary for the timeline tiles.
+export function summarizeBlockFees(block: any) {
+  const txs = (block?.transactions || []) as any[];
+  let totalFees = 0;
+  let sizeBytes = 0;
+  const rates: number[] = [];
+  for (const tx of txs) {
+    const bytes = estimateMempoolTxBytes(tx);
+    sizeBytes += bytes;
+    const fee = Number(tx.fee || 0);
+    totalFees += fee;
+    rates.push(feeRateOf(tx, bytes));
+  }
+  rates.sort((a, b) => a - b);
+  const minRate = rates[0] ?? 0;
+  const maxRate = rates[rates.length - 1] ?? 0;
+  const medRate = rates.length ? rates[Math.floor(rates.length / 2)] : 0;
+  return { txCount: txs.length, totalFees, sizeBytes, minRate, medRate, maxRate };
+}
+
+// Fee estimation tiers — derived from greedy-packed projected blocks.
+// Each tier is the cheapest fee-rate that still makes it into block N.
+export type FeeEstimates = {
+  noPriority: { rate: number; etaBlocks: number };
+  low:        { rate: number; etaBlocks: number };
+  medium:     { rate: number; etaBlocks: number };
+  high:       { rate: number; etaBlocks: number };
+  priority:   { rate: number; etaBlocks: number };
+};
+
+export function feeEstimates(
+  enriched: { rate: number; bytes: number }[],
+  maxBlockSize: number,
+  minRate = 1,
+): FeeEstimates {
+  const sorted = [...enriched].sort((a, b) => b.rate - a.rate);
+  const blocks: number[] = []; // cheapest rate that fit in each projected block
+  let curBytes = 0;
+  let curMin = Infinity;
+  for (const x of sorted) {
+    if (curBytes + x.bytes > maxBlockSize && curBytes > 0) {
+      blocks.push(curMin === Infinity ? minRate : curMin);
+      curBytes = 0; curMin = Infinity;
+    }
+    curBytes += x.bytes;
+    if (x.rate < curMin) curMin = x.rate;
+  }
+  if (curBytes > 0) blocks.push(curMin === Infinity ? minRate : curMin);
+  const at = (i: number) => ({
+    rate: Math.max(minRate, blocks[i] ?? minRate),
+    etaBlocks: Math.max(1, Math.min(blocks.length || 1, i + 1)),
+  });
+  return {
+    priority: at(0),
+    high:     at(Math.min(1, blocks.length - 1)),
+    medium:   at(Math.min(2, blocks.length - 1)),
+    low:      at(Math.min(4, blocks.length - 1)),
+    noPriority: { rate: minRate, etaBlocks: Math.max(6, blocks.length + 2) },
+  };
+}
+
 export function addrFiltersActive(f: AddrFilters): number {
   let n = 0;
   if (f.q) n++;

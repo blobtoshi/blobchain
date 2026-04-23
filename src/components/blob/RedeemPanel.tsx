@@ -6,7 +6,7 @@
 // We POST { sol_signature, blob_address, amount } to bridge-redeem and poll.
 import { useEffect, useMemo, useState } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import {
   PublicKey, Transaction, TransactionInstruction,
 } from "@solana/web3.js";
@@ -34,7 +34,8 @@ export default function RedeemPanel({
   defaultBlobAddress?: string;
 }) {
   const { connection } = useConnection();
-  const { publicKey, signTransaction, connected } = useWallet();
+  const { publicKey, signTransaction, connected, disconnect } = useWallet();
+  const { setVisible: setWalletModalVisible } = useWalletModal();
   const [blobAddr, setBlobAddr] = useState(defaultBlobAddress ?? "");
   const [amt, setAmt] = useState("");
   const [st, setSt] = useState<Status>("idle");
@@ -212,12 +213,17 @@ export default function RedeemPanel({
         <div className="glass-hi p-5 sm:p-6 space-y-4">
           <div className="flex items-center justify-between">
             <div className="label-eyebrow">Redeem WBLOB → BLOB</div>
-            <WalletMultiButton style={{
-              background: "hsl(var(--primary))",
-              color: "hsl(var(--primary-foreground))",
-              fontSize: 12, height: 32, lineHeight: "32px", padding: "0 12px",
-              borderRadius: 9999, fontWeight: 600,
-            }} />
+            <button
+              type="button"
+              onClick={() => connected ? disconnect() : setWalletModalVisible(true)}
+              className={
+                connected
+                  ? "inline-flex items-center gap-1.5 h-8 px-3 rounded-full border border-border text-[12px] font-semibold text-muted-foreground hover:text-destructive hover:border-destructive/40 transition"
+                  : "inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-primary text-primary-foreground text-[12px] font-semibold hover:bg-primary/90 transition"
+              }
+            >
+              {connected ? "Disconnect wallet" : "Connect Solana wallet"}
+            </button>
           </div>
 
           {connected && publicKey && (

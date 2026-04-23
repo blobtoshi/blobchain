@@ -268,7 +268,7 @@ export default function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent
         )}
       </div>
 
-      <div className="rounded-lg border border-border/60 bg-secondary/30 px-3 py-2 text-xs space-y-1">
+      <div className="glass px-3 py-2 text-xs space-y-1">
         <div className="flex items-center justify-between text-muted-foreground">
           <span>Fee rate</span>
           <span className="num">{activeFeeRate} drops/B</span>

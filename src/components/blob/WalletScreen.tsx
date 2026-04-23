@@ -67,7 +67,7 @@ export default function WalletScreen({ wallet, chain, mempool, onBroadcast }: an
 
   return (
     <div className="space-y-5">
-      <div className="relative overflow-hidden rounded-3xl glass-hi px-5 sm:px-8 py-8 sm:py-10">
+      <div className="relative overflow-hidden rounded-3xl glass-pane px-5 sm:px-8 py-8 sm:py-10">
         <div className="pointer-events-none absolute -top-32 right-0 w-[420px] h-[420px] rounded-full bg-primary/10 blur-3xl" />
         <div className="relative flex flex-col gap-6">
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">

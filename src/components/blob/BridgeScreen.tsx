@@ -39,7 +39,7 @@ export default function BridgeScreen(props: any) {
   return (
     <div className="space-y-5">
       {/* Hero */}
-      <div className="relative overflow-hidden rounded-3xl glass-hi px-5 sm:px-8 py-8 sm:py-10">
+      <div className="relative overflow-hidden rounded-3xl glass-pane px-5 sm:px-8 py-8 sm:py-10">
         <div className="pointer-events-none absolute -top-32 right-0 w-[420px] h-[420px] rounded-full bg-primary/10 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 -left-12 w-[320px] h-[320px] rounded-full bg-accent/10 blur-3xl" />
         <div className="relative flex flex-col gap-3">

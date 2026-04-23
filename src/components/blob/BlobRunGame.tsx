@@ -78,10 +78,6 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
     }
 
     function drawHUD() {
-      const secs = blockInfo.remaining;
-      const m = Math.floor(secs / 60), s = secs % 60;
-      const tstr = `${m}:${s.toString().padStart(2, "0")}`;
-      const urgent = secs < 20;
       const FNT = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, sans-serif';
       const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
@@ -106,12 +102,9 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
       ctx.fillStyle = "rgba(180, 220, 230, 0.45)";
       ctx.font = `9px ${FNT}`;
       ctx.fillText(`BLOCK #${blockInfo.height}`, CW / 2, 24);
-      ctx.shadowColor = urgent ? "#ff5a6e" : "#7dffe0";
-      ctx.shadowBlur = urgent ? 12 : 6;
-      ctx.fillStyle = urgent ? "#ff8896" : "#7dffe0";
+      ctx.fillStyle = "#7dffe0";
       ctx.font = `600 18px ${MONO}`;
-      ctx.fillText(tstr, CW / 2, 42);
-      ctx.shadowBlur = 0;
+      ctx.fillText(`#${blockInfo.height}`, CW / 2, 42);
 
       ctx.textAlign = "right";
       ctx.fillStyle = "rgba(180, 220, 230, 0.45)";
@@ -199,7 +192,9 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
         p.sq += (1 - p.sq) * .13; p.wob++; p.blink = (Math.floor(p.wob / 80) % 9 === 0);
         if (!g.locked) {
           g.score++; g.dist += g.speed;
-          g.speed = Math.min(4.5 + Math.floor(g.score / 3000) * .5, 12);
+          // Aggressive, unbounded difficulty curve — eventually impossible.
+          // Quadratic-ish ramp so the first ~20s feel fair, then it accelerates hard.
+          g.speed = 4.5 + Math.pow(g.score / 600, 1.15) * 0.9;
         }
         if (g.comboTimer > 0 && --g.comboTimer === 0) g.combo = 0;
       }
@@ -207,7 +202,9 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
       while (obsIdx < lev.obstacles.length && g.dist >= lev.obstacles[obsIdx].at) {
         const ev = lev.obstacles[obsIdx++];
         if (ev.type === "low") {
-          g.obstacles.push({ x: CW + 8, y: GY - 60, w: ev.w, h: ev.h, type: "low" });
+          // Bar must overlap a standing player's body (player y≈GY-28, ph=42 → top ≈ GY-49).
+          // Place bar bottom around GY-32 so a running blob clearly hits it; ducking (ph=22, y=GY-16 → top GY-27) clears it.
+          g.obstacles.push({ x: CW + 8, y: GY - 50, w: ev.w, h: ev.h, type: "low" });
         } else {
           const ey = ev.type === "tall" ? GY - 90 : GY - 66;
           g.obstacles.push({ x: CW + 8, y: ey, w: ev.w, h: ev.h, type: ev.type });

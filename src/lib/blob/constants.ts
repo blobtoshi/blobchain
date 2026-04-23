@@ -30,6 +30,12 @@ export const SOL_ADDR_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 export const PAGE_SIZE = 100;
 
+// Reverse bridge (WBLOB → BLOB) — fee deducted from the redeemed amount.
+// Sized to comfortably cover the server-signed credit tx network fee at peak congestion.
+export const BRIDGE_FEE_BLOB = 0.0015;
+export const MEMO_PROGRAM_ID = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
+export const BRIDGE_ADDRESS = "19xGuoUEng3w4Y2DjP6te2LLTSKt7fKs27";
+
 export const GENESIS = {
   height: 0,
   previousHash: "0".repeat(64),

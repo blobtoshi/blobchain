@@ -101,6 +101,20 @@ export default function RedeemPanel({
     return () => { cancelled = true; clearInterval(id); };
   }, [blobAddr, validBlob, active?.status]);
 
+  // Auto-resume in-flight redemptions when history loads (e.g. after a tab switch
+  // unmount/remount, or page reload). Mirrors the forward-bridge behavior.
+  useEffect(() => {
+    const currentDone = !active || active.status === "credited" || active.status === "failed";
+    if (!currentDone) return;
+    const inflight = history.find(
+      (h) => h.status === "pending" || h.status === "verified" || h.status === "crediting",
+    );
+    if (!inflight) return;
+    setActive(inflight);
+    if (inflight.status === "crediting" || inflight.status === "verified") setSt("crediting");
+    else setSt("verifying");
+  }, [history, active]);
+
   // Poll active redemption.
   useEffect(() => {
     if (!active) return;

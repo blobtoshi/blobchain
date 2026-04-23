@@ -13,9 +13,10 @@ export function generateLevel(seed) {
     const gap = 240 + rng() * 280;
     pos += gap;
     const r = rng();
-    if (r < 0.5) obstacles.push({ at: pos, type: "fork", w: 36, h: 66 });
-    else if (r < 0.78) obstacles.push({ at: pos, type: "double", w: 36, h: 66 });
-    else obstacles.push({ at: pos, type: "tall", w: 40, h: 90 });
+    if (r < 0.38) obstacles.push({ at: pos, type: "fork", w: 36, h: 66 });
+    else if (r < 0.6) obstacles.push({ at: pos, type: "double", w: 36, h: 66 });
+    else if (r < 0.75) obstacles.push({ at: pos, type: "tall", w: 40, h: 90 });
+    else obstacles.push({ at: pos, type: "low", w: 60, h: 18 });
     if (rng() < 0.68) {
       const hs = ["low", "mid", "high"];
       tokens.push({ at: pos - gap * 0.4, height: hs[Math.floor(rng() * 3)] });
@@ -144,6 +145,42 @@ export function drawFork(ctx, o) {
   ctx.shadowBlur = 0;
   ctx.fillStyle = "rgba(255,255,255,0.18)";
   ctx.fillRect(x + 2, y + 4, 2, h - 8);
+  ctx.restore();
+}
+
+export function drawLowBar(ctx, o) {
+  ctx.save();
+  const x = o.x, y = o.y, w = o.w, h = o.h;
+  const grad = ctx.createLinearGradient(x, y, x, y + h);
+  grad.addColorStop(0, "rgba(96, 200, 255, 0.95)");
+  grad.addColorStop(1, "rgba(40, 120, 230, 0.75)");
+  ctx.shadowColor = "#40c4ff";
+  ctx.shadowBlur = 18;
+  ctx.fillStyle = grad;
+  const r = 6;
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "rgba(255,255,255,0.28)";
+  for (let i = 4; i < w - 4; i += 10) {
+    ctx.fillRect(x + i, y + 4, 4, h - 8);
+  }
+  ctx.strokeStyle = "rgba(120, 220, 255, 0.35)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x + 6, y); ctx.lineTo(x + 6, y - 28);
+  ctx.moveTo(x + w - 6, y); ctx.lineTo(x + w - 6, y - 28);
+  ctx.stroke();
   ctx.restore();
 }
 

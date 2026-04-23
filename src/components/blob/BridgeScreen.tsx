@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  ArrowLeftRight, ExternalLink, Loader2, CheckCircle2, AlertCircle, Copy,
+  TrendingUpDown, ExternalLink, Loader2, CheckCircle2, AlertCircle, Copy,
 } from "lucide-react";
 import { sha256hex, signData } from "@/lib/blob/crypto";
 import { calcBalance } from "@/lib/blob/chain";
@@ -44,7 +44,7 @@ export default function BridgeScreen(props: any) {
         <div className="relative flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <div className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-primary/10 border border-primary/30 text-primary">
-              <ArrowLeftRight className="w-4 h-4" />
+              <TrendingUpDown className="w-4 h-4" />
             </div>
             <span className="label-eyebrow">Bridge</span>
           </div>
@@ -373,7 +373,7 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast, config: configProp
               className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-primary text-primary-foreground text-sm font-semibold tracking-wide hover:bg-primary/90 transition disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_24px_hsl(var(--primary)/0.35)]"
             >
               {st === "idle" || st === "minted" || st === "failed" ? (
-                <><ArrowLeftRight className="w-4 h-4" /> Bridge to Solana</>
+                <><TrendingUpDown className="w-4 h-4" /> Bridge to Solana</>
               ) : st === "signing" ? (
                 <><Loader2 className="w-4 h-4 animate-spin" /> Signing…</>
               ) : st === "broadcasting" ? (

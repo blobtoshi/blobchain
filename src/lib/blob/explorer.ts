@@ -193,6 +193,57 @@ export function blockFiltersActive(f: BlockFilters): number {
   if (f.sort !== "newest") n++;
   return n;
 }
+// ---------- Mempool helpers (mempool.space-style view) ----------
+
+import { FEE_BUCKETS, BLOB_UNIT } from "./constants";
+
+// Estimate vbytes for a mempool tx using the same canonical-JSON shape we use elsewhere.
+export function estimateMempoolTxBytes(t: any): number {
+  const sigLen = (t.signature || "").length || 128;
+  const pkLen = (t.publicKey || t.public_key || "").length || 66;
+  const memoLen = new TextEncoder().encode(t.memo || "").length;
+  // Base overhead (JSON keys + addresses + numeric fields) ≈ 220, plus variable parts.
+  return 220 + sigLen + pkLen + memoLen;
+}
+
+// drops per byte. Prefer explicit feeRate; otherwise derive from fee/bytes.
+export function feeRateOf(t: any, bytes: number): number {
+  if (t.feeRate != null) return Number(t.feeRate);
+  if (t.fee_rate != null) return Number(t.fee_rate);
+  const fee = Number(t.fee || 0);
+  if (!bytes || !fee) return 0;
+  return Math.max(1, Math.round((fee * BLOB_UNIT) / bytes));
+}
+
+export type FeeBucket = {
+  idx: number;
+  label: string;
+  bg: string;        // tailwind bg class
+  ring: string;      // tailwind ring class
+  text: string;      // tailwind text class
+  hsl: string;       // raw hsl var for inline styles
+};
+
+// 7 buckets (FEE_BUCKETS.length + 1). Cobalt → cyan → amber → red gradient.
+const BUCKET_DEFS: FeeBucket[] = [
+  { idx: 0, label: "≤1",     bg: "bg-[hsl(var(--info)/0.45)]",       ring: "ring-[hsl(var(--info)/0.5)]",       text: "text-[hsl(var(--info))]",       hsl: "hsl(var(--info))" },
+  { idx: 1, label: "2-5",    bg: "bg-[hsl(var(--info)/0.7)]",        ring: "ring-[hsl(var(--info)/0.7)]",       text: "text-[hsl(var(--info))]",       hsl: "hsl(var(--info))" },
+  { idx: 2, label: "6-10",   bg: "bg-primary/70",                    ring: "ring-primary/60",                   text: "text-primary",                  hsl: "hsl(var(--primary))" },
+  { idx: 3, label: "11-20",  bg: "bg-primary",                       ring: "ring-primary",                      text: "text-primary",                  hsl: "hsl(var(--primary))" },
+  { idx: 4, label: "21-50",  bg: "bg-[hsl(var(--warning)/0.85)]",    ring: "ring-[hsl(var(--warning)/0.7)]",    text: "text-[hsl(var(--warning))]",    hsl: "hsl(var(--warning))" },
+  { idx: 5, label: "51-100", bg: "bg-[hsl(var(--warning))]",         ring: "ring-[hsl(var(--warning))]",        text: "text-[hsl(var(--warning))]",    hsl: "hsl(var(--warning))" },
+  { idx: 6, label: "100+",   bg: "bg-[hsl(var(--danger))]",          ring: "ring-[hsl(var(--danger))]",         text: "text-[hsl(var(--danger))]",     hsl: "hsl(var(--danger))" },
+];
+
+export function bucketForRate(rate: number): FeeBucket {
+  for (let i = 0; i < FEE_BUCKETS.length; i++) {
+    if (rate <= FEE_BUCKETS[i]) return BUCKET_DEFS[i];
+  }
+  return BUCKET_DEFS[BUCKET_DEFS.length - 1];
+}
+
+export function allBuckets(): FeeBucket[] { return BUCKET_DEFS; }
+
 export function addrFiltersActive(f: AddrFilters): number {
   let n = 0;
   if (f.q) n++;

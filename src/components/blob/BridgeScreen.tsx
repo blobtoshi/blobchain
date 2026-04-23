@@ -1,8 +1,9 @@
 // @ts-nocheck
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import * as Relay from "@/lib/blobRelay";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ArrowLeftRight, ExternalLink, Loader2, CheckCircle2, AlertCircle, Copy,
 } from "lucide-react";
@@ -13,7 +14,81 @@ import {
   BASE_FEE_RATE, MIN_FEE_RATE, MAX_MEMO_BYTES, BLOB_DECIMALS, SOL_ADDR_RE,
 } from "@/lib/blob/constants";
 
-export default function BridgeScreen({ wallet, chain, mempool, onBroadcast }: any) {
+// Lazy-load the Solana wallet adapter + redeem panel — keeps the heavy
+// @solana/web3.js + wallet-adapter modules out of the initial bridge bundle.
+const SolanaProvider = lazy(() => import("./SolanaProvider"));
+const RedeemPanel = lazy(() => import("./RedeemPanel"));
+
+export default function BridgeScreen(props: any) {
+  const { wallet } = props;
+  const [config, setConfig] = useState<{ bridgeAddress: string; splMintAddress: string | null } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let t: any = null;
+    const load = async () => {
+      const cfg = await Relay.fetchBridgeConfig();
+      if (cancelled) return;
+      if (cfg) setConfig(cfg);
+      else t = setTimeout(load, 2000);
+    };
+    load();
+    return () => { cancelled = true; if (t) clearTimeout(t); };
+  }, []);
+
+  return (
+    <div className="space-y-5">
+      {/* Hero */}
+      <div className="relative overflow-hidden rounded-3xl glass-hi px-5 sm:px-8 py-8 sm:py-10">
+        <div className="pointer-events-none absolute -top-32 right-0 w-[420px] h-[420px] rounded-full bg-primary/10 blur-3xl" />
+        <div className="relative flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <div className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-primary/10 border border-primary/30 text-primary">
+              <ArrowLeftRight className="w-4 h-4" />
+            </div>
+            <span className="label-eyebrow">Bridge</span>
+          </div>
+          <h1 className="text-2xl sm:text-4xl font-semibold tracking-tight">
+            <span className="text-foreground">Bridge </span>
+            <span className="text-primary drop-shadow-[0_0_24px_hsl(var(--primary)/0.4)]">BLOB</span>
+            <span className="text-foreground"> ↔ Solana</span>
+          </h1>
+          <div className="text-sm text-muted-foreground max-w-xl leading-relaxed">
+            Move value between Blob Chain and Solana. Forward bridging is free; reverse redemption charges a small bridge fee that covers the Blob Chain credit transaction.
+          </div>
+        </div>
+      </div>
+
+      <Tabs defaultValue="forward" className="space-y-4">
+        <TabsList className="grid grid-cols-2 max-w-md">
+          <TabsTrigger value="forward">BLOB → WBLOB</TabsTrigger>
+          <TabsTrigger value="reverse">WBLOB → BLOB</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="forward" className="mt-0">
+          <ForwardBridge {...props} config={config} />
+        </TabsContent>
+
+        <TabsContent value="reverse" className="mt-0">
+          <Suspense fallback={
+            <div className="glass-hi p-10 flex items-center justify-center text-sm text-muted-foreground gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading Solana wallet…
+            </div>
+          }>
+            <SolanaProvider>
+              <RedeemPanel
+                splMintAddress={config?.splMintAddress ?? null}
+                defaultBlobAddress={wallet.address}
+              />
+            </SolanaProvider>
+          </Suspense>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function ForwardBridge({ wallet, chain, mempool, onBroadcast, config: configProp }: any) {
   const [config, setConfig] = useState<{ bridgeAddress: string; splMintAddress: string | null } | null>(null);
   const [solAddr, setSolAddr] = useState("");
   const [amt, setAmt] = useState("");

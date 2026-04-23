@@ -156,8 +156,8 @@ body::before {
   position: fixed;
   inset: 0;
   background:
-    radial-gradient(ellipse at 18% 0%, hsl(215 95% 50% / 0.16), transparent 55%),
-    radial-gradient(ellipse at 82% 100%, hsl(188 95% 55% / 0.14), transparent 55%);
+    radial-gradient(ellipse at 18% 0%, hsl(215 95% 50% / 0.20), transparent 55%),
+    radial-gradient(ellipse at 82% 100%, hsl(188 95% 55% / 0.18), transparent 55%);
   pointer-events: none;
   z-index: 0;
 }

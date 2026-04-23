@@ -52,12 +52,18 @@ export default function RedeemPanel({
   const canSubmit =
     !!splMintAddress && connected && st === "idle" && validBlob && parsedAmt > BRIDGE_FEE_BLOB;
 
-  // Load balance on connect / mint change.
+  // Reset displayed balance only when wallet/mint actually changes.
   useEffect(() => {
-    let cancelled = false;
     setSplBalance(null);
+  }, [publicKey?.toBase58(), splMintAddress]);
+
+  // Fetch balance: on connect/mint change, when a redemption is credited, and every 30s.
+  // Preserves prior value while a fresh fetch is in flight (no flicker on poll).
+  const credited = active?.status === "credited";
+  useEffect(() => {
     if (!publicKey || !splMintAddress) return;
-    (async () => {
+    let cancelled = false;
+    const fetchBalance = async () => {
       try {
         const mintPub = new PublicKey(splMintAddress);
         const ata = await getAssociatedTokenAddress(mintPub, publicKey, true);
@@ -65,14 +71,21 @@ export default function RedeemPanel({
           console.warn("[redeem] getTokenAccountBalance failed", e);
           return null;
         });
-        if (!cancelled) setSplBalance(bal?.value?.uiAmount ?? 0);
+        if (cancelled) return;
+        if (bal?.value?.uiAmount != null) {
+          setSplBalance(bal.value.uiAmount);
+        } else {
+          setSplBalance((prev) => (prev == null ? 0 : prev));
+        }
       } catch (e) {
         console.warn("[redeem] balance lookup failed", e);
-        if (!cancelled) setSplBalance(0);
+        if (!cancelled) setSplBalance((prev) => (prev == null ? 0 : prev));
       }
-    })();
-    return () => { cancelled = true; };
-  }, [publicKey, splMintAddress, connection, active?.status]);
+    };
+    fetchBalance();
+    const id = setInterval(fetchBalance, 30_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [publicKey?.toBase58(), splMintAddress, connection, credited]);
 
   // History — public, filtered by destination blob address.
   useEffect(() => {

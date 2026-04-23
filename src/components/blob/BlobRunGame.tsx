@@ -28,11 +28,11 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
   useEffect(() => {
     const kd = e => {
       if (e.code === "Space" || e.code === "ArrowUp") { e.preventDefault(); jRef.current = true; }
-      if (e.code === "ArrowDown") dRef.current = true;
+      if (e.code === "ArrowDown") { e.preventDefault(); dRef.current = true; }
     };
     const ku = e => {
       if (e.code === "Space" || e.code === "ArrowUp") jRef.current = false;
-      if (e.code === "ArrowDown") dRef.current = false;
+      if (e.code === "ArrowDown") { e.preventDefault(); dRef.current = false; }
     };
     window.addEventListener("keydown", kd);
     window.addEventListener("keyup", ku);

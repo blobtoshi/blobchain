@@ -9,9 +9,15 @@ export function generateLevel(seed) {
   const rng = mkPrng(seed);
   const obstacles = [], tokens = [];
   let pos = 250;
-  while (pos < 150000) {
-    const gap = 240 + rng() * 280;
+  let idx = 0;
+  while (pos < 400000) {
+    // Gaps shrink with index — early obstacles feel fair, later they pack tight.
+    const tightness = Math.min(idx / 120, 1); // 0 → 1 over first 120 obstacles
+    const baseMin = 240 - tightness * 130;    // 240 → 110
+    const baseRng = 280 - tightness * 200;    // 280 → 80
+    const gap = baseMin + rng() * baseRng;
     pos += gap;
+    idx++;
     const r = rng();
     if (r < 0.38) obstacles.push({ at: pos, type: "fork", w: 36, h: 66 });
     else if (r < 0.6) obstacles.push({ at: pos, type: "double", w: 36, h: 66 });

@@ -32,7 +32,7 @@ import {
   createMintToInstruction,
   getAssociatedTokenAddress,
   getMint,
-} from "https://esm.sh/@solana/spl-token@0.4.9?deps=@solana/web3.js@1.95.4esm.sh/@solana/spl-token@0.4.9bundle-deps";
+} from "https://esm.sh/@solana/spl-token@0.4.9?deps=@solana/web3.js@1.95.4&bundle-deps";
 import bs58 from "https://esm.sh/bs58@5.0.0";
 
 // Bridge deposit address on Blob Chain.

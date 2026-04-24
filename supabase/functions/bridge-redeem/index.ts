@@ -12,7 +12,7 @@
 //   5. GET ?sol_signature=... polls status (re-runs verify if still pending).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { Connection, PublicKey } from "https://esm.sh/@solana/web3.js@1.95.4";
-import { getMint } from "https://esm.sh/@solana/spl-token@0.4.9?deps=@solana/web3.js@1.95.4esm.sh/@solana/spl-token@0.4.9bundle-deps";
+import { getMint } from "https://esm.sh/@solana/spl-token@0.4.9?deps=@solana/web3.js@1.95.4&bundle-deps";
 import * as secp from "https://esm.sh/@noble/secp256k1@2.1.0";
 import { sha256 } from "https://esm.sh/@noble/hashes@1.5.0/sha256";
 import { ripemd160 } from "https://esm.sh/@noble/hashes@1.5.0/ripemd160";

@@ -33,7 +33,7 @@ import {
   getAssociatedTokenAddress,
   getMint,
 } from "npm:@solana/spl-token@0.4.9";
-import bs58 from "npm:bs58@5.0.0";
+import bs58 from "https://esm.sh/bs58@5.0.0";
 
 // Bridge deposit address on Blob Chain.
 const BRIDGE_ADDRESS = "19xGuoUEng3w4Y2DjP6te2LLTSKt7fKs27";

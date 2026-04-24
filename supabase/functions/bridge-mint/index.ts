@@ -141,7 +141,7 @@ async function mintSpl(
   const recipientPub = new PublicKey(recipient);
 
   // Read the SPL mint to know its decimals so we mint the correct base units.
-  const mintInfo = await getMint(conn, mintPub);
+  const mintInfo = await getMint(conn as any, mintPub);
   const baseUnits = BigInt(Math.round(amount * 10 ** mintInfo.decimals));
   if (baseUnits <= 0n) throw new Error("Amount rounds to zero base units");
 

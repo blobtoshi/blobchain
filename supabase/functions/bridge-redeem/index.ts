@@ -110,7 +110,7 @@ async function verifyBurn(sig: string, expectedAmount: number, expectedBlobAddr:
   const expectedMemo = `blob:${expectedBlobAddr}`;
 
   // Get mint decimals to convert expectedAmount → base units.
-  const mintInfo = await getMint(conn, new PublicKey(SOLANA_SPL_MINT_ADDRESS));
+  const mintInfo = await getMint(conn as any, new PublicKey(SOLANA_SPL_MINT_ADDRESS));
   const expectedBase = BigInt(Math.round(expectedAmount * 10 ** mintInfo.decimals));
 
   let burnCount = 0;

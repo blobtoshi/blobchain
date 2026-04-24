@@ -191,28 +191,17 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
       drawHUD();
     }
 
-    let prevTokenCount = state.tokens.length;
-    let prevAlive = state.tokens.filter(t => t.alive).length;
-
     async function loop() {
       if (stRef.current !== "playing") return;
-      // Collect any events that were queued for *this* tick.
+      // Collect events queued for the upcoming tick (recordEvent appends with
+      // f = state.frame + 1, so they live at the tail of inputsRef).
       const targetFrame = state.frame + 1;
-      const evs = [];
-      // Pull events with f === targetFrame from the tail (cheap because they're appended in order).
-      while (inputsRef.current.length && inputsRef.current[inputsRef.current.length - 1].f === targetFrame) {
-        evs.unshift(inputsRef.current[inputsRef.current.length - 1]);
-        // Don't pop — we keep them for the replay submission.
-        break;
-      }
-      // Actually, we need ALL events at this frame; rebuild via slice from the end.
-      const queuedAtFrame = [];
+      const queuedAtFrame: any[] = [];
       for (let i = inputsRef.current.length - 1; i >= 0 && inputsRef.current[i].f === targetFrame; i--) {
         queuedAtFrame.unshift(inputsRef.current[i]);
       }
 
       const prevTokensAlive = state.tokens.filter(t => t.alive).length;
-      const prevDist = state.dist;
       const alive = tick(state, lev, queuedAtFrame);
 
       // Visual-only effects driven from state diffs

@@ -47,6 +47,11 @@ export type Entry = {
   block_height: number;
   block_seed?: string;
   signature: string;
+  // Anti-cheat replay fields (optional for backward-compat reads)
+  inputs?: string;
+  inputs_hash?: string;
+  frame_count?: number;
+  engine_version?: number;
 };
 
 const safeParse = (s: any, fallback: any) => {
@@ -186,6 +191,10 @@ export async function pushEntry(
       block_seed: e.block_seed,
       signature: e.signature,
       publicKey: e.publicKey,
+      inputs: e.inputs ?? "",
+      inputs_hash: e.inputs_hash,
+      frame_count: e.frame_count,
+      engine_version: e.engine_version,
     },
   });
   if (error) {

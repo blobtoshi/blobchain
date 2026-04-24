@@ -10,7 +10,7 @@
 //      then atomically claims the row and signs+broadcasts a normal BLOB tx
 //      from BRIDGE_ADDRESS to blob_address for `amount - BRIDGE_FEE_BLOB`.
 //   5. GET ?sol_signature=... polls status (re-runs verify if still pending).
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
 import { Connection, PublicKey } from "https://esm.sh/@solana/web3.js@1.95.4";
 import { getMint } from "https://esm.sh/@solana/spl-token@0.4.9?deps=@solana/web3.js@1.95.4&bundle-deps";
 import * as secp from "https://esm.sh/@noble/secp256k1@2.1.0";

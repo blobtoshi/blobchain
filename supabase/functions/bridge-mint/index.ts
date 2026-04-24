@@ -11,7 +11,7 @@
 //   4. GET ?blob_tx_id=... polls status (and triggers a mint attempt if the
 //      tx has since been confirmed). The client polls this until status =
 //      'minted' or 'failed'.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":

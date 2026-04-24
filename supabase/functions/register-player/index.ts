@@ -2,12 +2,12 @@
 // the address is visible in the explorer immediately, even before its first
 // mining attempt or transaction. Signature-gated so only the keypair owner
 // can claim a username.
-import { createClient } from "npm:@supabase/supabase-js@2.95.0";
-import { corsHeaders } from "npm:@supabase/supabase-js@2.95.0/cors";
-import * as secp from "npm:@noble/secp256k1@2.1.0";
-import { sha256 } from "npm:@noble/hashes@1.5.0/sha256";
-import { ripemd160 } from "npm:@noble/hashes@1.5.0/ripemd160";
-import { base58check } from "npm:@scure/base@1.1.9";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
+import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2.95.0/cors";
+import * as secp from "https://esm.sh/@noble/secp256k1@2.1.0";
+import { sha256 } from "https://esm.sh/@noble/hashes@1.5.0/sha256";
+import { ripemd160 } from "https://esm.sh/@noble/hashes@1.5.0/ripemd160";
+import { base58check } from "https://esm.sh/@scure/base@1.1.9";
 
 const enc = new TextEncoder();
 const b58check = base58check(sha256);

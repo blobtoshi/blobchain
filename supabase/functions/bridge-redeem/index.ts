@@ -10,9 +10,12 @@
 //      then atomically claims the row and signs+broadcasts a normal BLOB tx
 //      from BRIDGE_ADDRESS to blob_address for `amount - BRIDGE_FEE_BLOB`.
 //   5. GET ?sol_signature=... polls status (re-runs verify if still pending).
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
+import { createClient as _createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
+// deno type-check chokes on the 2.95 generics; cast to any so call sites stay clean.
+// deno-lint-ignore no-explicit-any
+const createClient = _createClient as any;
 import { Connection, PublicKey } from "https://esm.sh/@solana/web3.js@1.95.4";
-import { getMint } from "https://esm.sh/@solana/spl-token@0.4.9";
+import { getMint } from "https://esm.sh/@solana/spl-token@0.4.9?deps=@solana/web3.js@1.95.4&bundle-deps";
 import * as secp from "https://esm.sh/@noble/secp256k1@2.1.0";
 import { sha256 } from "https://esm.sh/@noble/hashes@1.5.0/sha256";
 import { ripemd160 } from "https://esm.sh/@noble/hashes@1.5.0/ripemd160";
@@ -107,7 +110,7 @@ async function verifyBurn(sig: string, expectedAmount: number, expectedBlobAddr:
   const expectedMemo = `blob:${expectedBlobAddr}`;
 
   // Get mint decimals to convert expectedAmount → base units.
-  const mintInfo = await getMint(conn, new PublicKey(SOLANA_SPL_MINT_ADDRESS));
+  const mintInfo = await getMint(conn as any, new PublicKey(SOLANA_SPL_MINT_ADDRESS));
   const expectedBase = BigInt(Math.round(expectedAmount * 10 ** mintInfo.decimals));
 
   let burnCount = 0;

@@ -2,7 +2,10 @@
 // Bitcoin-style fee model: fee = ceil(feeRate × tx_byte_size) / 1e8 $BLOB.
 // feeRate is drops/byte (1 drop = 1e-8 $BLOB, the smallest unit). Server enforces
 // a minimum feeRate derived from current mempool congestion.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
+import { createClient as _createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
+// deno type-check chokes on the 2.95 generics; cast to any so call sites stay clean.
+// deno-lint-ignore no-explicit-any
+const createClient = _createClient as any;
 import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2.95.0/cors";
 import * as secp from "https://esm.sh/@noble/secp256k1@2.1.0";
 import { sha256 } from "https://esm.sh/@noble/hashes@1.5.0/sha256";

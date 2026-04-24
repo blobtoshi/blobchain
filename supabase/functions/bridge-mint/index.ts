@@ -11,7 +11,10 @@
 //   4. GET ?blob_tx_id=... polls status (and triggers a mint attempt if the
 //      tx has since been confirmed). The client polls this until status =
 //      'minted' or 'failed'.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
+import { createClient as _createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
+// deno type-check chokes on the 2.95 generics; cast to any so call sites stay clean.
+// deno-lint-ignore no-explicit-any
+const createClient = _createClient as any;
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -32,7 +35,7 @@ import {
   createMintToInstruction,
   getAssociatedTokenAddress,
   getMint,
-} from "https://esm.sh/@solana/spl-token@0.4.9";
+} from "https://esm.sh/@solana/spl-token@0.4.9?deps=@solana/web3.js@1.95.4&bundle-deps";
 import bs58 from "https://esm.sh/bs58@5.0.0";
 
 // Bridge deposit address on Blob Chain.
@@ -138,7 +141,7 @@ async function mintSpl(
   const recipientPub = new PublicKey(recipient);
 
   // Read the SPL mint to know its decimals so we mint the correct base units.
-  const mintInfo = await getMint(conn, mintPub);
+  const mintInfo = await getMint(conn as any, mintPub);
   const baseUnits = BigInt(Math.round(amount * 10 ** mintInfo.decimals));
   if (baseUnits <= 0n) throw new Error("Amount rounds to zero base units");
 

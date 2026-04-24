@@ -1,8 +1,8 @@
 // Seals a closed block on the server. Re-fetches verified entries from DB,
 // re-runs the deterministic weighted-lottery winner selection, and persists
 // the block with confirmed transactions. Idempotent on (height) PK.
-import { createClient } from "@supabase/supabase-js";
-import { corsHeaders } from "@supabase/supabase-js/cors";
+import { createClient } from "npm:@supabase/supabase-js@2.95.0";
+import { corsHeaders } from "npm:@supabase/supabase-js@2.95.0/cors";
 
 const BLOCK_TIME = 120;
 const INITIAL_REWARD = 10;

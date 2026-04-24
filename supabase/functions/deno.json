@@ -4,6 +4,11 @@
     "bs58": "npm:bs58@5.0.0",
     "@solana/web3.js": "npm:@solana/web3.js@1.95.4",
     "@solana/spl-token": "npm:@solana/spl-token@0.4.9",
-    "@supabase/supabase-js": "npm:@supabase/supabase-js@2.95.0"
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@2.95.0",
+    "@supabase/supabase-js/cors": "npm:@supabase/supabase-js@2.95.0/cors",
+    "@noble/secp256k1": "npm:@noble/secp256k1@2.1.0",
+    "@noble/hashes/sha256": "npm:@noble/hashes@1.5.0/sha256",
+    "@noble/hashes/ripemd160": "npm:@noble/hashes@1.5.0/ripemd160",
+    "@scure/base": "npm:@scure/base@1.1.9"
   }
 }

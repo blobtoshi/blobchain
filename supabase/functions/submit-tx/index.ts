@@ -2,12 +2,12 @@
 // Bitcoin-style fee model: fee = ceil(feeRate × tx_byte_size) / 1e8 $BLOB.
 // feeRate is drops/byte (1 drop = 1e-8 $BLOB, the smallest unit). Server enforces
 // a minimum feeRate derived from current mempool congestion.
-import { createClient } from "npm:@supabase/supabase-js@2.95.0";
-import { corsHeaders } from "npm:@supabase/supabase-js@2.95.0/cors";
-import * as secp from "npm:@noble/secp256k1@2.1.0";
-import { sha256 } from "npm:@noble/hashes@1.5.0/sha256";
-import { ripemd160 } from "npm:@noble/hashes@1.5.0/ripemd160";
-import { base58check } from "npm:@scure/base@1.1.9";
+import { createClient } from "@supabase/supabase-js";
+import { corsHeaders } from "@supabase/supabase-js/cors";
+import * as secp from "@noble/secp256k1";
+import { sha256 } from "@noble/hashes/sha256";
+import { ripemd160 } from "@noble/hashes/ripemd160";
+import { base58check } from "@scure/base";
 
 const MAX_TX_SIZE = 100_000;     // 100 KB, Bitcoin standard tx limit
 const MAX_BLOCK_SIZE = 1_000_000; // 1 MB

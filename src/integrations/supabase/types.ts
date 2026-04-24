@@ -70,6 +70,9 @@ export type Database = {
           address: string
           block_height: number
           block_seed: string | null
+          frame_count: number | null
+          inputs: string | null
+          inputs_hash: string | null
           score: number
           signature: string
           submitted_at: string | null
@@ -79,6 +82,9 @@ export type Database = {
           address: string
           block_height: number
           block_seed?: string | null
+          frame_count?: number | null
+          inputs?: string | null
+          inputs_hash?: string | null
           score?: number
           signature: string
           submitted_at?: string | null
@@ -88,6 +94,9 @@ export type Database = {
           address?: string
           block_height?: number
           block_seed?: string | null
+          frame_count?: number | null
+          inputs?: string | null
+          inputs_hash?: string | null
           score?: number
           signature?: string
           submitted_at?: string | null

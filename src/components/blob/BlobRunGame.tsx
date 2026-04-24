@@ -2,19 +2,24 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import * as Relay from "@/lib/blobRelay";
 import { signData } from "@/lib/blob/crypto";
-import { CW, CH, GY, PX, GRAVITY, JUMP_V } from "@/lib/blob/constants";
-import { generateLevel, TYMAP, drawBG, drawBlob, drawFork, drawLowBar, drawToken, _blobImg } from "@/lib/blob/level";
+import { CW, CH, GY, PX } from "@/lib/blob/constants";
+import { TYMAP, drawBG, drawBlob, drawFork, drawLowBar, drawToken, _blobImg } from "@/lib/blob/level";
+import {
+  generateLevelPure, initialState, tick,
+  encodeInputs, hashInputs, ENGINE_VERSION,
+} from "@/lib/blob/simulator";
 
 export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry }) {
   const cvs = useRef(null);
   const raf = useRef(null);
-  const gRef = useRef(null);
+  const stateRef = useRef(null);
+  const inputsRef = useRef([]); // recorded events for verifiable replay
   const jRef = useRef(false);
   const dRef = useRef(false);
   const stRef = useRef("idle");
   const [gs, setGs] = useState({ status: "idle", score: 0, combo: 0 });
 
-  const level = useRef(generateLevel(blockInfo.seed));
+  const level = useRef(generateLevelPure(blockInfo.seed));
   const bgNodes = useRef(Array.from({ length: 12 }, () => ({
     x: Math.random() * CW, y: 20 + Math.random() * (GY - 40),
     r: 2 + Math.random() * 9, a: .03 + Math.random() * .09,
@@ -22,17 +27,36 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
   })));
 
   useEffect(() => {
-    level.current = generateLevel(blockInfo.seed);
+    level.current = generateLevelPure(blockInfo.seed);
   }, [blockInfo.seed]);
+
+  // Helper: record a key state change as an input event for the *next* tick.
+  const recordEvent = useCallback((type) => {
+    const s = stateRef.current;
+    if (!s || s.dead) return;
+    // Event applies at the tick that's about to run (frame becomes s.frame+1).
+    inputsRef.current.push({ f: s.frame + 1, t: type });
+  }, []);
 
   useEffect(() => {
     const kd = e => {
-      if (e.code === "Space" || e.code === "ArrowUp") { e.preventDefault(); jRef.current = true; }
-      if (e.code === "ArrowDown") { e.preventDefault(); dRef.current = true; }
+      if (e.code === "Space" || e.code === "ArrowUp") {
+        e.preventDefault();
+        if (!jRef.current) { jRef.current = true; recordEvent(0); }
+      }
+      if (e.code === "ArrowDown") {
+        e.preventDefault();
+        if (!dRef.current) { dRef.current = true; recordEvent(2); }
+      }
     };
     const ku = e => {
-      if (e.code === "Space" || e.code === "ArrowUp") jRef.current = false;
-      if (e.code === "ArrowDown") { e.preventDefault(); dRef.current = false; }
+      if (e.code === "Space" || e.code === "ArrowUp") {
+        if (jRef.current) { jRef.current = false; recordEvent(1); }
+      }
+      if (e.code === "ArrowDown") {
+        e.preventDefault();
+        if (dRef.current) { dRef.current = false; recordEvent(3); }
+      }
     };
     window.addEventListener("keydown", kd);
     window.addEventListener("keyup", ku);
@@ -40,49 +64,42 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
       window.removeEventListener("keydown", kd);
       window.removeEventListener("keyup", ku);
     };
-  }, []);
+  }, [recordEvent]);
 
   const startRun = useCallback(async () => {
     cancelAnimationFrame(raf.current);
     jRef.current = false; dRef.current = false;
     stRef.current = "playing";
-    let obsIdx = 0, tokIdx = 0;
+    inputsRef.current = [];
     const lev = level.current;
-
-    const g: any = {
-      frame: 0, score: 0, dist: 0, speed: 4.5, locked: false,
-      combo: 0, comboTimer: 0,
-      player: { y: GY - 28, vy: 0, action: "run", wob: 0, sq: 1, blink: false },
-      obstacles: [], tokens: [], parts: [],
-    };
-    gRef.current = g;
+    const state = initialState();
+    stateRef.current = state;
     setGs({ status: "playing", score: 0, combo: 0 });
 
     const ctx = cvs.current.getContext("2d");
+    const parts = []; // visual-only, NOT part of consensus
 
-    function parts(x, y, col, n = 8) {
-      for (let i = 0; i < n; i++) g.parts.push({
+    function spawnParts(x, y, col, n = 8) {
+      for (let i = 0; i < n; i++) parts.push({
         x, y, vx: (Math.random() - .5) * 9, vy: Math.random() * -9 - 2,
         life: 1, col, sz: 2 + Math.random() * 4.5,
       });
     }
 
-    function roundedRect(ctx, x, y, w, h, r) {
-      ctx.beginPath();
-      ctx.moveTo(x + r, y);
-      ctx.arcTo(x + w, y, x + w, y + h, r);
-      ctx.arcTo(x + w, y + h, x, y + h, r);
-      ctx.arcTo(x, y + h, x, y, r);
-      ctx.arcTo(x, y, x + w, y, r);
-      ctx.closePath();
+    function roundedRect(c, x, y, w, h, r) {
+      c.beginPath();
+      c.moveTo(x + r, y);
+      c.arcTo(x + w, y, x + w, y + h, r);
+      c.arcTo(x + w, y + h, x, y + h, r);
+      c.arcTo(x, y + h, x, y, r);
+      c.arcTo(x, y, x + w, y, r);
+      c.closePath();
     }
 
     function drawHUD() {
       const FNT = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, sans-serif';
       const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
-
       ctx.save();
-
       ctx.fillStyle = "rgba(7, 12, 22, 0.55)";
       roundedRect(ctx, 12, 10, CW - 24, 38, 12);
       ctx.fill();
@@ -96,7 +113,7 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
       ctx.fillText("SCORE", 26, 24);
       ctx.fillStyle = "#e7fff8";
       ctx.font = `600 18px ${MONO}`;
-      ctx.fillText(g.score.toLocaleString(), 26, 42);
+      ctx.fillText(state.score.toLocaleString(), 26, 42);
 
       ctx.textAlign = "center";
       ctx.fillStyle = "rgba(180, 220, 230, 0.45)";
@@ -109,47 +126,47 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
       ctx.textAlign = "right";
       ctx.fillStyle = "rgba(180, 220, 230, 0.45)";
       ctx.font = `9px ${FNT}`;
-      ctx.fillText(`SPEED ×${g.speed.toFixed(1)}`, CW - 26, 24);
+      ctx.fillText(`SPEED ×${state.speed.toFixed(1)}`, CW - 26, 24);
       ctx.fillStyle = "#e7fff8";
       ctx.font = `600 14px ${MONO}`;
       ctx.fillText(`${blockInfo.reward} BLOB`, CW - 26, 42);
 
-      if (g.combo > 1) {
+      if (state.combo > 1) {
         ctx.textAlign = "left";
         ctx.shadowColor = "#ffd166"; ctx.shadowBlur = 14;
         ctx.fillStyle = "#ffd166";
-        ctx.font = `700 ${Math.min(13 + g.combo * 2, 26)}px ${FNT}`;
-        ctx.fillText(`×${g.combo} combo`, 26, CH - 24);
+        ctx.font = `700 ${Math.min(13 + state.combo * 2, 26)}px ${FNT}`;
+        ctx.fillText(`×${state.combo} combo`, 26, CH - 24);
         ctx.shadowBlur = 0;
       }
-      if (g.locked) {
+      if (state.locked) {
         ctx.textAlign = "center";
         ctx.fillStyle = "rgba(7, 12, 22, 0.6)";
-        roundedRect(ctx, CW / 2 - 160, CH - 36, 320, 24, 12);
+        roundedRect(ctx, CW / 2 - 180, CH - 36, 360, 24, 12);
         ctx.fill();
         ctx.fillStyle = "#7dffe0";
         ctx.font = `600 10px ${FNT}`;
-        ctx.fillText("✓ Score broadcast — proof in network", CW / 2, CH - 20);
+        ctx.fillText("✓ Replay submitted — awaiting node verification", CW / 2, CH - 20);
       }
       ctx.restore();
     }
 
     function draw() {
-      const p = g.player;
+      const p = state.player;
       bgNodes.current.forEach(n => { n.x -= n.spd; if (n.x < -15) n.x = CW + 15; });
-      drawBG(ctx, g.frame, bgNodes.current);
-      if (!g.locked && p.action !== "dead" && _blobImg && _blobImg.complete && _blobImg.naturalWidth > 0) {
-        if (!g.trail) g.trail = [];
+      drawBG(ctx, state.frame, bgNodes.current);
+      if (!state.locked && p.action !== "dead" && _blobImg && _blobImg.complete && _blobImg.naturalWidth > 0) {
+        if (!state._trail) state._trail = [];
         const tT = p.wob * 0.08;
         const trailFloatY = p.action === "duck" ? 0 : Math.sin(tT) * 5;
-        g.trail.unshift({ x: PX, y: p.y + trailFloatY - (p.action === "duck" ? 0 : 4), action: p.action });
-        if (g.trail.length > 8) g.trail.length = 8;
+        state._trail.unshift({ x: PX, y: p.y + trailFloatY - (p.action === "duck" ? 0 : 4), action: p.action });
+        if (state._trail.length > 8) state._trail.length = 8;
         const duck = p.action === "duck";
         const baseW = duck ? 78 : 64;
         const baseH = duck ? 46 : 72;
-        for (let i = g.trail.length - 1; i >= 1; i--) {
-          const tr = g.trail[i];
-          const a = (1 - i / g.trail.length) * 0.28;
+        for (let i = state._trail.length - 1; i >= 1; i--) {
+          const tr = state._trail[i];
+          const a = (1 - i / state._trail.length) * 0.28;
           ctx.save();
           ctx.globalAlpha = a;
           ctx.globalCompositeOperation = "lighter";
@@ -159,119 +176,88 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
           ctx.drawImage(_blobImg, -baseW / 2, -baseH / 2, baseW, baseH);
           ctx.restore();
         }
-      } else if (g.trail) {
-        g.trail.length = 0;
+      } else if (state._trail) {
+        state._trail.length = 0;
       }
-      g.obstacles.forEach(o => o.type === "low" ? drawLowBar(ctx, o) : drawFork(ctx, o));
-      g.tokens.forEach(t => { if (t.alive) drawToken(ctx, t.x, t.y, g.frame); });
-      g.parts.forEach(pt => {
+      state.obstacles.forEach(o => o.type === "low" ? drawLowBar(ctx, o) : drawFork(ctx, o));
+      state.tokens.forEach(t => { if (t.alive) drawToken(ctx, t.x, t.y, state.frame); });
+      parts.forEach(pt => {
         ctx.save(); ctx.globalAlpha = Math.max(0, pt.life);
         ctx.shadowColor = pt.col; ctx.shadowBlur = 10; ctx.fillStyle = pt.col;
         ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.sz, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
       });
-      if (p.action !== "dead") drawBlob(ctx, PX, p.y, p.action, p.wob, p.sq, p.blink);
+      if (!state.dead) drawBlob(ctx, PX, p.y, p.action, p.wob, p.sq, false);
       drawHUD();
     }
 
     async function loop() {
       if (stRef.current !== "playing") return;
-      const p = g.player; g.frame++;
-
-      if (p.action !== "dead") {
-        if (jRef.current && p.action !== "jump") { p.vy = JUMP_V; p.action = "jump"; }
-        if (!jRef.current && dRef.current && p.action !== "jump") p.action = "duck";
-        else if (!dRef.current && p.action === "duck") p.action = "run";
-        p.vy += GRAVITY; p.y += p.vy;
-        const fl = p.action === "duck" ? GY - 16 : GY - 28;
-        if (p.y >= fl) {
-          if (p.vy > 5) p.sq = 0.5;
-          p.y = fl; p.vy = 0;
-          if (p.action === "jump") p.action = "run";
-        }
-        p.sq += (1 - p.sq) * .13; p.wob++; p.blink = (Math.floor(p.wob / 80) % 9 === 0);
-        if (!g.locked) {
-          g.score++; g.dist += g.speed;
-          // Aggressive, unbounded difficulty curve — eventually impossible.
-          // Quadratic-ish ramp so the first ~20s feel fair, then it accelerates hard.
-          g.speed = 4.5 + Math.pow(g.score / 600, 1.15) * 0.9;
-        }
-        if (g.comboTimer > 0 && --g.comboTimer === 0) g.combo = 0;
+      // Collect events queued for the upcoming tick (recordEvent appends with
+      // f = state.frame + 1, so they live at the tail of inputsRef).
+      const targetFrame = state.frame + 1;
+      const queuedAtFrame: any[] = [];
+      for (let i = inputsRef.current.length - 1; i >= 0 && inputsRef.current[i].f === targetFrame; i--) {
+        queuedAtFrame.unshift(inputsRef.current[i]);
       }
 
-      while (obsIdx < lev.obstacles.length && g.dist >= lev.obstacles[obsIdx].at) {
-        const ev = lev.obstacles[obsIdx++];
-        if (ev.type === "low") {
-          // Bar must overlap a standing player's body (player y≈GY-28, ph=42 → top ≈ GY-49).
-          // Place bar bottom around GY-32 so a running blob clearly hits it; ducking (ph=22, y=GY-16 → top GY-27) clears it.
-          g.obstacles.push({ x: CW + 8, y: GY - 50, w: ev.w, h: ev.h, type: "low" });
-        } else {
-          const ey = ev.type === "tall" ? GY - 90 : GY - 66;
-          g.obstacles.push({ x: CW + 8, y: ey, w: ev.w, h: ev.h, type: ev.type });
-          if (ev.type === "double") g.obstacles.push({ x: CW + 190, y: ey, w: ev.w, h: ev.h, type: ev.type });
-        }
-      }
-      while (tokIdx < lev.tokens.length && g.dist >= lev.tokens[tokIdx].at) {
-        const ev = lev.tokens[tokIdx++];
-        g.tokens.push({ x: CW + 8, y: TYMAP[ev.height], alive: true });
-      }
-      g.obstacles.forEach(o => o.x -= g.speed);
-      g.obstacles = g.obstacles.filter(o => o.x > -70);
-      g.tokens.forEach(t => t.x -= g.speed);
-      g.tokens = g.tokens.filter(t => t.x > -35);
-      g.parts.forEach(pt => { pt.x += pt.vx; pt.y += pt.vy; pt.vy += .18; pt.life -= .028; });
-      g.parts = g.parts.filter(pt => pt.life > 0);
+      const prevTokensAlive = state.tokens.filter(t => t.alive).length;
+      const alive = tick(state, lev, queuedAtFrame);
 
-      if (p.action !== "dead" && !g.locked) {
-        const dk = p.action === "duck";
-        const ph = dk ? 22 : 42, pw = dk ? 46 : 30;
-        const x1 = PX - pw / 2 + 4, x2 = PX + pw / 2 - 4, y1 = p.y - ph / 2 + 4, y2 = p.y + ph / 2 - 4;
-        for (const o of g.obstacles) {
-          if (x2 > o.x + 4 && x1 < o.x + o.w - 4 && y2 > o.y + 4 && y1 < o.y + o.h - 4) {
-            p.action = "dead"; g.locked = true;
-            parts(PX, p.y, "#ff2244", 18); parts(PX, p.y, "#00ffcc", 8);
-            stRef.current = "dead";
-            const finalScore = g.score;
-            const entryData = `${blockInfo.height}:${wallet.address}:${finalScore}`;
-            const sig = await signData(wallet.privateKey, entryData);
-            const entry = {
-              block_height: blockInfo.height,
-              block_seed: String(blockInfo.seed),
-              address: wallet.address,
-              username: wallet.username,
-              score: finalScore,
-              signature: sig,
-              submitted_at: new Date().toISOString(),
-            };
-            Relay.pushEntry({ ...entry, publicKey: wallet.publicKey });
-            onEntrySubmit(entry);
-            setGs(prev => ({ ...prev, status: "dead", score: finalScore }));
-            draw(); return;
-          }
-        }
-        for (const t of g.tokens) {
-          if (t.alive && Math.abs(PX - t.x) < 28 && Math.abs(p.y - t.y) < 28) {
-            t.alive = false;
-            g.combo = Math.min(g.combo + 1, 10);
-            g.comboTimer = 150;
-            g.score += Math.floor(50 * (1 + g.combo * .25));
-            parts(t.x, t.y, "#00aaff", 8);
-          }
-        }
+      // Visual-only effects driven from state diffs
+      const newTokensAlive = state.tokens.filter(t => t.alive).length;
+      // (token pickup particles fire when alive count drops mid-frame from collision)
+      if (newTokensAlive < prevTokensAlive) {
+        // Find the picked-up token roughly at PX
+        spawnParts(PX, state.player.y, "#00aaff", 8);
       }
+
+      if (!alive) {
+        spawnParts(PX, state.player.y, "#ff2244", 18);
+        spawnParts(PX, state.player.y, "#00ffcc", 8);
+        stRef.current = "dead";
+        const finalScore = state.score;
+        const frameCount = state.frame;
+        const canonical = encodeInputs(inputsRef.current);
+        const inputsHash = await hashInputs(canonical);
+        const payload = `${blockInfo.height}:${wallet.address}:${finalScore}:${inputsHash}`;
+        const sig = await signData(wallet.privateKey, payload);
+        const entry = {
+          block_height: blockInfo.height,
+          block_seed: String(blockInfo.seed),
+          address: wallet.address,
+          username: wallet.username,
+          score: finalScore,
+          frame_count: frameCount,
+          inputs: canonical,
+          inputs_hash: inputsHash,
+          engine_version: ENGINE_VERSION,
+          signature: sig,
+          submitted_at: new Date().toISOString(),
+        };
+        Relay.pushEntry({ ...entry, publicKey: wallet.publicKey });
+        onEntrySubmit(entry);
+        setGs(prev => ({ ...prev, status: "dead", score: finalScore }));
+        // Update particles one last time for the fade-out frame
+        parts.forEach(pt => { pt.x += pt.vx; pt.y += pt.vy; pt.vy += .18; pt.life -= .028; });
+        for (let i = parts.length - 1; i >= 0; i--) if (parts[i].life <= 0) parts.splice(i, 1);
+        draw();
+        return;
+      }
+
+      parts.forEach(pt => { pt.x += pt.vx; pt.y += pt.vy; pt.vy += .18; pt.life -= .028; });
+      for (let i = parts.length - 1; i >= 0; i--) if (parts[i].life <= 0) parts.splice(i, 1);
+
       draw();
-      // Avoid per-frame React re-renders. Score/combo are drawn directly on the
-      // canvas inside drawHUD, so React only needs updates on meaningful events
-      // (combo change, or a slow heartbeat for any external observers).
-      if (g.combo !== g._lastCombo) {
-        g._lastCombo = g.combo;
-        setGs(prev => ({ ...prev, score: g.score, combo: g.combo }));
+      if (state.combo !== state._lastCombo) {
+        state._lastCombo = state.combo;
+        setGs(prev => ({ ...prev, score: state.score, combo: state.combo }));
       }
       raf.current = requestAnimationFrame(loop);
     }
 
     raf.current = requestAnimationFrame(loop);
-  }, [blockInfo, wallet, onEntrySubmit, myEntry]);
+  }, [blockInfo, wallet, onEntrySubmit]);
 
   useEffect(() => {
     startRun();
@@ -282,7 +268,10 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
   const onTap = e => {
     e.preventDefault();
     if (gs.status === "idle" || gs.status === "dead") { startRun(); return; }
-    jRef.current = true; setTimeout(() => { jRef.current = false; }, 120);
+    if (!jRef.current) { jRef.current = true; recordEvent(0); }
+    setTimeout(() => {
+      if (jRef.current) { jRef.current = false; recordEvent(1); }
+    }, 120);
   };
 
   return (
@@ -290,18 +279,20 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
       <div className="relative rounded-2xl overflow-hidden border border-border/50" style={{ lineHeight: 0, boxShadow: "0 20px 60px hsl(220 50% 2% / 0.6)" }}>
         <canvas ref={cvs} width={CW} height={CH}
           style={{ display: "block", width: "100%", height: "auto", touchAction: "none" }}
-          onTouchStart={onTap} onTouchEnd={() => { jRef.current = false; }}
+          onTouchStart={onTap} onTouchEnd={() => {
+            if (jRef.current) { jRef.current = false; recordEvent(1); }
+          }}
         />
         {gs.status === "playing" && (
           <button
             type="button"
             aria-label="Duck"
-            onTouchStart={(e) => { e.preventDefault(); dRef.current = true; }}
-            onTouchEnd={(e) => { e.preventDefault(); dRef.current = false; }}
-            onTouchCancel={() => { dRef.current = false; }}
-            onMouseDown={(e) => { e.preventDefault(); dRef.current = true; }}
-            onMouseUp={() => { dRef.current = false; }}
-            onMouseLeave={() => { dRef.current = false; }}
+            onTouchStart={(e) => { e.preventDefault(); if (!dRef.current) { dRef.current = true; recordEvent(2); } }}
+            onTouchEnd={(e) => { e.preventDefault(); if (dRef.current) { dRef.current = false; recordEvent(3); } }}
+            onTouchCancel={() => { if (dRef.current) { dRef.current = false; recordEvent(3); } }}
+            onMouseDown={(e) => { e.preventDefault(); if (!dRef.current) { dRef.current = true; recordEvent(2); } }}
+            onMouseUp={() => { if (dRef.current) { dRef.current = false; recordEvent(3); } }}
+            onMouseLeave={() => { if (dRef.current) { dRef.current = false; recordEvent(3); } }}
             onContextMenu={(e) => e.preventDefault()}
             className="absolute bottom-3 right-3 select-none px-4 py-2 rounded-full bg-background/60 backdrop-blur-sm border border-accent/40 text-accent text-xs font-semibold tracking-[0.2em] shadow-[0_0_18px_hsl(var(--accent)/0.25)] active:bg-accent/30 active:scale-95 transition"
             style={{ touchAction: "none" }}
@@ -328,7 +319,7 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
             <div className="num text-5xl font-semibold text-primary mb-1 drop-shadow-[0_0_24px_hsl(var(--primary)/0.5)]">
               {gs.score.toLocaleString()}
             </div>
-            <div className="text-xs text-muted-foreground mb-6">Block closes in {blockInfo.remaining}s · Score broadcast</div>
+            <div className="text-xs text-muted-foreground mb-6">Block closes in {blockInfo.remaining}s · Replay sealed for verification</div>
             <button
               onClick={startRun}
               className="px-8 py-3 rounded-full bg-primary text-primary-foreground text-sm font-semibold tracking-wide hover:scale-[1.02] transition-transform shadow-[0_0_30px_hsl(var(--primary)/0.4)]"

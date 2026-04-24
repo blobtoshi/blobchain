@@ -1,9 +1,14 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -11,50 +16,65 @@ Deno.serve(async (req) => {
   try {
     const { code, fingerprint } = await req.json();
     if (typeof code !== 'string' || typeof fingerprint !== 'string' || !code.trim() || !fingerprint.trim()) {
-      return new Response(JSON.stringify({ ok: false, error: 'invalid input' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return json({ ok: false, error: 'invalid input' }, 400);
     }
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-    );
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !serviceRoleKey) {
+      throw new Error('backend environment not configured');
+    }
 
     const normalized = code.trim().toUpperCase();
-    const { data: row, error } = await supabase
-      .from('access_codes')
-      .select('code, used_at, used_by_fingerprint')
-      .eq('code', normalized)
-      .maybeSingle();
+    const lookupUrl = new URL(`${supabaseUrl}/rest/v1/access_codes`);
+    lookupUrl.searchParams.set('select', 'code,used_at,used_by_fingerprint');
+    lookupUrl.searchParams.set('code', `eq.${normalized}`);
 
-    if (error) throw error;
+    const lookupRes = await fetch(lookupUrl, {
+      headers: {
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`,
+      },
+    });
+
+    if (!lookupRes.ok) {
+      throw new Error(`lookup failed (${lookupRes.status})`);
+    }
+
+    const rows = await lookupRes.json();
+    const row = Array.isArray(rows) ? rows[0] : null;
+
     if (!row) {
-      return new Response(JSON.stringify({ ok: false, error: 'invalid code' }), {
-        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return json({ ok: false, error: 'invalid code' });
     }
 
     // If already used, only same fingerprint may re-validate
     if (row.used_at && row.used_by_fingerprint && row.used_by_fingerprint !== fingerprint) {
-      return new Response(JSON.stringify({ ok: false, error: 'code already used' }), {
-        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return json({ ok: false, error: 'code already used' });
     }
 
     if (!row.used_at) {
-      await supabase.from('access_codes').update({
+      const updateRes = await fetch(`${supabaseUrl}/rest/v1/access_codes?code=eq.${encodeURIComponent(normalized)}`, {
+        method: 'PATCH',
+        headers: {
+          apikey: serviceRoleKey,
+          Authorization: `Bearer ${serviceRoleKey}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal',
+        },
+        body: JSON.stringify({
         used_at: new Date().toISOString(),
         used_by_fingerprint: fingerprint,
-      }).eq('code', normalized);
+        }),
+      });
+
+      if (!updateRes.ok) {
+        throw new Error(`update failed (${updateRes.status})`);
+      }
     }
 
-    return new Response(JSON.stringify({ ok: true, token: normalized }), {
-      status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return json({ ok: true, token: normalized });
   } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: String(e) }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return json({ ok: false, error: String(e) }, 500);
   }
 });

@@ -38,7 +38,7 @@ export const FEE_BUCKETS = [1, 5, 10, 20, 50, 100];
 // Sized to comfortably cover the server-signed credit tx network fee at peak congestion.
 export const BRIDGE_FEE_BLOB = 0.0015;
 export const MEMO_PROGRAM_ID = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
-export const BRIDGE_ADDRESS = "19xGuoUEng3w4Y2DjP6te2LLTSKt7fKs27";
+export const BRIDGE_ADDRESS = "13mEv2jseLwXDzbJi4GnScvbMvR2VR76on";
 
 export const GENESIS = {
   height: 0,

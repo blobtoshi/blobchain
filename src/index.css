@@ -146,23 +146,7 @@
     overflow: hidden;
     isolation: isolate;
   }
-  .glass::before {
-    content: "";
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background:
-      linear-gradient(125deg,
-        transparent 0%,
-        transparent 18%,
-        hsl(var(--glass-spec)) 22%,
-        hsl(var(--glass-spec)) 24%,
-        transparent 28%,
-        transparent 100%);
-    opacity: 0.55;
-    pointer-events: none;
-    z-index: 0;
-    mix-blend-mode: screen;
-  }
+  .glass::before { content: none; }
   .glass::after {
     content: "";
     position: absolute;
@@ -197,26 +181,7 @@
     overflow: hidden;
     isolation: isolate;
   }
-  .glass-hi::before {
-    content: "";
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background:
-      linear-gradient(125deg,
-        transparent 0%,
-        transparent 16%,
-        hsl(var(--glass-spec)) 20%,
-        hsl(var(--glass-spec)) 23%,
-        transparent 28%,
-        transparent 70%,
-        hsl(0 0% 100% / 0.20) 75%,
-        transparent 80%,
-        transparent 100%);
-    opacity: 0.6;
-    pointer-events: none;
-    z-index: 0;
-    mix-blend-mode: screen;
-  }
+  .glass-hi::before { content: none; }
   .glass-hi::after {
     content: "";
     position: absolute;
@@ -252,27 +217,7 @@
     overflow: hidden;
     isolation: isolate;
   }
-  .glass-pane::before {
-    content: "";
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background:
-      linear-gradient(120deg,
-        transparent 0%,
-        transparent 14%,
-        hsl(var(--glass-spec)) 18%,
-        hsl(var(--glass-spec)) 22%,
-        transparent 28%,
-        transparent 65%,
-        hsl(0 0% 100% / 0.25) 72%,
-        hsl(0 0% 100% / 0.10) 76%,
-        transparent 82%,
-        transparent 100%);
-    opacity: 0.65;
-    pointer-events: none;
-    z-index: 0;
-    mix-blend-mode: screen;
-  }
+  .glass-pane::before { content: none; }
   .glass-pane::after {
     content: "";
     position: absolute;
@@ -316,20 +261,7 @@
     overflow: hidden;
     isolation: isolate;
   }
-  .glass-pill::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background:
-      linear-gradient(125deg,
-        transparent 0%, transparent 22%,
-        hsl(0 0% 100% / 0.55) 26%,
-        hsl(0 0% 100% / 0.55) 28%,
-        transparent 32%, transparent 100%);
-    opacity: 0.5;
-    pointer-events: none;
-    mix-blend-mode: screen;
-  }
+  .glass-pill::before { content: none; }
   .glass-pill > * { position: relative; z-index: 1; }
 
   .num {

@@ -1,8 +1,8 @@
 // Seals a closed block on the server. Re-fetches verified entries from DB,
 // re-runs the deterministic weighted-lottery winner selection, and persists
 // the block with confirmed transactions. Idempotent on (height) PK.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
-import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2.95.0/cors";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2.45.0/cors";
 
 const BLOCK_TIME = 120;
 const INITIAL_REWARD = 10;

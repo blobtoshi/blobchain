@@ -1,8 +1,8 @@
 // Verifies a secp256k1 (Bitcoin curve) signed mining entry, RE-SIMULATES
 // the submitted gameplay trace deterministically, and only accepts the
 // score if the replay matches. This is the consensus anti-cheat layer.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
-import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2.95.0/cors";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2.45.0/cors";
 import * as secp from "https://esm.sh/@noble/secp256k1@2.1.0";
 import { sha256 } from "https://esm.sh/@noble/hashes@1.5.0/sha256";
 import { ripemd160 } from "https://esm.sh/@noble/hashes@1.5.0/ripemd160";

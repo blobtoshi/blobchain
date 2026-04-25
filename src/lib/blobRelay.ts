@@ -11,7 +11,6 @@ export type Block = {
   transactions: any[];
   miningEntries: any[];
   winner: string | null;
-  winnerUsername?: string | null;
   winnerScore?: number;
   reward: number;
   seed: string;
@@ -23,7 +22,6 @@ export type Block = {
 export type Tx = {
   id: string;
   from: string;
-  fromUsername?: string;
   to: string;
   amount: number;
   fee?: number;
@@ -42,7 +40,6 @@ export type FeeInfo = {
 
 export type Entry = {
   address: string;
-  username?: string;
   score: number;
   block_height: number;
   block_seed?: string;
@@ -68,7 +65,6 @@ function blockFromRow(r: any): Block {
     transactions: safeParse(r.transactions, []),
     miningEntries: safeParse(r.mining_entries, []),
     winner: r.winner,
-    winnerUsername: r.winner_username,
     winnerScore: r.winner_score ?? 0,
     reward: Number(r.reward ?? 0),
     seed: String(r.seed ?? ""),
@@ -104,7 +100,6 @@ function txFromRow(r: any): Tx {
   return {
     id: r.id,
     from: r.from_address,
-    fromUsername: r.from_username,
     to: r.to_address,
     amount: Number(r.amount),
     fee: Number(r.fee ?? 0),
@@ -142,7 +137,6 @@ export async function pushTx(tx: Tx): Promise<{ ok: boolean; error?: string; fee
     body: {
       id: tx.id,
       from: tx.from,
-      fromUsername: tx.fromUsername,
       to: tx.to,
       amount: tx.amount,
       feeRate: tx.feeRate,
@@ -164,7 +158,6 @@ export async function pushTx(tx: Tx): Promise<{ ok: boolean; error?: string; fee
 function entryFromRow(r: any): Entry {
   return {
     address: r.address,
-    username: r.username,
     score: Number(r.score ?? 0),
     block_height: Number(r.block_height),
     block_seed: r.block_seed,
@@ -185,7 +178,6 @@ export async function pushEntry(
   const { data, error } = await supabase.functions.invoke("submit-entry", {
     body: {
       address: e.address,
-      username: e.username,
       score: e.score,
       block_height: e.block_height,
       block_seed: e.block_seed,
@@ -209,7 +201,6 @@ export async function pushEntry(
 // explorer immediately, even before the user mines or transacts.
 export async function registerPlayer(p: {
   address: string;
-  username: string;
   publicKey: string;
   signature: string;
   timestamp: number;
@@ -226,7 +217,6 @@ export async function registerPlayer(p: {
 // ── PLAYERS ─────────────────────────────────────────────────────────────
 export type Player = {
   address: string;
-  username: string;
   publicKey?: string;
   blocksWon?: number;
   totalMined?: number;
@@ -239,12 +229,11 @@ export type Player = {
 export async function fetchPlayers(): Promise<Player[]> {
   const { data, error } = await (supabase as any)
     .from("blob_players_public")
-    .select("address,username,blocks_won,total_mined,best_score,games_played,first_seen,last_active")
+    .select("address,blocks_won,total_mined,best_score,games_played,first_seen,last_active")
     .order("first_seen", { ascending: true });
   if (error) { console.error("[relay] fetchPlayers", error); return []; }
   return (data ?? []).map((r: any) => ({
     address: r.address,
-    username: r.username,
     publicKey: undefined,
     blocksWon: Number(r.blocks_won ?? 0),
     totalMined: Number(r.total_mined ?? 0),
@@ -259,7 +248,6 @@ export async function fetchPlayers(): Promise<Player[]> {
 export type BridgeRequest = {
   blob_tx_id: string;
   from_address: string;
-  from_username: string | null;
   sol_address: string;
   amount: number;
   status: "pending" | "confirmed" | "minting" | "minted" | "failed";
@@ -295,7 +283,6 @@ export async function registerBridgeRequest(p: {
   sol_address: string;
   amount: number;
   from_address: string;
-  from_username?: string;
 }): Promise<{ ok: boolean; error?: string; data?: BridgeRequest }> {
   const { data, error } = await supabase.functions.invoke("bridge-mint", { body: p });
   if (error) return { ok: false, error: error.message };

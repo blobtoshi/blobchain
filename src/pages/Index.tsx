@@ -49,6 +49,38 @@ export default function BlobChainApp() {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showPriv, setShowPriv] = useState(false);
+  const [privCopied, setPrivCopied] = useState(false);
+  const [showSeed, setShowSeed] = useState(false);
+  const [seedSettingsCopied, setSeedSettingsCopied] = useState(false);
+
+  // Auto-hide sensitive material (private key + seed) after 30s or on tab blur.
+  useEffect(() => {
+    if (!showPriv && !showSeed) return;
+    const t = window.setTimeout(() => { setShowPriv(false); setShowSeed(false); }, 30_000);
+    const onVis = () => { if (document.hidden) { setShowPriv(false); setShowSeed(false); } };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("blur", onVis);
+    return () => {
+      window.clearTimeout(t);
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("blur", onVis);
+    };
+  }, [showPriv, showSeed]);
+
+  async function copyPrivateKey() {
+    try {
+      await navigator.clipboard.writeText(wallet?.privateKey ?? "");
+      setPrivCopied(true);
+      setTimeout(() => setPrivCopied(false), 2000);
+    } catch {}
+  }
+  async function copySeedSettings() {
+    try {
+      await navigator.clipboard.writeText(wallet?.mnemonic ?? "");
+      setSeedSettingsCopied(true);
+      setTimeout(() => setSeedSettingsCopied(false), 2000);
+    } catch {}
+  }
 
   const [connectOpen, setConnectOpen] = useState(false);
   const [connectMode, setConnectMode] = useState<"choose" | "create" | "import">("choose");

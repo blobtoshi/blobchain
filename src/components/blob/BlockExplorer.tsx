@@ -310,7 +310,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                 {searchResults.addresses.map(a => (
                   <button key={a.address} onClick={() => { setTab("addresses"); setSelAddr(a.address); setQuery(""); }}
                     className="w-full text-left glass px-3 py-2 mb-1 hover:bg-secondary/30 transition flex items-center justify-between text-xs">
-                    <span className="text-foreground/80">{a.address === "coinbase" ? "blob" : (a.username || "anon")}</span>
+                    <span className="text-foreground/80">{a.address === "coinbase" ? "blob" : shortHash(a.address, 6)}</span>
                     <span className="num text-muted-foreground truncate mx-2">{shortHash(a.address, 8)}</span>
                     <span className="num text-primary/80">{(a.received + a.mined - a.sent).toFixed(2)} BLOB</span>
                   </button>
@@ -387,8 +387,8 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
           <FilterPanel activeCount={blockFiltersActive(blkF)} onClear={() => setBlkF(emptyBlockFilters)}>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
               <div className="col-span-2 sm:col-span-3 lg:col-span-2">
-                <FieldLabel>Winner (address or username)</FieldLabel>
-                <FInput value={blkF.winner} onChange={e => setBlkF({ ...blkF, winner: e.target.value })} placeholder="address or @username" />
+                <FieldLabel>Winner address</FieldLabel>
+                <FInput value={blkF.winner} onChange={e => setBlkF({ ...blkF, winner: e.target.value })} placeholder="address" />
               </div>
               <div>
                 <FieldLabel>Min height</FieldLabel>
@@ -482,7 +482,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
               <div className="col-span-2 sm:col-span-2">
                 <FieldLabel>Address (from / to)</FieldLabel>
-                <FInput value={txF.addr} onChange={e => setTxF({ ...txF, addr: e.target.value })} placeholder="address or @username" />
+                <FInput value={txF.addr} onChange={e => setTxF({ ...txF, addr: e.target.value })} placeholder="address" />
               </div>
               <div>
                 <FieldLabel>Side</FieldLabel>
@@ -644,7 +644,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
               <FilterPanel activeCount={addrFiltersActive(addrF)} onClear={() => setAddrF(emptyAddrFilters)}>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                   <div className="col-span-2">
-                    <FieldLabel>Address or username</FieldLabel>
+                    <FieldLabel>Address</FieldLabel>
                     <FInput value={addrF.q} onChange={e => setAddrF({ ...addrF, q: e.target.value })} placeholder="search…" />
                   </div>
                   <div>

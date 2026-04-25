@@ -44,6 +44,7 @@
     "@radix-ui/react-toggle-group": "^1.1.10",
     "@radix-ui/react-tooltip": "^1.2.7",
     "@scure/base": "1.1.9",
+    "@scure/bip39": "1.4.0",
     "@solana/spl-token": "0.4.9",
     "@solana/wallet-adapter-base": "0.9.23",
     "@solana/wallet-adapter-phantom": "0.9.24",

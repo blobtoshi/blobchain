@@ -547,12 +547,12 @@ export default function BlobChainApp() {
         {screen === "wallet" && (
           wallet
             ? <WalletScreen wallet={wallet} chain={chain} mempool={mempool} onBroadcast={onTxBroadcast} />
-            : <LockedGate context="wallet" />
+            : <LockedGate />
         )}
         {screen === "bridge" && (
           wallet
             ? <BridgeScreen wallet={wallet} chain={chain} mempool={mempool} onBroadcast={onTxBroadcast} />
-            : <LockedGate context="bridge" />
+            : <LockedGate />
         )}
         {screen === "chain" && <BlockExplorer chain={chain} blockInfo={blockInfo} mempool={mempool} />}
         {screen === "network" && <NetworkView nodeCount={nodeCount} chain={chain} blockInfo={blockInfo} mempool={mempool} />}

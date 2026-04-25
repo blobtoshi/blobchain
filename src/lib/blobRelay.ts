@@ -527,7 +527,17 @@ export function subscribeRelay(h: RelayHandlers) {
           if (t.id) liveMempool.add(t.id);
           h.onTx?.(t);
         },
-        onEntry: (e) => h.onEntry?.(e),
+        onEntry: (e) => h.onEntry?.({
+          address: e.address,
+          score: e.score,
+          block_height: e.block_height,
+          block_seed: e.block_seed,
+          signature: e.signature,
+          inputs: e.inputs ?? undefined,
+          inputs_hash: e.inputs_hash ?? undefined,
+          frame_count: e.frame_count ?? undefined,
+          engine_version: e.engine_version,
+        }),
       });
       nodeClient.connect();
       return;

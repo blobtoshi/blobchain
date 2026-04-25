@@ -171,7 +171,7 @@ export function useBlockchain(walletRef: React.MutableRefObject<WalletLike>) {
     if (entries.length > 0) attemptSeal();
   }, [entries.length, attemptSeal]);
 
-  const onEntrySubmit = useCallback(entry => {
+  const onEntrySubmit = useCallback((entry: SubmittedEntry) => {
     const current = blockInfoRef.current;
     const matchesActiveBlock =
       Number(entry.block_height) === Number(current.height) &&
@@ -180,11 +180,15 @@ export function useBlockchain(walletRef: React.MutableRefObject<WalletLike>) {
     if (!matchesActiveBlock) return;
 
     setMyEntry(entry);
-    setEntries(e => e.find(x => x.address === entry.address) ? e.map(x => x.address === entry.address ? entry : x) : [...e, entry]);
+    setEntries((e) =>
+      e.find((x) => x.address === entry.address)
+        ? e.map((x) => (x.address === entry.address ? entry : x))
+        : [...e, entry]
+    );
   }, []);
 
-  const onTxBroadcast = useCallback(tx => {
-    setMempool(m => [...m, tx]);
+  const onTxBroadcast = useCallback((tx: Tx) => {
+    setMempool((m) => [...m, tx]);
   }, []);
 
   return {

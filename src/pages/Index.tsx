@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Send, Wallet, Plus, Download, Lock, Settings as SettingsIcon, LogOut, ChevronDown, Eye, EyeOff, ArrowLeftRight, Copy, Check, ShieldAlert, KeyRound, FileKey } from "lucide-react";
 import blobLogo from "@/assets/blob-logo.png";
+import minerSlime from "@/assets/miner-slime.png";
 
 import { useBlockchain } from "@/hooks/useBlockchain";
 import { useWalletVault } from "@/hooks/useWalletVault";
@@ -513,6 +514,13 @@ export default function BlobChainApp() {
             {!wallet ? (
               <div className="relative overflow-hidden rounded-3xl glass-hi px-6 py-16 sm:py-20 text-center">
                 <div className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[480px] h-[480px] rounded-full bg-primary/10 blur-3xl" />
+                <img
+                  src={minerSlime}
+                  alt=""
+                  aria-hidden="true"
+                  className="pointer-events-none select-none absolute -left-16 -bottom-16 sm:-left-20 sm:-bottom-20 w-[280px] sm:w-[420px] h-auto opacity-90 drop-shadow-[0_0_40px_hsl(var(--primary)/0.4)] -rotate-12"
+                  style={{ imageRendering: "pixelated" }}
+                />
                 <div className="relative">
                   <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-primary/10 border border-primary/30 text-primary mb-5">
                     <Lock className="w-5 h-5" />

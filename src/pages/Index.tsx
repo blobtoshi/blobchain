@@ -252,13 +252,47 @@ export default function BlobChainApp() {
               />
             </div>
             <div>
-              <label className="label-eyebrow block mb-2">Private key (64 hex characters)</label>
+              <div className="label-eyebrow mb-2">Restore using</div>
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <button
+                  type="button"
+                  onClick={() => { setImportMode("seed"); setImportJson(""); setConnectErr(""); }}
+                  className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-xs font-medium border transition ${
+                    importMode === "seed"
+                      ? "border-primary/60 bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <FileKey className="w-3.5 h-3.5" /> Seed phrase
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setImportMode("privkey"); setImportJson(""); setConnectErr(""); }}
+                  className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-xs font-medium border transition ${
+                    importMode === "privkey"
+                      ? "border-primary/60 bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <KeyRound className="w-3.5 h-3.5" /> Private key
+                </button>
+              </div>
+              <label className="label-eyebrow block mb-2">
+                {importMode === "seed" ? "12-word seed phrase" : "Private key (64 hex characters)"}
+              </label>
               <textarea
                 value={importJson} onChange={e => setImportJson(e.target.value)}
-                placeholder="e.g. 1e99423a4ed27608a15a2616a2b0e9e52ced330ac530edcc32c8ffc6a526aedd"
+                placeholder={importMode === "seed"
+                  ? "e.g. legal winner thank year wave sausage worth useful legal winner thank yellow"
+                  : "e.g. 1e99423a4ed27608a15a2616a2b0e9e52ced330ac530edcc32c8ffc6a526aedd"}
                 rows={3} spellCheck={false} autoCapitalize="off" autoCorrect="off"
-                className="num w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-[12px] leading-relaxed resize-none break-all"
+                className={`${importMode === "privkey" ? "num" : ""} w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-[12px] leading-relaxed resize-none break-all`}
               />
+              <div className="text-[10px] text-muted-foreground/70 mt-1.5">
+                {importMode === "seed"
+                  ? "Your seed phrase regenerates your private key — username and passphrase are NOT used to import."
+                  : "Paste the raw private key — username and passphrase are NOT used to import."}
+              </div>
             </div>
             <div>
               <label className="label-eyebrow block mb-2">Passphrase</label>

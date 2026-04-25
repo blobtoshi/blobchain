@@ -785,7 +785,7 @@ export default function BlobChainApp() {
                 </div>
                 {showPriv ? (
                   <div className="p-3 rounded-md border border-destructive/30 bg-destructive/5 space-y-1.5">
-                    <div className="text-[11px] text-destructive">⚠ Never share this key — anyone with it controls your wallet. Auto-hides in 30s or when you switch tabs.</div>
+                    <div className="text-[11px] text-destructive">⚠ Never share this key — anyone with it controls your wallet. </div>
                     <div className="num text-[10px] text-foreground/70 break-all leading-relaxed">{wallet.privateKey}</div>
                   </div>
                 ) : (

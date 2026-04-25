@@ -550,6 +550,83 @@ export default function BlobChainApp() {
 
       {ConnectWalletDialog}
 
+      {/* Seed-phrase reveal — shown once after wallet creation */}
+      <Dialog
+        open={seedRevealOpen}
+        onOpenChange={(o) => {
+          // Block close until the user confirms they've saved it.
+          if (!o && !seedConfirmed) return;
+          setSeedRevealOpen(o);
+          if (!o) { setSeedPhrase(""); setSeedConfirmed(false); setSeedCopied(false); }
+        }}
+      >
+        <DialogContent
+          className="glass-hi border-border max-w-lg"
+          onInteractOutside={(e) => { if (!seedConfirmed) e.preventDefault(); }}
+          onEscapeKeyDown={(e) => { if (!seedConfirmed) e.preventDefault(); }}
+        >
+          <DialogHeader>
+            <DialogTitle className="text-sm font-medium tracking-wide flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-[hsl(var(--warning))]" />
+              Save your 12-word seed phrase
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <div className="text-xs text-muted-foreground leading-relaxed">
+              This is the <span className="text-foreground font-medium">only way</span> to recover your wallet on another device or after clearing this browser. Write it down on paper or store it in a password manager. Never share it with anyone.
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 p-4 rounded-lg border border-primary/30 bg-primary/5">
+              {seedPhrase.split(" ").map((word, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-2 px-2.5 py-2 rounded-md bg-secondary/60 border border-border"
+                >
+                  <span className="text-[10px] text-muted-foreground num w-4 text-right">{i + 1}</span>
+                  <span className="text-xs font-medium text-foreground">{word}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={copySeedPhrase}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:border-primary/40 text-xs text-muted-foreground hover:text-foreground transition"
+              >
+                {seedCopied ? <><Check className="w-3.5 h-3.5 text-primary" /> Copied</> : <><Copy className="w-3.5 h-3.5" /> Copy phrase</>}
+              </button>
+              <div className="text-[10px] text-muted-foreground/70 flex-1">
+                Anyone with these 12 words controls your wallet.
+              </div>
+            </div>
+
+            <label className="flex items-start gap-3 p-3 rounded-lg border border-border bg-secondary/30 cursor-pointer hover:border-primary/40 transition">
+              <input
+                type="checkbox"
+                checked={seedConfirmed}
+                onChange={(e) => setSeedConfirmed(e.target.checked)}
+                className="mt-0.5 w-4 h-4 accent-primary cursor-pointer"
+              />
+              <span className="text-xs text-foreground/90 leading-relaxed">
+                I have safely stored my 12-word seed phrase. I understand that losing it means losing access to my wallet, and that no one — including Blob Chain — can recover it for me.
+              </span>
+            </label>
+
+            <button
+              onClick={() => {
+                setSeedRevealOpen(false);
+                setSeedPhrase(""); setSeedConfirmed(false); setSeedCopied(false);
+              }}
+              disabled={!seedConfirmed}
+              className="w-full py-3 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition"
+            >
+              I've saved it — continue
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+
       <Dialog open={unlockOpen} onOpenChange={(o) => { setUnlockOpen(o); if (!o) { setUnlockPass(""); setUnlockErr(""); } }}>
         <DialogContent className="glass-hi border-border max-w-md">
           <DialogHeader>

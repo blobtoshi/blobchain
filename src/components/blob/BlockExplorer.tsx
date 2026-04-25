@@ -544,7 +544,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                   ? <HandCoins className="w-3.5 h-3.5 text-[hsl(var(--warning))]" />
                   : <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground" />}
                 <span className="text-foreground/80 truncate">{t.kind === "reward" ? "Block Reward" : (t.from === "coinbase" ? "blob" : shortHash(t.from, 6))}</span>
-                <span className="hidden sm:block text-foreground/80 truncate">{t || shortHash(t.to, 6)}</span>
+                <span className="hidden sm:block text-foreground/80 truncate">{t.to === "coinbase" ? "blob" : shortHash(t.to, 6)}</span>
                 <span className="num text-primary/80">{t.amount} BLOB</span>
                 <span className="num text-muted-foreground">{t.status === "pending" ? "—" : `#${t.block}`}</span>
                 <span className={`num text-right ${t.status === "pending" ? "text-[hsl(var(--warning))]" : "text-muted-foreground"}`}>

@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Pure helpers + types for the BlockExplorer view.
 
 export type ExplorerTx = {

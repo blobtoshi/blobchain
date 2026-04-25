@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Shared constants for the BLOB chain UI.
 export const BLOCK_TIME = 120;
 export const INITIAL_REWARD = 10;

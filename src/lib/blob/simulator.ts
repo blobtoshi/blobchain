@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Pure, deterministic Blob Run physics simulator.
 // SAME module is imported by the React canvas component AND the
 // submit-entry edge function. Any drift = consensus break, so do not

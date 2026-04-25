@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useRef, useState, useCallback } from "react";
 import * as Relay from "@/lib/blobRelay";
 import { signData } from "@/lib/blob/crypto";

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { mkPrng } from "./chain";
 import { CW, CH, GY } from "./constants";
 import blobSprite from "@/assets/blob-sprite.png";

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { sha256hex } from "./crypto";
 import { to8 } from "./fees";
 import {

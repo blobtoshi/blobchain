@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useMemo, useState } from "react";
 import * as Relay from "@/lib/blobRelay";
 import { ChevronDown, SlidersHorizontal, X, Search, HandCoins, ArrowUpRight, ArrowDownLeft, Trophy } from "lucide-react";

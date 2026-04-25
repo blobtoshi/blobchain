@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Lightweight ring-buffer of mempool snapshots for inline sparklines.
 // Frontend-only — no relay or backend changes.
 import { useEffect, useRef, useState } from "react";

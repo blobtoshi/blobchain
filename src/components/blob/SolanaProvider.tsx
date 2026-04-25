@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Tight Solana wallet adapter setup for the reverse-bridge flow.
 // Loads only Phantom + Solflare to keep the bundle small and to avoid the
 // hardware-wallet packages (Ledger pulls native `usb` deps).

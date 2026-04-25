@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { lazy, Suspense, useEffect, useState } from "react";
 import * as Relay from "@/lib/blobRelay";
 import { Input } from "@/components/ui/input";

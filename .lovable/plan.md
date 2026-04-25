@@ -1,66 +1,56 @@
-## Phase 1 — Decentralization groundwork
+## Phase 2 — Light-client wiring + Persistence/Sync API
 
-You picked: deliver `full-node.ts` + protocol first, run locally on `ws://localhost:8080`, persist with SQLite, move bridge to the full node eventually but keep access-code/locked-gate untouched. Browser code is **not** modified in this phase — current Supabase relay keeps working.
+Goal: the browser app talks directly to a BLOB CHAIN full node (`ws://…/ws` + `http://…/`) for live chain data and submissions, with Supabase kept only as a fallback / for bridge + auth flows. The full node becomes the source of truth for chain state.
 
-### Deliverables
+### 1. Node-side: persistence + sync API hardening
 
-1. **`node/full-node.ts`** — standalone Node 20 + TypeScript full node
-   - HTTP (Express) + WebSocket (`ws`) on port `8080`
-   - SQLite via `better-sqlite3` at `./data/blobchain.db`
-   - Tables: `blocks`, `mempool`, `entries`, `addresses` (mirrors current Supabase schema)
-   - Block sealer: 120s ticker that reuses the exact logic from `supabase/functions/seal-block` (PRNG, weighted lottery, halving, 20M cap, deterministic hash). Ported verbatim so block hashes match the current chain rules.
-   - Validators for `submitTx` (secp256k1 verify, balance, fee floor) and `submitEntry` (signature over `address|score|block_height|block_seed`, replay-input hashing — same as `submit-entry`).
-   - Gossip: on accepted tx/entry/block, broadcast to all subscribed WS clients.
-   - REST helpers for debugging: `GET /chain/tip`, `GET /blocks?from=&limit=`, `GET /mempool`, `GET /health`.
-   - Graceful shutdown, structured logs, reconnection-friendly (idempotent inserts).
+Files in `node/` (mirrored to `src/server/` — see §3).
 
-2. **`node/wsProtocol.ts`** — shared message types
-   - `ClientMsg = Subscribe | SubmitTx | SubmitEntry | GetChainTip | GetBlocks`
-   - `ServerMsg = NewBlock | NewTx | NewEntry | ChainTip | BlocksRange | Ack | ErrorMsg`
-   - Discriminated unions, exported so the browser can import the same file later.
-   - Lives under `node/` so the browser can `import type` from it without bundling Node deps.
+- **`/blocks` REST**: already exists; add `?from=H&limit=N` validation, return `[]` past tip, and a `Cache-Control: no-store` header. Add **`/blocks/:height`** for single-block lookups (used for catch-up gap fills).
+- **`/chain/tip` REST**: already exists; add an `ETag` so polling clients can short-circuit.
+- **`/mempool` REST**: already exists; add optional `?since=<ts>` for delta polls.
+- **WebSocket sync flow**: on `subscribe`, server already sends `hello` with `chainTip`. Add a `getBlocks { fromHeight, limit }` round-trip the client uses immediately after `hello` to backfill anything it's missing, then it switches to live `newBlock` gossip. Already wired server-side — just formalize the contract and document it.
+- **Backpressure / sanity**: cap `getBlocks` limit at 500 (already), reject `submitTx` payloads >`MAX_TX_SIZE`, drop sockets after N malformed messages. Add a `lastSeenSeq` per socket so a reconnecting client can ask "did I miss anything since seq X?" → respond with a `blocksRange`.
+- **Persistence**: SQLite is already used; add a `PRAGMA journal_mode=WAL` on open (better-sqlite3 supports it) and a nightly `VACUUM` no-op stub so we don't surprise ourselves later. Verify `getBlocksFrom` uses an index on `height` (it's PK, so yes).
+- **CORS**: already `*`; keep but echo the request origin if present (cleaner DevTools).
 
-3. **`node/package.json`** — minimal manifest
-   - Deps: `better-sqlite3`, `ws`, `express`, `@noble/secp256k1`, `@noble/hashes`, `tsx`, `typescript`, `@types/node`, `@types/ws`, `@types/express`
-   - Scripts: `"dev": "tsx watch full-node.ts"`, `"start": "tsx full-node.ts"`
+### 2. Browser-side: light-client relay
 
-4. **`node/README.md`** — local run instructions
-   - `cd node && npm i && npm run dev`
-   - Env vars: `PORT`, `DB_PATH`, `GENESIS_TIME_MS` (default matches current chain)
-   - How to point a future browser build at `ws://localhost:8080`
-   - Notes on later deploying 4 nodes (Fly.io/Railway placeholder section)
+New file `src/lib/blobNodeClient.ts` — thin WebSocket+REST client speaking `wsProtocol`:
 
-5. **`node/lib/`** (small internal modules to keep `full-node.ts` readable)
-   - `crypto.ts` — sha256 + secp256k1 verify wrappers
-   - `consensus.ts` — `mkPrng`, `pickWinner`, `getRewardForHeight`, `computeBlockHash`
-   - `validate.ts` — tx + entry validation
-   - `db.ts` — SQLite schema bootstrap + prepared statements
-   - `gossip.ts` — WS broadcast helpers
+- Connection manager with auto-reconnect (exponential backoff, capped 15s), heartbeat `ping`/`pong` every 20s, and an event emitter (`onBlock`, `onTx`, `onTxRemoved`, `onEntry`, `onTip`).
+- On (re)connect: receive `hello`, compare its `chainTip.height` to local cache, request `getBlocks { fromHeight: localHeight+1 }` in pages of 100 until caught up, then send `subscribe`.
+- Submit helpers: `submitTx`, `submitEntry`, returning the server's `ack` payload (matched by `ref`).
+- REST helpers (used at cold start before WS opens, and as fallback if WS is down): `fetchTip`, `fetchBlocks(from, limit)`, `fetchMempool`, `fetchFeeInfo`.
+- Config via `VITE_BLOB_NODE_URL` (e.g. `http://localhost:8080`); derives WS URL by swapping scheme + appending `/ws`.
 
-### Out of scope for this phase
+Refactor `src/lib/blobRelay.ts` into a **mode-switching facade**:
 
-- No edits to `src/`, no rewrite of `blobRelay.ts`, no `useLightChain.ts`, no `BlobChainApp.tsx` changes.
-- Bridge port to full node (`bridge-mint`, `bridge-redeem`, Solana RPC) — deferred to Phase 3.
-- Multi-node peer-to-peer gossip — Phase 2 will add node↔node WS peering once one node is proven.
-- Access code / locked gate — left fully alone (you said it's being removed at launch).
+- New env flag `VITE_BLOB_RELAY_MODE` = `"node" | "supabase" | "auto"` (default `auto`).
+- `auto` mode: try `GET /health` on the configured node URL once at boot; if healthy → use node client; else fall back to current Supabase path.
+- All existing exports (`fetchChain`, `fetchMempool`, `pushTx`, `pushEntry`, `subscribeRelay`, `sealBlock`, etc.) keep their signatures so `useBlockchain.ts` and components don't change.
+- **Bridge + address registry + access-code flows stay on Supabase** — those aren't part of the node's job. Only chain/mempool/entries/tip switch.
+- `sealBlock(height)` becomes a no-op in node mode (the node seals on its own timer); keep the Supabase path for compatibility with the current deployment.
 
-### How it integrates with existing code
+### 3. Code location: mirror node/ into src/server/
 
-- The full node does **not** read/write Supabase. It is a parallel implementation of the same consensus rules.
-- For local testing you can manually copy the genesis hash + `GENESIS_TIME_MS` from the current chain so a fresh node starts at height 1 with the same rules.
-- Once you confirm the node runs and seals blocks correctly locally, Phase 2 will wire the browser to it via a new `useLightChain.ts` hook behind a feature flag, so you can A/B against the Supabase relay.
+- Copy `node/` → `src/server/` so files appear in the Lovable editor.
+- Add `src/server/.editor-only.md` explaining: "These files are a mirror of `/node/` for editor visibility. The deployable copy lives in `/node/` and is what `npm run dev` uses. When you edit here, also update `/node/`." (Or: pick `src/server/` as authoritative and have `/node/` be the mirror — say which you prefer. Default: `node/` stays authoritative since it's what's running.)
+- Exclude `src/server/` from the Vite build via `tsconfig.app.json` `exclude` and `vite.config.ts` so it doesn't get bundled into the React app.
+- Keep `wsProtocol.ts` as the shared contract — copy it into `src/lib/wsProtocol.ts` so the browser client can import it without crossing into `src/server/`. It's framework-free and identical on both sides.
 
-### Verification
+### 4. Rollout / testing
 
-- `cd node && npm run dev` boots without errors.
-- Hit `curl http://localhost:8080/health` → `{ ok: true, height, tipHash }`.
-- Open a `wscat` connection, send `{"type":"subscribe"}`, then `{"type":"submitEntry", ...}` with a valid signed entry — server acks and the next block (after 120s) lists it.
-- SQLite file persists across restarts; restart resumes at the same tip.
+- Default `VITE_BLOB_RELAY_MODE=auto` so production keeps working unchanged (Supabase path) until the node is reachable.
+- Local dev: set `VITE_BLOB_NODE_URL=http://localhost:8080` in `.env.local` (you, manually — `.env` is managed). Run the node, refresh, watch DevTools → WS frame inspector to verify `hello` → `getBlocks` → `subscribe` → live `newBlock` gossip.
+- Add a tiny dev-only badge in the corner showing relay mode + tip height + WS state (green/yellow/red). Hidden in production builds.
 
-### Phase 2 preview (not part of this plan)
+### Out of scope (for later phases)
 
-Once you approve Phase 1 and the node runs cleanly:
-- Build `src/lib/lightChain.ts` + `src/hooks/useLightChain.ts` (IndexedDB last-500 blocks, header chain).
-- Rewrite `blobRelay.ts` to speak the WS protocol with auto-reconnect + node failover.
-- Add Network tab indicator showing connected node URL + peer count.
-- Feature-flag rollout so the Supabase path stays available until you flip the switch.
+- Multi-node P2P / peer discovery
+- Consensus hardening beyond what's in `node/lib/validate.ts` today
+- Migrating bridge + auth off Supabase
+
+### Open question
+
+- Mirror direction: **`node/` authoritative, `src/server/` mirror** (current proposal) or flip it so you edit in `src/server/` and a script syncs to `node/`? The first is safer (your running process never goes stale); the second is more ergonomic. I'll go with the first unless you say otherwise.

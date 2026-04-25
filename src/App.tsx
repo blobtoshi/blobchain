@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import AlphaLock from "./components/AlphaLock";
+import { RelayStatusBadge } from "@/components/blob/RelayStatusBadge";
 
 const queryClient = new QueryClient();
 
@@ -23,6 +24,7 @@ const App = () => (
           </Routes>
         </BrowserRouter>
       </AlphaLock>
+      {import.meta.env.DEV && <RelayStatusBadge />}
     </TooltipProvider>
   </QueryClientProvider>
 );

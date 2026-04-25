@@ -1,7 +1,6 @@
 import { base64 } from "@scure/base";
 
 const VAULT_KEY = "blob_wallet_vault_v2"; // v2: secp256k1 hex keys
-const LEGACY_KEYS = ["blob_wallet_v2", "blob_wallet_vault_v1"]; // older formats to purge
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();

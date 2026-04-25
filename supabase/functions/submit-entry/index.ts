@@ -1,4 +1,4 @@
-// Verifies a secp256k1 (Bitcoin curve) signed mining entry, RE-SIMULATES
+// Verifies a secp256k1-signed mining entry, RE-SIMULATES
 // the submitted gameplay trace deterministically, and only accepts the
 // score if the replay matches. This is the consensus anti-cheat layer.
 import { createClient as _createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";

@@ -1,5 +1,5 @@
-// Verifies a secp256k1 (Bitcoin curve) signed transaction and inserts into the mempool.
-// Bitcoin-style fee model: fee = ceil(feeRate × tx_byte_size) / 1e8 $BLOB.
+// Verifies a secp256k1-signed transaction and inserts into the mempool.
+// Fee model: fee = ceil(feeRate × tx_byte_size) / 1e8 $BLOB.
 // feeRate is drops/byte (1 drop = 1e-8 $BLOB, the smallest unit). Server enforces
 // a minimum feeRate derived from current mempool congestion.
 import { createClient as _createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
@@ -12,7 +12,7 @@ import { sha256 } from "https://esm.sh/@noble/hashes@1.5.0/sha256";
 import { ripemd160 } from "https://esm.sh/@noble/hashes@1.5.0/ripemd160";
 import { base58check } from "https://esm.sh/@scure/base@1.1.9";
 
-const MAX_TX_SIZE = 100_000;     // 100 KB, Bitcoin standard tx limit
+const MAX_TX_SIZE = 100_000;     // 100 KB standard tx limit
 const MAX_BLOCK_SIZE = 1_000_000; // 1 MB
 const BLOB_UNIT = 1e8;            // $BLOB is divisible to 8 decimals
 const BASE_FEE_RATE = 10;         // drops/byte at zero congestion
@@ -178,8 +178,8 @@ Deno.serve(async (req) => {
     // Enforce minimum feeRate based on current congestion. Allow the
     // sender to underpay relative to "recommended" but never below the
     // congestion-derived floor (which itself never drops below MIN_FEE_RATE).
-    // We use 50% of the recommended rate as the acceptance floor — same as
-    // a Bitcoin node's `minrelaytxfee` heuristic.
+    // We use 50% of the recommended rate as the acceptance floor — analogous
+    // to a `minrelaytxfee` heuristic.
     const recRate = await recommendedFeeRate(supa);
     const floorRate = Math.max(MIN_FEE_RATE, Math.floor(recRate * 0.5));
     if (feeRate < floorRate) {

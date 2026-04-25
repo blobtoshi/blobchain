@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight, Gauge, TrendingUp, Hourglass, Coins,
 } from "lucide-react";
 import {
-  ExplorerTx, mempoolToTxs, shortHash, timeAgo,
+  mempoolToTxs, shortHash, timeAgo,
   TxFilters, applyTxFilters,
   estimateMempoolTxBytes, feeRateOf, bucketForRate, allBuckets,
   summarizeBlockFees, feeEstimates,
@@ -211,7 +211,6 @@ export default function MempoolView({
   // History sparklines.
   const history = useMempoolHistory(mempool, estimateMempoolTxBytes, 60);
   const histCount = history.map(h => h.count);
-  const histVbytes = history.map(h => h.vbytes);
   const histFees = history.map(h => h.fees);
   const histIn = history.map(h => h.incoming);
   const histConf = history.map(h => h.confirmed);

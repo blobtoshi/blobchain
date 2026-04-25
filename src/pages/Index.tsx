@@ -345,7 +345,7 @@ export default function BlobChainApp() {
     </Dialog>
   );
 
-  const LockedGate = ({ context }: { context: "wallet" | "bridge" }) => (
+  const LockedGate = () => (
     <div className="glass-hi p-10 text-center space-y-4">
       <div className="text-sm text-muted-foreground">{vaultPub ? "Wallet locked" : "No wallet connected"}</div>
       <button
@@ -539,7 +539,7 @@ export default function BlobChainApp() {
             ) : !gameLaunched ? (
               <MineHero blockInfo={blockInfo} onLaunch={() => setGameLaunched(true)} />
             ) : (
-              <BlobRunGame wallet={wallet} blockInfo={blockInfo} onEntrySubmit={onEntrySubmit} myEntry={myEntry} />
+              <BlobRunGame wallet={wallet} blockInfo={blockInfo} onEntrySubmit={onEntrySubmit} />
             )}
             <MiningPanel blockInfo={blockInfo} entries={entries} myEntry={myEntry} chain={chain} />
           </div>
@@ -547,12 +547,12 @@ export default function BlobChainApp() {
         {screen === "wallet" && (
           wallet
             ? <WalletScreen wallet={wallet} chain={chain} mempool={mempool} onBroadcast={onTxBroadcast} />
-            : <LockedGate context="wallet" />
+            : <LockedGate />
         )}
         {screen === "bridge" && (
           wallet
             ? <BridgeScreen wallet={wallet} chain={chain} mempool={mempool} onBroadcast={onTxBroadcast} />
-            : <LockedGate context="bridge" />
+            : <LockedGate />
         )}
         {screen === "chain" && <BlockExplorer chain={chain} blockInfo={blockInfo} mempool={mempool} />}
         {screen === "network" && <NetworkView nodeCount={nodeCount} chain={chain} blockInfo={blockInfo} mempool={mempool} />}

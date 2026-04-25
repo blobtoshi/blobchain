@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import * as Relay from "@/lib/blobRelay";
 import { signData } from "@/lib/blob/crypto";
 import { CW, CH, GY, PX } from "@/lib/blob/constants";
-import { TYMAP, drawBG, drawBlob, drawFork, drawLowBar, drawToken, _blobImg } from "@/lib/blob/level";
+import { drawBG, drawBlob, drawFork, drawLowBar, drawToken, _blobImg } from "@/lib/blob/level";
 import {
   generateLevelPure, initialState, tick,
   encodeInputs, hashInputs, ENGINE_VERSION,
@@ -13,7 +13,7 @@ type SimState = ReturnType<typeof initialState>;
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; col: string; sz: number };
 type Trail = { x: number; y: number; action: string };
 
-export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry }) {
+export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit }) {
   const cvs = useRef<HTMLCanvasElement | null>(null);
   const raf = useRef<number | null>(null);
   const stateRef = useRef<SimState | null>(null);

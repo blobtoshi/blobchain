@@ -112,7 +112,7 @@ function tick(state: any, level: any, frameInputs: any[]) {
   }
   while (state.tokIdx < level.tokens.length && state.dist >= level.tokens[state.tokIdx].at) {
     const ev = level.tokens[state.tokIdx++];
-    state.tokens.push({ x: 780 + 8, y: TYMAP[ev.height], alive: true });
+    state.tokens.push({ x: 780 + 8, y: TYMAP[ev.height as keyof typeof TYMAP], alive: true });
   }
 
   for (const o of state.obstacles) o.x -= state.speed;

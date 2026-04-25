@@ -3,7 +3,7 @@
 // submit-entry edge function. Any drift = consensus break, so do not
 // change the constants or tick math without bumping ENGINE_VERSION.
 
-import { mkPrng, getRewardForHeight } from "./chain";
+import { mkPrng } from "./chain";
 import { GY, PX, GRAVITY, JUMP_V } from "./constants";
 
 export const ENGINE_VERSION = 2;

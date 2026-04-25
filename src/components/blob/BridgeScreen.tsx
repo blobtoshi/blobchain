@@ -98,7 +98,7 @@ export default function BridgeScreen(props: any) {
   );
 }
 
-function ForwardBridge({ wallet, chain, mempool, onBroadcast, config: configProp }: any) {
+function ForwardBridge({ wallet, chain, mempool, onBroadcast }: any) {
   const [config, setConfig] = useState<{ bridgeAddress: string; splMintAddress: string | null } | null>(null);
   const [solAddr, setSolAddr] = useState("");
   const [amt, setAmt] = useState("");

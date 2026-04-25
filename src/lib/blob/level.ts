@@ -38,13 +38,11 @@ export const _blobImg: HTMLImageElement | null = (() => {
   const img = new Image();
   img.onerror = (e) => {
     _blobImgFailed = true;
-    // eslint-disable-next-line no-console
     console.warn("[blob] sprite failed to load, falling back to ellipse", { src: blobSprite, e });
   };
   img.onload = () => {
     if (img.naturalWidth === 0) {
       _blobImgFailed = true;
-      // eslint-disable-next-line no-console
       console.warn("[blob] sprite loaded but has zero dimensions", { src: blobSprite });
     }
   };

@@ -12,9 +12,8 @@ const INITIAL_REWARD = 10;
 const HALVING_BLOCKS = 1_000_000;   // halves every 1M blocks
 const MAX_SUPPLY = 20_000_000;       // hard cap: Σ rewards = 10 × 1M × 2 = 20M
 const GENESIS_TIME_MS = 1777084251161;
-const TX_FEE = 0.001;
-const MAX_BLOCK_SIZE = 1_000_000;   // 1 MB, Bitcoin-style
-const MAX_TX_SIZE = 100_000;        // 100 KB, Bitcoin standard tx limit
+const MAX_BLOCK_SIZE = 1_000_000;   // 1 MB
+const MAX_TX_SIZE = 100_000;        // 100 KB standard tx limit
 const BLOB_UNIT = 1e8;               // 8-decimal base unit
 const to8 = (n: number) => Math.round(Number(n) * BLOB_UNIT) / BLOB_UNIT;
 
@@ -133,7 +132,7 @@ Deno.serve(async (req) => {
     }> = [];
     if (winner) {
       // Pull mempool txs to include. Order by fee_rate DESC (highest priority
-      // first) — Bitcoin-style block-template construction.
+      // first) — standard fee-priority block-template construction.
       const { data: txRows } = await supa
         .from("blob_mempool").select("*")
         .order("fee_rate", { ascending: false })

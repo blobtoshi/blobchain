@@ -216,7 +216,6 @@ async function signAndBroadcastCredit(
   const body = {
     id: txid,
     from: BRIDGE_ADDRESS,
-    fromUsername: "Bridge",
     to: blobAddress,
     amount: amt,
     feeRate,

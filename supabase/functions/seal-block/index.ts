@@ -109,7 +109,7 @@ Deno.serve(async (req) => {
 
     // Verified entries (only those that passed signature check at write time)
     const { data: entriesRaw } = await supa
-      .from("blob_entries").select("address,username,score,signature")
+      .from("blob_entries").select("address,score,signature")
       .eq("block_height", targetHeight);
     const entries = entriesRaw ?? [];
 
@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
     // Mempool txs stay pending and roll over to a future block that has a winner.
     // This makes the gaming layer load-bearing: no players → no settlement.
     let txs: Array<{
-      id: string; from: string; fromUsername: string | null; to: string;
+      id: string; from: string; to: string;
       amount: number; fee: number; feeRate: number; memo: string;
       signature: string; publicKey: string; timestamp: number;
     }> = [];
@@ -142,7 +142,6 @@ Deno.serve(async (req) => {
       const allTxs = (txRows ?? []).map((r: any) => ({
         id: r.id,
         from: r.from_address,
-        fromUsername: r.from_username,
         to: r.to_address,
         amount: Number(r.amount),
         fee: Number(r.fee ?? 0),
@@ -180,7 +179,6 @@ Deno.serve(async (req) => {
       transactions: JSON.stringify(txs),
       mining_entries: JSON.stringify(entries),
       winner: winner?.address ?? null,
-      winner_username: winner?.username ?? null,
       winner_score: Number(winner?.score ?? 0),
       reward,
       seed: String(targetHeight),

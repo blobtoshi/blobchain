@@ -254,7 +254,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { blob_tx_id, sol_address, amount, from_address, from_username } = body ?? {};
+    const { blob_tx_id, sol_address, amount, from_address } = body ?? {};
 
     if (typeof blob_tx_id !== "string" || !TX_ID_RE.test(blob_tx_id))
       return bad("invalid blob_tx_id");
@@ -291,7 +291,6 @@ Deno.serve(async (req) => {
         .insert({
           blob_tx_id,
           from_address,
-          from_username: typeof from_username === "string" ? from_username.slice(0, 24) : null,
           sol_address,
           amount: amt,
           status: confirmed ? "confirmed" : "pending",

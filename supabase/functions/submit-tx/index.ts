@@ -133,7 +133,7 @@ Deno.serve(async (req) => {
     if (raw.length > MAX_TX_SIZE) return bad(`tx too large (max ${MAX_TX_SIZE} bytes)`);
     const body = JSON.parse(raw);
     const {
-      id, from, fromUsername, to, amount, signature, publicKey, timestamp,
+      id, from, to, amount, signature, publicKey, timestamp,
       feeRate: feeRateRaw, memo: memoRaw,
     } = body ?? {};
 
@@ -198,7 +198,6 @@ Deno.serve(async (req) => {
     const { error } = await supa.from("blob_mempool").insert({
       id,
       from_address: from,
-      from_username: fromUsername?.toString().slice(0, 24) ?? null,
       to_address: to,
       amount: amt,
       fee,

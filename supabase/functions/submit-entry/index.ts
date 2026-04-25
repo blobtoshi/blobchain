@@ -58,7 +58,6 @@ const ADDR_RE = /^[1][1-9A-HJ-NP-Za-km-z]{25,34}$/;
 const PUB_RE = /^(02|03)[0-9a-fA-F]{64}$/;
 const SIG_RE = /^[0-9a-fA-F]{128}$/;
 const HASH_RE = /^[0-9a-fA-F]{64}$/;
-const USERNAME_RE = /^[A-Za-z0-9_]{3,24}$/;
 const SEED_RE = /^[0-9]+$/;
 
 // Canonical input string is "f:t,f:t,..." — bound length to MAX_FRAMES * ~10 chars.
@@ -70,7 +69,7 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
     const {
-      address, username, score, block_height, block_seed,
+      address, score, block_height, block_seed,
       signature, publicKey, frame_count, inputs, inputs_hash, engine_version,
     } = body ?? {};
 
@@ -81,9 +80,6 @@ Deno.serve(async (req) => {
     if (typeof block_height !== "number" || block_height < 1) return bad("invalid block_height");
     const sc = Number(score);
     if (!Number.isFinite(sc) || sc < 0 || sc > 10_000_000) return bad("invalid score");
-    if (typeof username !== "string" || !USERNAME_RE.test(username)) {
-      return bad("username must be 3–24 chars, letters/numbers/underscore");
-    }
     if (typeof block_seed !== "string" || !SEED_RE.test(block_seed)) return bad("invalid block_seed");
     if (typeof frame_count !== "number" || !Number.isInteger(frame_count)) return bad("invalid frame_count");
     if (typeof inputs !== "string" || inputs.length > MAX_INPUTS_STR) return bad("invalid inputs trace");

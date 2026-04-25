@@ -218,22 +218,10 @@ export default function BlobChainApp() {
         {connectMode === "create" && (
           <div className="space-y-3 pt-1">
             <div>
-              <label className="label-eyebrow block mb-2">Username</label>
-              <input
-                value={nameIn}
-                onChange={e => setNameIn(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && !creating && handleCreate()}
-                placeholder="Blobtoshi"
-                maxLength={24}
-                autoFocus
-                className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm"
-              />
-            </div>
-            <div>
               <label className="label-eyebrow block mb-2">Passphrase</label>
               <input
                 type="password" value={pass1} onChange={e => setPass1(e.target.value)}
-                placeholder="At least 6 characters"
+                placeholder="At least 6 characters" autoFocus
                 className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm"
               />
             </div>
@@ -262,7 +250,7 @@ export default function BlobChainApp() {
               </button>
               <button
                 onClick={handleCreate}
-                disabled={creating || !nameIn.trim() || !pass1 || !pass2}
+                disabled={creating || !pass1 || !pass2}
                 className="flex-1 py-3 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition"
               >
                 {creating ? "Generating keypair…" : "Generate wallet"}

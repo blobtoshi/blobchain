@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import * as Relay from "@/lib/blobRelay";
-import { ChevronDown, SlidersHorizontal, X, Search, HandCoins, ArrowUpRight, ArrowDownLeft, Trophy } from "lucide-react";
+import { ChevronDown, SlidersHorizontal, X, Search, HandCoins, ArrowUpRight, ArrowDownLeft } from "lucide-react";
 import {
-  ExplorerTx, flattenChainTxs, mempoolToTxs, shortHash, timeAgo,
+  flattenChainTxs, mempoolToTxs, shortHash, timeAgo,
   TxFilters, BlockFilters, AddrFilters,
   emptyTxFilters, emptyBlockFilters, emptyAddrFilters,
   applyTxFilters, txFiltersActive, blockFiltersActive, addrFiltersActive, dateToTs,
@@ -174,7 +174,6 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
 
   const txsAll = useMemo(() => [...memTxs, ...allTxs], [memTxs, allTxs]);
   const txsFiltered = useMemo(() => applyTxFilters(txsAll, txF), [txsAll, txF]);
-  const memFiltered = useMemo(() => applyTxFilters(memTxs, memF), [memTxs, memF]);
 
   const blocksFiltered = useMemo(() => {
     const winner = blkF.winner.trim().toLowerCase();

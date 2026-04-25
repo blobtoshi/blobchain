@@ -1,13 +1,14 @@
 # BLOB CHAIN — Full Node
 
 A standalone Node.js implementation of the BLOB CHAIN consensus rules.
-Runs the same 120-second weighted-lottery block sealer as the current
-Supabase edge function, persists state in SQLite, and gossips new blocks /
+Runs the same 120-second weighted-lottery block sealer as the Supabase
+edge function, persists state in SQLite, and gossips new blocks /
 transactions / mining entries over WebSocket.
 
-This is **Phase 1** of the decentralization migration — the browser app is
-not yet wired to it. Once a node is verified locally, Phase 2 will add a
-light-client hook (`useLightChain.ts`) and switch the relay over.
+**Status: Phases 1 & 2 complete.** The node runs standalone *and* the
+browser app can connect to it as a light client via the
+`VITE_BLOB_RELAY_MODE` switch. Phase 3 = node↔node peering + porting the
+Solana bridge off Supabase.
 
 ---
 
@@ -36,15 +37,38 @@ curl http://localhost:8080/health
 
 ---
 
+## Browser integration (Phase 2)
+
+The React app ships with a mode-switching relay (`src/lib/blobRelay.ts`)
+backed by `src/lib/blobNodeClient.ts`. Point it at your local node by
+adding to `.env.local`:
+
+```bash
+VITE_BLOB_NODE_URL=http://localhost:8080
+VITE_BLOB_RELAY_MODE=auto   # auto | node | supabase
+```
+
+- `auto` — probe the node first, fall back to Supabase if unreachable
+- `node` — force the local full node (errors if down)
+- `supabase` — bypass the node entirely (legacy path)
+
+In dev builds a `RelayStatusBadge` overlay shows the active mode, WS
+state, and current tip height so you can verify which backend the
+browser is talking to.
+
+---
+
 ## HTTP endpoints
 
-| Method | Path             | Description                          |
-|--------|------------------|--------------------------------------|
-| GET    | `/health`        | Liveness + tip summary + peer count  |
-| GET    | `/chain/tip`     | `{ height, hash, totalSupply, timestamp }` |
-| GET    | `/blocks?from=N&limit=M` | Range of blocks (max 500)    |
-| GET    | `/mempool`       | All pending transactions             |
-| GET    | `/fee-info`      | Recommended / minimum fee rate       |
+| Method | Path                       | Description                                  |
+|--------|----------------------------|----------------------------------------------|
+| GET    | `/health`                  | Liveness + tip summary + peer count          |
+| GET    | `/chain/tip`               | `{ height, hash, totalSupply, timestamp }` — supports `If-None-Match` / `ETag` |
+| GET    | `/blocks?from=N&limit=M`   | Range of blocks (max 500)                    |
+| GET    | `/blocks/:height`          | Single immutable block by height             |
+| GET    | `/mempool`                 | All pending transactions                     |
+| GET    | `/mempool?since=<ts>`      | Delta sync — only txs newer than `<ts>` (ms) |
+| GET    | `/fee-info`                | Recommended / minimum fee rate               |
 
 ## WebSocket protocol
 
@@ -79,6 +103,10 @@ Server → Client messages:
 - `{ "type": "mempool", "txs": [ ... ] }`
 - `{ "type": "pong", "t": 12345 }`
 
+**Abuse guard:** the server tracks malformed/invalid messages per
+socket. **5 strikes → the connection is terminated.** Keep your client
+honest.
+
 ---
 
 ## Sanity test with `wscat`
@@ -91,9 +119,10 @@ npx wscat -c ws://localhost:8080/ws
 < {"type":"chainTip","tip":{"height":0,"hash":"412c…",…}}
 ```
 
-Submitting a real signed tx or entry requires the same payload format the
-edge functions accept (`submit-tx`, `submit-entry`). The browser already
-produces these payloads — Phase 2 will route them here over WS.
+Submitting a real signed tx or entry uses the same payload format the
+edge functions accept (`submit-tx`, `submit-entry`). The browser
+already produces these payloads and (in Phase 2) routes them here over
+WS when `VITE_BLOB_RELAY_MODE` selects the node.
 
 ---
 
@@ -125,7 +154,7 @@ always-online nodes, any of these work cleanly with this code:
 - **Render** — Web Service, persistent disk
 - **Plain VPS** — `pm2 start "npm start"` behind nginx with a TLS cert
 
-Phase 2 will add node↔node peering so the four servers gossip blocks to
+Phase 3 will add node↔node peering so the four servers gossip blocks to
 each other and converge on a single chain.
 
 ---
@@ -133,6 +162,5 @@ each other and converge on a single chain.
 ## What's intentionally *not* here yet
 
 - Solana bridge (`bridge-mint`, `bridge-redeem`) — staying on Supabase for now, will be ported in Phase 3.
-- Access-code / locked gate — kept on Supabase; you mentioned it gets removed at launch.
-- Browser light-client integration — Phase 2.
-- Node↔node peering / chain reorg handling — Phase 2.
+- Access-code / locked gate — kept on Supabase; gets removed at launch.
+- Node↔node peering / chain reorg handling — Phase 3.

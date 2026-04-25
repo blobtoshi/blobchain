@@ -197,25 +197,25 @@ export async function pushEntry(
   return { ok: true };
 }
 
-// Register a wallet in the player registry so its address shows up in the
+// Register a wallet in the address registry so it shows up in the
 // explorer immediately, even before the user mines or transacts.
-export async function registerPlayer(p: {
+export async function registerAddress(p: {
   address: string;
   publicKey: string;
   signature: string;
   timestamp: number;
 }): Promise<{ ok: boolean; error?: string }> {
-  const { data, error } = await supabase.functions.invoke("register-player", { body: p });
+  const { data, error } = await supabase.functions.invoke("register-address", { body: p });
   if (error) {
-    console.error("[relay] registerPlayer", error);
+    console.error("[relay] registerAddress", error);
     return { ok: false, error: error.message };
   }
   if ((data as any)?.error) return { ok: false, error: (data as any).error };
   return { ok: true };
 }
 
-// ── PLAYERS ─────────────────────────────────────────────────────────────
-export type Player = {
+// ── ADDRESSES ──────────────────────────────────────────────────────────
+export type AddressRecord = {
   address: string;
   publicKey?: string;
   blocksWon?: number;
@@ -226,12 +226,12 @@ export type Player = {
   lastActive?: string | null;
 };
 
-export async function fetchPlayers(): Promise<Player[]> {
+export async function fetchAddresses(): Promise<AddressRecord[]> {
   const { data, error } = await (supabase as any)
-    .from("blob_players_public")
+    .from("blob_addresses_public")
     .select("address,blocks_won,total_mined,best_score,games_played,first_seen,last_active")
     .order("first_seen", { ascending: true });
-  if (error) { console.error("[relay] fetchPlayers", error); return []; }
+  if (error) { console.error("[relay] fetchAddresses", error); return []; }
   return (data ?? []).map((r: any) => ({
     address: r.address,
     publicKey: undefined,

@@ -148,11 +148,11 @@ Deno.serve(async (req) => {
       return bad("internal error", 500);
     }
 
-    const { error: pErr } = await supa.from("blob_players").upsert({
+    const { error: pErr } = await supa.from("blob_addresses").upsert({
       address, public_key: publicKey, last_active: new Date().toISOString(),
     }, { onConflict: "address" });
     if (pErr) {
-      console.error("[submit-entry] player upsert failed", pErr);
+      console.error("[submit-entry] address upsert failed", pErr);
       return bad("internal error", 500);
     }
 

@@ -1,6 +1,6 @@
-// Registers a freshly-created (or imported) wallet in blob_players so that
-// the address is visible in the explorer immediately. Signature-gated so
-// only the keypair owner can claim the address slot.
+// Registers a freshly-created (or imported) wallet address in blob_addresses
+// so it is visible in the explorer immediately. Signature-gated so only the
+// keypair owner can claim the address slot.
 import { createClient as _createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
 // deno-lint-ignore no-explicit-any
 const createClient = _createClient as any;

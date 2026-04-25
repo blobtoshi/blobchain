@@ -219,6 +219,12 @@ export default function BlobChainApp() {
                 className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm"
               />
             </div>
+            <div className="flex items-start gap-2 p-3 rounded-lg border border-[hsl(var(--warning)/0.4)] bg-[hsl(var(--warning)/0.08)]">
+              <ShieldAlert className="w-3.5 h-3.5 text-[hsl(var(--warning))] mt-0.5 flex-shrink-0" />
+              <div className="text-[11px] text-foreground/80 leading-relaxed">
+                After generating, you'll see a <span className="font-medium">12-word seed phrase</span>. Save it somewhere safe — it's the only way to recover this wallet on another device.
+              </div>
+            </div>
             {connectErr && <div className="text-xs text-destructive">{connectErr}</div>}
             <div className="flex gap-2">
               <button

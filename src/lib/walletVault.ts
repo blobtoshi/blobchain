@@ -1,7 +1,6 @@
 import { base64 } from "@scure/base";
 
 const VAULT_KEY = "blob_wallet_vault_v2"; // v2: secp256k1 hex keys
-const LEGACY_KEYS = ["blob_wallet_v2", "blob_wallet_vault_v1"]; // older formats to purge
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -59,8 +58,6 @@ export async function saveEncryptedWallet(w: WalletPlain, passphrase: string) {
     },
   };
   localStorage.setItem(VAULT_KEY, JSON.stringify(vault));
-  // Make sure no copies in older-format slots linger
-  for (const k of LEGACY_KEYS) localStorage.removeItem(k);
 }
 
 export function getStoredWalletPublic(): WalletPublic | null {
@@ -121,17 +118,15 @@ export async function unlockWallet(passphrase: string): Promise<WalletPlain> {
     throw new Error("Wrong passphrase");
   }
   const plain = dec.decode(plainBuf);
-  // Backward compatible: older vaults stored the raw private key as plaintext.
-  let privateKey = plain;
+  let privateKey = "";
   let mnemonic: string | undefined;
-  if (plain.startsWith("{")) {
-    try {
-      const obj = JSON.parse(plain);
-      if (typeof obj.privateKey === "string") privateKey = obj.privateKey;
-      if (typeof obj.mnemonic === "string" && obj.mnemonic) mnemonic = obj.mnemonic;
-    } catch {
-      /* fall back to raw */
-    }
+  try {
+    const obj = JSON.parse(plain);
+    if (typeof obj.privateKey !== "string") throw new Error("Corrupt wallet vault");
+    privateKey = obj.privateKey;
+    if (typeof obj.mnemonic === "string" && obj.mnemonic) mnemonic = obj.mnemonic;
+  } catch {
+    throw new Error("Corrupt wallet vault");
   }
   return {
     address: v.address,
@@ -143,13 +138,4 @@ export async function unlockWallet(passphrase: string): Promise<WalletPlain> {
 
 export function clearWallet() {
   localStorage.removeItem(VAULT_KEY);
-  for (const k of LEGACY_KEYS) localStorage.removeItem(k);
-}
-
-// One-time cleanup: remove legacy/older-format wallets from any browser that
-// still has them. Old (P-256/JWK) wallets can't sign for the new chain anyway.
-export function purgeLegacyPlaintextWallet() {
-  for (const k of LEGACY_KEYS) {
-    if (localStorage.getItem(k)) localStorage.removeItem(k);
-  }
 }

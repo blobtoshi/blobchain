@@ -17,7 +17,6 @@ export function useWalletVault() {
   useEffect(() => { walletRef.current = wallet; }, [wallet]);
 
   useEffect(() => {
-    Vault.purgeLegacyPlaintextWallet();
     setVaultPub(Vault.getStoredWalletPublic());
   }, []);
 

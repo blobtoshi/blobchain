@@ -1,8 +1,17 @@
-// Blob Chain P2P relay backed by Lovable Cloud (Supabase).
-// Reads are direct (RLS allows public SELECT); all writes go through
-// signature-verifying edge functions (entries, transactions, block sealing).
+// Blob Chain P2P relay.
+//
+// Two backends, selected by VITE_BLOB_RELAY_MODE ∈ {"node","supabase","auto"}:
+//   • supabase — original path: direct table reads + edge functions for writes.
+//   • node     — connect to a BLOB CHAIN full node (REST + WebSocket /ws).
+//   • auto     — probe VITE_BLOB_NODE_URL/health at boot; node if healthy, else supabase.
+//
+// All public exports keep the same signatures so callers (useBlockchain,
+// SendTxForm, MiningPanel, etc.) don't need to change. Bridge + address
+// registry + redeem flows remain on Supabase regardless of mode — they're
+// orthogonal to chain consensus.
 
 import { supabase } from "@/integrations/supabase/client";
+import { BlobNodeClient } from "@/lib/blobNodeClient";
 
 export type Block = {
   height: number;

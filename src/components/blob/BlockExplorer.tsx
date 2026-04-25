@@ -256,7 +256,8 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
     ).slice(0, 15);
     const addresses = addressBook.filter(a =>
       a.address.toLowerCase().includes(q) ||
-      a.username?.toLowerCase().includes(q)
+      a.username?.toLowerCase().includes(q) ||
+      (q === "blob" && a.address === "coinbase")
     ).slice(0, 10);
     return { blocks, txs, addresses };
   }, [q, chain, allTxs, memTxs, addressBook]);
@@ -318,7 +319,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                 {searchResults.addresses.map(a => (
                   <button key={a.address} onClick={() => { setTab("addresses"); setSelAddr(a.address); setQuery(""); }}
                     className="w-full text-left glass px-3 py-2 mb-1 hover:bg-secondary/30 transition flex items-center justify-between text-xs">
-                    <span className="text-foreground/80">{a.username || "anon"}</span>
+                    <span className="text-foreground/80">{a.address === "coinbase" ? "blob" : (a.username || "anon")}</span>
                     <span className="num text-muted-foreground truncate mx-2">{shortHash(a.address, 8)}</span>
                     <span className="num text-primary/80">{(a.received + a.mined - a.sent).toFixed(2)} BLOB</span>
                   </button>
@@ -466,7 +467,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                       <div className="label-eyebrow mb-1">Transactions ({b.transactions.length})</div>
                       {b.transactions.map((tx: any, i: number) => (
                         <div key={i} className="num text-foreground/60 text-[11px]">
-                          {tx.fromUsername || shortHash(tx.from, 6)} → {tx.toUsername || shortHash(tx.to, 6)} · {tx.amount} BLOB · fee {tx.fee || 0}
+                          {tx.from === "coinbase" ? "blob" : (tx.fromUsername || shortHash(tx.from, 6))} → {tx.toUsername || shortHash(tx.to, 6)} · {tx.amount} BLOB · fee {tx.fee || 0}
                         </div>
                       ))}
                     </div>
@@ -551,7 +552,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                 {t.kind === "reward"
                   ? <HandCoins className="w-3.5 h-3.5 text-[hsl(var(--warning))]" />
                   : <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground" />}
-                <span className="text-foreground/80 truncate">{t.kind === "reward" ? "Block Reward" : (t.fromUsername || shortHash(t.from, 6))}</span>
+                <span className="text-foreground/80 truncate">{t.kind === "reward" ? "Block Reward" : (t.from === "coinbase" ? "blob" : (t.fromUsername || shortHash(t.from, 6)))}</span>
                 <span className="hidden sm:block text-foreground/80 truncate">{t.toUsername || shortHash(t.to, 6)}</span>
                 <span className="num text-primary/80">{t.amount} BLOB</span>
                 <span className="num text-muted-foreground">{t.status === "pending" ? "—" : `#${t.block}`}</span>
@@ -565,7 +566,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                   <div className="grid grid-cols-[80px_1fr] gap-2">
                     <span className="label-eyebrow">From</span>
                     <button onClick={() => { setTab("addresses"); setSelAddr(t.from); }} className="num text-[hsl(var(--warning))] hover:underline text-left break-all">
-                      {t.kind === "reward" ? "Block Reward" : t.from}
+                      {t.kind === "reward" ? "Block Reward" : (t.from === "coinbase" ? "blob" : t.from)}
                     </button>
                   </div>
                   <div className="grid grid-cols-[80px_1fr] gap-2">
@@ -636,7 +637,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                           ? <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                           : <ArrowDownLeft className="w-3.5 h-3.5 text-primary/80 shrink-0" />}
                       <span className="text-foreground/70 truncate flex-1">
-                        {t.from === selAddr ? `→ ${shortHash(t.to, 8)}` : `← ${t.kind === "reward" ? "Block Reward" : shortHash(t.from, 8)}`}
+                        {t.from === selAddr ? `→ ${shortHash(t.to, 8)}` : `← ${t.kind === "reward" ? "Block Reward" : (t.from === "coinbase" ? "blob" : shortHash(t.from, 8))}`}
                       </span>
                       <span className={`num shrink-0 ${t.from === selAddr ? "text-muted-foreground" : "text-primary/80"}`}>
                         {t.from === selAddr ? "-" : "+"}{t.amount} BLOB

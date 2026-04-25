@@ -73,6 +73,7 @@ export default function BlobChainApp() {
 
   function resetConnect() {
     setConnectMode("choose");
+    setImportMode("seed");
     setNameIn(""); setPass1(""); setPass2(""); setImportJson(""); setConnectErr("");
   }
 
@@ -85,7 +86,13 @@ export default function BlobChainApp() {
     try {
       const r = await createWallet(name, pass1);
       if (!r.ok) { setConnectErr(r.error); return; }
-      setConnectOpen(false); resetConnect();
+      // Show seed phrase reveal dialog before closing connect flow.
+      setSeedPhrase(r.mnemonic);
+      setSeedConfirmed(false);
+      setSeedCopied(false);
+      setConnectOpen(false);
+      resetConnect();
+      setSeedRevealOpen(true);
     } catch (e: any) {
       setConnectErr(String(e?.message || e));
     } finally {
@@ -106,6 +113,14 @@ export default function BlobChainApp() {
     } catch (e: any) {
       setConnectErr(String(e?.message || e));
     }
+  }
+
+  async function copySeedPhrase() {
+    try {
+      await navigator.clipboard.writeText(seedPhrase);
+      setSeedCopied(true);
+      setTimeout(() => setSeedCopied(false), 2000);
+    } catch {}
   }
 
   async function handleUnlock() {

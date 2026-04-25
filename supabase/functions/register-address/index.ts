@@ -1,6 +1,6 @@
-// Registers a freshly-created (or imported) wallet in blob_players so that
-// the address is visible in the explorer immediately. Signature-gated so
-// only the keypair owner can claim the address slot.
+// Registers a freshly-created (or imported) wallet address in blob_addresses
+// so it is visible in the explorer immediately. Signature-gated so only the
+// keypair owner can claim the address slot.
 import { createClient as _createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
 // deno-lint-ignore no-explicit-any
 const createClient = _createClient as any;
@@ -65,19 +65,19 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const { error } = await supa.from("blob_players").upsert({
+    const { error } = await supa.from("blob_addresses").upsert({
       address,
       public_key: publicKey,
       last_active: new Date().toISOString(),
     }, { onConflict: "address" });
     if (error) {
-      console.error("[register-player] upsert failed", error);
+      console.error("[register-address] upsert failed", error);
       return bad("internal error", 500);
     }
 
     return ok_({ address });
   } catch (e) {
-    console.error("[register-player] unexpected error", e);
+    console.error("[register-address] unexpected error", e);
     return bad("internal error", 500);
   }
 });

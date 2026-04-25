@@ -62,6 +62,39 @@ export type Database = {
         }
         Relationships: []
       }
+      blob_addresses: {
+        Row: {
+          address: string
+          best_score: number | null
+          blocks_won: number | null
+          first_seen: string | null
+          games_played: number | null
+          last_active: string | null
+          public_key: string | null
+          total_mined: number | null
+        }
+        Insert: {
+          address: string
+          best_score?: number | null
+          blocks_won?: number | null
+          first_seen?: string | null
+          games_played?: number | null
+          last_active?: string | null
+          public_key?: string | null
+          total_mined?: number | null
+        }
+        Update: {
+          address?: string
+          best_score?: number | null
+          blocks_won?: number | null
+          first_seen?: string | null
+          games_played?: number | null
+          last_active?: string | null
+          public_key?: string | null
+          total_mined?: number | null
+        }
+        Relationships: []
+      }
       blob_chain: {
         Row: {
           block_hash_v2: string | null
@@ -194,39 +227,6 @@ export type Database = {
         }
         Relationships: []
       }
-      blob_players: {
-        Row: {
-          address: string
-          best_score: number | null
-          blocks_won: number | null
-          first_seen: string | null
-          games_played: number | null
-          last_active: string | null
-          public_key: string | null
-          total_mined: number | null
-        }
-        Insert: {
-          address: string
-          best_score?: number | null
-          blocks_won?: number | null
-          first_seen?: string | null
-          games_played?: number | null
-          last_active?: string | null
-          public_key?: string | null
-          total_mined?: number | null
-        }
-        Update: {
-          address?: string
-          best_score?: number | null
-          blocks_won?: number | null
-          first_seen?: string | null
-          games_played?: number | null
-          last_active?: string | null
-          public_key?: string | null
-          total_mined?: number | null
-        }
-        Relationships: []
-      }
       bridge_redeems: {
         Row: {
           amount: number
@@ -310,7 +310,7 @@ export type Database = {
       }
     }
     Views: {
-      blob_players_public: {
+      blob_addresses_public: {
         Row: {
           address: string | null
           best_score: number | null
@@ -383,16 +383,7 @@ export type Database = {
         }
         Returns: string
       }
-      get_block_leaderboard: {
-        Args: { p_height: number }
-        Returns: {
-          address: string
-          rank: number
-          score: number
-          win_pct: number
-        }[]
-      }
-      get_player_stats: {
+      get_address_stats: {
         Args: { p_address: string }
         Returns: {
           avg_score: number
@@ -400,6 +391,15 @@ export type Database = {
           blocks_won: number
           games_played: number
           total_mined: number
+        }[]
+      }
+      get_block_leaderboard: {
+        Args: { p_height: number }
+        Returns: {
+          address: string
+          rank: number
+          score: number
+          win_pct: number
         }[]
       }
     }

@@ -27,7 +27,7 @@ export function useWalletVault() {
     await Vault.saveEncryptedWallet(w, pass);
     const ts = Date.now();
     const sig = await signData(w.privateKey, `register:${w.address}:${ts}`);
-    const reg = await Relay.registerPlayer({
+    const reg = await Relay.registerAddress({
       address: w.address, publicKey: w.publicKey, signature: sig, timestamp: ts,
     });
     if (!reg.ok) return { ok: false, error: reg.error || "Failed to register wallet" };
@@ -63,7 +63,7 @@ export function useWalletVault() {
     await Vault.saveEncryptedWallet(w, pass);
     const ts = Date.now();
     const sig = await signData(priv, `register:${address}:${ts}`);
-    const reg = await Relay.registerPlayer({
+    const reg = await Relay.registerAddress({
       address, publicKey, signature: sig, timestamp: ts,
     });
     if (!reg.ok) return { ok: false, error: reg.error || "Failed to register wallet" };

@@ -265,14 +265,6 @@ export default function BlobChainApp() {
         {connectMode === "import" && (
           <div className="space-y-3 pt-1">
             <div>
-              <label className="label-eyebrow block mb-2">Username</label>
-              <input
-                value={nameIn} onChange={e => setNameIn(e.target.value)}
-                placeholder="Blobtoshi" maxLength={24}
-                className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm"
-              />
-            </div>
-            <div>
               <div className="label-eyebrow mb-2">Restore using</div>
               <div className="grid grid-cols-2 gap-2 mb-3">
                 <button
@@ -311,8 +303,8 @@ export default function BlobChainApp() {
               />
               <div className="text-[10px] text-muted-foreground/70 mt-1.5">
                 {importMode === "seed"
-                  ? "Your seed phrase regenerates your private key — username and passphrase are NOT used to import."
-                  : "Paste the raw private key — username and passphrase are NOT used to import."}
+                  ? "Your seed phrase regenerates your private key. The passphrase encrypts it locally on this device."
+                  : "Paste the raw private key. The passphrase encrypts it locally on this device."}
               </div>
             </div>
             <div>

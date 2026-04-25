@@ -242,7 +242,7 @@ export default function BlobChainApp() {
               </button>
             </div>
             <div className="text-[11px] text-muted-foreground/70 text-center pt-1">
-              secp256k1 keypair generated in your browser (Bitcoin curve)
+              secp256k1 keypair generated on Blob Chain. (elliptic curve)
             </div>
           </div>
         )}

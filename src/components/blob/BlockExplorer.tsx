@@ -334,7 +334,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
         <div className="space-y-3">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             <ExplorerStat label="Latest block" value={`#${blockInfo.height - 1}`} sub={lastBlock ? timeAgo(lastBlock.timestamp) : "—"} />
-            <ExplorerStat label="Total supply" value={`${totalSupply.toFixed(2)}`} sub="BLOB minted" />
+            <ExplorerStat label="Total supply" value={`${totalSupply.toFixed(2)}`} sub="BLOB mined" />
             <ExplorerStat label="Transactions" value={totalTxs} sub={`${totalVolume.toFixed(2)} BLOB volume`} />
             <ExplorerStat label="Pending" value={memTxs.length} sub="in mempool" />
           </div>

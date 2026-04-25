@@ -42,7 +42,10 @@ export function useBlockchain(walletRef: React.MutableRefObject<any>) {
       if (cancelled) return;
       if (c.length) setChain(c);
       setMempool(m);
-      setEntries(e);
+      const expectedSeed = String(getBlockInfo(c.length ? c : [GENESIS], true).seed);
+      setEntries(e.filter((en: any) =>
+        en.block_seed == null || String(en.block_seed) === expectedSeed
+      ));
     })();
 
     const unsub = Relay.subscribeRelay({
@@ -66,6 +69,10 @@ export function useBlockchain(walletRef: React.MutableRefObject<any>) {
         const tip = chainRef.current[chainRef.current.length - 1];
         const activeH = (tip ? Number(tip.height) : 0) + 1;
         if (en.block_height !== activeH) return;
+        // Reject entries with a stale/forked block seed — they were playing a
+        // different level than the current block and must not appear here.
+        const expectedSeed = String(getBlockInfo(chainRef.current, true).seed);
+        if (en.block_seed != null && String(en.block_seed) !== expectedSeed) return;
         setEntries(prev => {
           const i = prev.findIndex(x => x.address === en.address);
           if (i === -1) return [...prev, en];
@@ -77,13 +84,20 @@ export function useBlockchain(walletRef: React.MutableRefObject<any>) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Refresh entries when active block changes.
+  // Refresh entries when active block changes. Filter out forked submissions
+  // whose block_seed doesn't match the seed of the current active block — these
+  // come from players who finished a level on the previous seed after the timer
+  // expired and would otherwise pollute the next block's entry list.
   useEffect(() => {
     (async () => {
       const e = await Relay.fetchEntries(blockInfo.height);
-      setEntries(e);
+      const expectedSeed = String(blockInfo.seed);
+      const filtered = e.filter((en: any) =>
+        en.block_seed == null || String(en.block_seed) === expectedSeed
+      );
+      setEntries(filtered);
     })();
-  }, [blockInfo.height]);
+  }, [blockInfo.height, blockInfo.seed]);
 
   // Block sealing — both reactive and 10s safety net.
   const sealingRef = useRef(false);

@@ -22,10 +22,12 @@ export const MAX_INPUTS_PER_RUN = MAX_FRAMES; // hard ceiling; cadence checked t
 const TYMAP = { low: GY - 52, mid: GY - 94, high: GY - 140 };
 
 // Mirror of generateLevel() from level.ts but without sprite imports.
+type ObstacleEv = { at: number; type: string; w: number; h: number };
+type TokenEv = { at: number; height: string };
 export function generateLevelPure(seed) {
   const rng = mkPrng(seed);
-  const obstacles = [];
-  const tokens = [];
+  const obstacles: ObstacleEv[] = [];
+  const tokens: TokenEv[] = [];
   let pos = 250;
   let idx = 0;
   while (pos < 400000) {
@@ -65,6 +67,8 @@ export async function hashInputs(canonical) {
 }
 
 // ---------- Initial state --------------------------------------------------
+type LiveObstacle = { x: number; y: number; w: number; h: number; type: string };
+type LiveToken = { x: number; y: number; alive: boolean };
 export function initialState() {
   return {
     frame: 0,
@@ -77,8 +81,8 @@ export function initialState() {
     obsIdx: 0,
     tokIdx: 0,
     player: { y: GY - 28, vy: 0, action: "run", wob: 0, sq: 1 },
-    obstacles: [],
-    tokens: [],
+    obstacles: [] as LiveObstacle[],
+    tokens: [] as LiveToken[],
     jumpHeld: false,
     duckHeld: false,
     dead: false,

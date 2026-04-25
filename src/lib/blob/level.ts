@@ -6,7 +6,8 @@ export const TYMAP = { low: GY - 52, mid: GY - 94, high: GY - 140 };
 
 export function generateLevel(seed) {
   const rng = mkPrng(seed);
-  const obstacles = [], tokens = [];
+  const obstacles: { at: number; type: string; w: number; h: number }[] = [];
+  const tokens: { at: number; height: string }[] = [];
   let pos = 250;
   let idx = 0;
   while (pos < 400000) {

@@ -36,7 +36,14 @@ export const FEE_BUCKETS = [1, 5, 10, 20, 50, 100];
 // Sized to comfortably cover the server-signed credit tx network fee at peak congestion.
 export const BRIDGE_FEE_BLOB = 0.0015;
 export const MEMO_PROGRAM_ID = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
-export const BRIDGE_ADDRESS = "13mEv2jseLwXDzbJi4GnScvbMvR2VR76on";
+
+// Bridge keypair is pinned at GENESIS — verifiable by anyone, never editable.
+// The matching private key lives only in the BRIDGE_BLOB_PRIVATE_KEY secret on
+// node operators' servers. Edge functions self-check that their loaded private
+// key derives this exact address on every redeem call.
+export const BRIDGE_ADDRESS = "1E4QWFYb5Pqj8iAV2be8Ee88yEbvhU9iTs";
+export const BRIDGE_PUBLIC_KEY =
+  "03f2d496af89a9349bbe4ee26cb7493600c9cb6a860d04b9e12259a94a9d1952fc";
 
 export const GENESIS = {
   height: 0,
@@ -48,9 +55,11 @@ export const GENESIS = {
   winnerScore: 0,
   reward: 0,
   seed: "genesis",
-  hash: "genesis00000000000000000000000000000000000000000000000000000000blob",
+  hash: "412c22f77b50de1a3faec282597d49b58a04bb5161e6d414f9885ab09de24bc7",
   totalSupply: 0,
   nodeCount: 0,
+  bridgeAddress: BRIDGE_ADDRESS,
+  bridgePublicKey: BRIDGE_PUBLIC_KEY,
 };
 
 // Custom event used to navigate the explorer to a specific address from

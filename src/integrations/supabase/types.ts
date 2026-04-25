@@ -77,7 +77,6 @@ export type Database = {
           transactions: string | null
           winner: string | null
           winner_score: number | null
-          winner_username: string | null
         }
         Insert: {
           created_at?: string | null
@@ -93,7 +92,6 @@ export type Database = {
           transactions?: string | null
           winner?: string | null
           winner_score?: number | null
-          winner_username?: string | null
         }
         Update: {
           created_at?: string | null
@@ -109,7 +107,6 @@ export type Database = {
           transactions?: string | null
           winner?: string | null
           winner_score?: number | null
-          winner_username?: string | null
         }
         Relationships: []
       }
@@ -124,7 +121,6 @@ export type Database = {
           score: number
           signature: string
           submitted_at: string | null
-          username: string | null
         }
         Insert: {
           address: string
@@ -136,7 +132,6 @@ export type Database = {
           score?: number
           signature: string
           submitted_at?: string | null
-          username?: string | null
         }
         Update: {
           address?: string
@@ -148,7 +143,6 @@ export type Database = {
           score?: number
           signature?: string
           submitted_at?: string | null
-          username?: string | null
         }
         Relationships: []
       }
@@ -159,7 +153,6 @@ export type Database = {
           fee: number | null
           fee_rate: number | null
           from_address: string
-          from_username: string | null
           id: string
           memo: string | null
           public_key: string
@@ -174,7 +167,6 @@ export type Database = {
           fee?: number | null
           fee_rate?: number | null
           from_address: string
-          from_username?: string | null
           id: string
           memo?: string | null
           public_key: string
@@ -189,7 +181,6 @@ export type Database = {
           fee?: number | null
           fee_rate?: number | null
           from_address?: string
-          from_username?: string | null
           id?: string
           memo?: string | null
           public_key?: string
@@ -210,7 +201,6 @@ export type Database = {
           last_active: string | null
           public_key: string | null
           total_mined: number | null
-          username: string
         }
         Insert: {
           address: string
@@ -221,7 +211,6 @@ export type Database = {
           last_active?: string | null
           public_key?: string | null
           total_mined?: number | null
-          username: string
         }
         Update: {
           address?: string
@@ -232,7 +221,6 @@ export type Database = {
           last_active?: string | null
           public_key?: string | null
           total_mined?: number | null
-          username?: string
         }
         Relationships: []
       }
@@ -286,7 +274,6 @@ export type Database = {
           created_at: string
           error: string | null
           from_address: string
-          from_username: string | null
           minted_at: string | null
           sol_address: string
           sol_signature: string | null
@@ -299,7 +286,6 @@ export type Database = {
           created_at?: string
           error?: string | null
           from_address: string
-          from_username?: string | null
           minted_at?: string | null
           sol_address: string
           sol_signature?: string | null
@@ -312,7 +298,6 @@ export type Database = {
           created_at?: string
           error?: string | null
           from_address?: string
-          from_username?: string | null
           minted_at?: string | null
           sol_address?: string
           sol_signature?: string | null
@@ -331,7 +316,6 @@ export type Database = {
           games_played: number | null
           last_active: string | null
           total_mined: number | null
-          username: string | null
         }
         Insert: {
           address?: string | null
@@ -341,7 +325,6 @@ export type Database = {
           games_played?: number | null
           last_active?: string | null
           total_mined?: number | null
-          username?: string | null
         }
         Update: {
           address?: string | null
@@ -351,7 +334,6 @@ export type Database = {
           games_played?: number | null
           last_active?: string | null
           total_mined?: number | null
-          username?: string | null
         }
         Relationships: []
       }
@@ -363,7 +345,6 @@ export type Database = {
           address: string
           rank: number
           score: number
-          username: string
           win_pct: number
         }[]
       }
@@ -375,13 +356,6 @@ export type Database = {
           blocks_won: number
           games_played: number
           total_mined: number
-        }[]
-      }
-      resolve_username: {
-        Args: { p_username: string }
-        Returns: {
-          address: string
-          username: string
         }[]
       }
     }

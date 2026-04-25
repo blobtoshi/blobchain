@@ -217,10 +217,17 @@ async function processRequest(supa: Supa, row: any) {
     return latest ?? row;
   }
 
+  // CRITICAL: kick off the dynamic SDK imports BEFORE returning the response.
+  // Otherwise Deno terminates the dynamic import as soon as the request scope
+  // ends, and the background mint never runs. By starting the import here we
+  // anchor it inside the active request, and waitUntil keeps the worker alive
+  // for the awaited mint that follows.
+  const depsPromise = loadSolana();
   // @ts-ignore EdgeRuntime is provided by the Supabase Edge runtime.
-  EdgeRuntime.waitUntil(backgroundMint(
-    supa, row.blob_tx_id, row.sol_address, Number(row.amount),
-  ));
+  EdgeRuntime.waitUntil((async () => {
+    await depsPromise;
+    await backgroundMint(supa, row.blob_tx_id, row.sol_address, Number(row.amount));
+  })());
   return claimed;
 }
 

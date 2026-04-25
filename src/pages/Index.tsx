@@ -8,7 +8,7 @@
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Send, Wallet, Plus, Download, Lock, Settings as SettingsIcon, LogOut, ChevronDown, Eye, EyeOff, ArrowLeftRight } from "lucide-react";
+import { Send, Wallet, Plus, Download, Lock, Settings as SettingsIcon, LogOut, ChevronDown, Eye, EyeOff, ArrowLeftRight, Copy, Check, ShieldAlert, KeyRound, FileKey } from "lucide-react";
 import blobLogo from "@/assets/blob-logo.png";
 
 import { useBlockchain } from "@/hooks/useBlockchain";
@@ -52,12 +52,19 @@ export default function BlobChainApp() {
 
   const [connectOpen, setConnectOpen] = useState(false);
   const [connectMode, setConnectMode] = useState<"choose" | "create" | "import">("choose");
+  const [importMode, setImportMode] = useState<"seed" | "privkey">("seed");
   const [nameIn, setNameIn] = useState("");
   const [pass1, setPass1] = useState("");
   const [pass2, setPass2] = useState("");
   const [importJson, setImportJson] = useState("");
   const [connectErr, setConnectErr] = useState("");
   const [creating, setCreating] = useState(false);
+
+  // Seed-phrase reveal flow shown right after a successful create.
+  const [seedRevealOpen, setSeedRevealOpen] = useState(false);
+  const [seedPhrase, setSeedPhrase] = useState("");
+  const [seedConfirmed, setSeedConfirmed] = useState(false);
+  const [seedCopied, setSeedCopied] = useState(false);
 
   useEffect(() => { document.title = "BLOB CHAIN — Proof-of-Gaming"; }, []);
 
@@ -66,6 +73,7 @@ export default function BlobChainApp() {
 
   function resetConnect() {
     setConnectMode("choose");
+    setImportMode("seed");
     setNameIn(""); setPass1(""); setPass2(""); setImportJson(""); setConnectErr("");
   }
 
@@ -78,7 +86,13 @@ export default function BlobChainApp() {
     try {
       const r = await createWallet(name, pass1);
       if (!r.ok) { setConnectErr(r.error); return; }
-      setConnectOpen(false); resetConnect();
+      // Show seed phrase reveal dialog before closing connect flow.
+      setSeedPhrase(r.mnemonic);
+      setSeedConfirmed(false);
+      setSeedCopied(false);
+      setConnectOpen(false);
+      resetConnect();
+      setSeedRevealOpen(true);
     } catch (e: any) {
       setConnectErr(String(e?.message || e));
     } finally {
@@ -99,6 +113,14 @@ export default function BlobChainApp() {
     } catch (e: any) {
       setConnectErr(String(e?.message || e));
     }
+  }
+
+  async function copySeedPhrase() {
+    try {
+      await navigator.clipboard.writeText(seedPhrase);
+      setSeedCopied(true);
+      setTimeout(() => setSeedCopied(false), 2000);
+    } catch {}
   }
 
   async function handleUnlock() {
@@ -197,6 +219,12 @@ export default function BlobChainApp() {
                 className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm"
               />
             </div>
+            <div className="flex items-start gap-2 p-3 rounded-lg border border-[hsl(var(--warning)/0.4)] bg-[hsl(var(--warning)/0.08)]">
+              <ShieldAlert className="w-3.5 h-3.5 text-[hsl(var(--warning))] mt-0.5 flex-shrink-0" />
+              <div className="text-[11px] text-foreground/80 leading-relaxed">
+                After generating, you'll see a <span className="font-medium">12-word seed phrase</span>. Save it somewhere safe — it's the only way to recover this wallet on another device.
+              </div>
+            </div>
             {connectErr && <div className="text-xs text-destructive">{connectErr}</div>}
             <div className="flex gap-2">
               <button
@@ -230,13 +258,47 @@ export default function BlobChainApp() {
               />
             </div>
             <div>
-              <label className="label-eyebrow block mb-2">Private key (64 hex characters)</label>
+              <div className="label-eyebrow mb-2">Restore using</div>
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <button
+                  type="button"
+                  onClick={() => { setImportMode("seed"); setImportJson(""); setConnectErr(""); }}
+                  className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-xs font-medium border transition ${
+                    importMode === "seed"
+                      ? "border-primary/60 bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <FileKey className="w-3.5 h-3.5" /> Seed phrase
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setImportMode("privkey"); setImportJson(""); setConnectErr(""); }}
+                  className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-xs font-medium border transition ${
+                    importMode === "privkey"
+                      ? "border-primary/60 bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <KeyRound className="w-3.5 h-3.5" /> Private key
+                </button>
+              </div>
+              <label className="label-eyebrow block mb-2">
+                {importMode === "seed" ? "12-word seed phrase" : "Private key (64 hex characters)"}
+              </label>
               <textarea
                 value={importJson} onChange={e => setImportJson(e.target.value)}
-                placeholder="e.g. 1e99423a4ed27608a15a2616a2b0e9e52ced330ac530edcc32c8ffc6a526aedd"
+                placeholder={importMode === "seed"
+                  ? "e.g. legal winner thank year wave sausage worth useful legal winner thank yellow"
+                  : "e.g. 1e99423a4ed27608a15a2616a2b0e9e52ced330ac530edcc32c8ffc6a526aedd"}
                 rows={3} spellCheck={false} autoCapitalize="off" autoCorrect="off"
-                className="num w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-[12px] leading-relaxed resize-none break-all"
+                className={`${importMode === "privkey" ? "num" : ""} w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-[12px] leading-relaxed resize-none break-all`}
               />
+              <div className="text-[10px] text-muted-foreground/70 mt-1.5">
+                {importMode === "seed"
+                  ? "Your seed phrase regenerates your private key — username and passphrase are NOT used to import."
+                  : "Paste the raw private key — username and passphrase are NOT used to import."}
+              </div>
             </div>
             <div>
               <label className="label-eyebrow block mb-2">Passphrase</label>
@@ -487,6 +549,83 @@ export default function BlobChainApp() {
       </main>
 
       {ConnectWalletDialog}
+
+      {/* Seed-phrase reveal — shown once after wallet creation */}
+      <Dialog
+        open={seedRevealOpen}
+        onOpenChange={(o) => {
+          // Block close until the user confirms they've saved it.
+          if (!o && !seedConfirmed) return;
+          setSeedRevealOpen(o);
+          if (!o) { setSeedPhrase(""); setSeedConfirmed(false); setSeedCopied(false); }
+        }}
+      >
+        <DialogContent
+          className="glass-hi border-border max-w-lg"
+          onInteractOutside={(e) => { if (!seedConfirmed) e.preventDefault(); }}
+          onEscapeKeyDown={(e) => { if (!seedConfirmed) e.preventDefault(); }}
+        >
+          <DialogHeader>
+            <DialogTitle className="text-sm font-medium tracking-wide flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-[hsl(var(--warning))]" />
+              Save your 12-word seed phrase
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <div className="text-xs text-muted-foreground leading-relaxed">
+              This is the <span className="text-foreground font-medium">only way</span> to recover your wallet on another device or after clearing this browser. Write it down on paper or store it in a password manager. Never share it with anyone.
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 p-4 rounded-lg border border-primary/30 bg-primary/5">
+              {seedPhrase.split(" ").map((word, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-2 px-2.5 py-2 rounded-md bg-secondary/60 border border-border"
+                >
+                  <span className="text-[10px] text-muted-foreground num w-4 text-right">{i + 1}</span>
+                  <span className="text-xs font-medium text-foreground">{word}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={copySeedPhrase}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:border-primary/40 text-xs text-muted-foreground hover:text-foreground transition"
+              >
+                {seedCopied ? <><Check className="w-3.5 h-3.5 text-primary" /> Copied</> : <><Copy className="w-3.5 h-3.5" /> Copy phrase</>}
+              </button>
+              <div className="text-[10px] text-muted-foreground/70 flex-1">
+                Anyone with these 12 words controls your wallet.
+              </div>
+            </div>
+
+            <label className="flex items-start gap-3 p-3 rounded-lg border border-border bg-secondary/30 cursor-pointer hover:border-primary/40 transition">
+              <input
+                type="checkbox"
+                checked={seedConfirmed}
+                onChange={(e) => setSeedConfirmed(e.target.checked)}
+                className="mt-0.5 w-4 h-4 accent-primary cursor-pointer"
+              />
+              <span className="text-xs text-foreground/90 leading-relaxed">
+                I have safely stored my 12-word seed phrase. I understand that losing it means losing access to my wallet, and that no one — including Blob Chain — can recover it for me.
+              </span>
+            </label>
+
+            <button
+              onClick={() => {
+                setSeedRevealOpen(false);
+                setSeedPhrase(""); setSeedConfirmed(false); setSeedCopied(false);
+              }}
+              disabled={!seedConfirmed}
+              className="w-full py-3 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition"
+            >
+              I've saved it — continue
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
 
       <Dialog open={unlockOpen} onOpenChange={(o) => { setUnlockOpen(o); if (!o) { setUnlockPass(""); setUnlockErr(""); } }}>
         <DialogContent className="glass-hi border-border max-w-md">

@@ -4,6 +4,8 @@ import * as secp from "@noble/secp256k1";
 import { sha256 } from "@noble/hashes/sha256";
 import { ripemd160 } from "@noble/hashes/ripemd160";
 import { base58check } from "@scure/base";
+import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from "@scure/bip39";
+import { wordlist } from "@scure/bip39/wordlists/english";
 
 const enc = new TextEncoder();
 const b58check = base58check(sha256);
@@ -31,13 +33,38 @@ export function pubKeyToAddress(pubHex: string) {
   return b58check.encode(payload);
 }
 
+// ── BIP39 seed-phrase support ────────────────────────────────────────────────
+// 12-word mnemonic (128 bits entropy). The secp256k1 private key is derived
+// deterministically from the BIP39 seed by taking the first 32 bytes of the
+// PBKDF2-HMAC-SHA512 output. Fully reversible from the mnemonic alone.
+
+export function generateMnemonic12(): string {
+  return generateMnemonic(wordlist, 128);
+}
+
+export function normalizeMnemonic(phrase: string): string {
+  return phrase.trim().toLowerCase().split(/\s+/).join(" ");
+}
+
+export function isValidMnemonic(phrase: string): boolean {
+  try { return validateMnemonic(normalizeMnemonic(phrase), wordlist); }
+  catch { return false; }
+}
+
+export function mnemonicToPrivateKey(phrase: string): string {
+  const seed = mnemonicToSeedSync(normalizeMnemonic(phrase));
+  let priv = seed.slice(0, 32);
+  if (!secp.utils.isValidPrivateKey(priv)) priv = sha256(seed);
+  return bytesToHex(priv);
+}
+
 export async function generateWallet() {
-  const priv = secp.utils.randomPrivateKey();
-  const pub = secp.getPublicKey(priv, true);
-  const privateKey = bytesToHex(priv);
+  const mnemonic = generateMnemonic12();
+  const privateKey = mnemonicToPrivateKey(mnemonic);
+  const pub = secp.getPublicKey(hexToBytes(privateKey), true);
   const publicKey = bytesToHex(pub);
   const address = pubKeyToAddress(publicKey);
-  return { address, publicKey, privateKey };
+  return { address, publicKey, privateKey, mnemonic };
 }
 
 export async function signData(privHex: string, data: string) {

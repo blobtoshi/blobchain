@@ -5,7 +5,7 @@ import * as Relay from "@/lib/blobRelay";
 import * as Vault from "@/lib/walletVault";
 import * as secp from "@noble/secp256k1";
 import { supabase } from "@/integrations/supabase/client";
-import { generateWallet, signData, bytesToHex, hexToBytes, pubKeyToAddress } from "@/lib/blob/crypto";
+import { generateWallet, signData, bytesToHex, hexToBytes, pubKeyToAddress, isValidMnemonic, mnemonicToPrivateKey, normalizeMnemonic } from "@/lib/blob/crypto";
 import { USERNAME_RE } from "@/lib/blob/constants";
 
 export function useWalletVault() {
@@ -29,7 +29,7 @@ export function useWalletVault() {
     return null;
   }
 
-  async function createWallet(name: string, pass: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  async function createWallet(name: string, pass: string): Promise<{ ok: true; mnemonic: string } | { ok: false; error: string }> {
     const nameErr = await validateUsername(name);
     if (nameErr) return { ok: false, error: nameErr };
     const w: any = await generateWallet();
@@ -43,18 +43,29 @@ export function useWalletVault() {
     if (!reg.ok) return { ok: false, error: reg.error || "Failed to register wallet" };
     setVaultPub({ address: w.address, publicKey: w.publicKey, username: w.username });
     setWallet(w);
-    return { ok: true };
+    return { ok: true, mnemonic: w.mnemonic };
   }
 
-  async function importWallet(name: string, privKeyHex: string, pass: string): Promise<{ ok: true } | { ok: false; error: string }> {
-    const priv = privKeyHex.trim().toLowerCase().replace(/^0x/, "");
-    if (!/^[0-9a-f]{64}$/.test(priv)) return { ok: false, error: "Private key must be 64 hex characters (32 bytes)" };
+  // secret = either a 64-hex private key or a 12-word BIP39 mnemonic.
+  async function importWallet(name: string, secret: string, pass: string): Promise<{ ok: true } | { ok: false; error: string }> {
+    const raw = secret.trim();
+    let priv = "";
+    const looksHex = /^(0x)?[0-9a-fA-F]{64}$/.test(raw);
+    if (looksHex) {
+      priv = raw.toLowerCase().replace(/^0x/, "");
+    } else {
+      const phrase = normalizeMnemonic(raw);
+      const wordCount = phrase.split(" ").filter(Boolean).length;
+      if (wordCount !== 12) return { ok: false, error: "Seed phrase must be exactly 12 words" };
+      if (!isValidMnemonic(phrase)) return { ok: false, error: "Invalid seed phrase (checksum mismatch or unknown words)" };
+      priv = mnemonicToPrivateKey(phrase);
+    }
     let publicKey: string, address: string;
     try {
       publicKey = bytesToHex(secp.getPublicKey(hexToBytes(priv), true));
       address = pubKeyToAddress(publicKey);
     } catch {
-      return { ok: false, error: "Invalid private key" };
+      return { ok: false, error: "Invalid key material" };
     }
     const nameErr = await validateUsername(name, address);
     if (nameErr) return { ok: false, error: nameErr };

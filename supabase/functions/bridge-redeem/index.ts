@@ -1,21 +1,23 @@
 // Reverse bridge: WBLOB (Solana SPL) → BLOB (Blob Chain).
 //
+// SDK-free implementation: verifies the Solana burn via raw JSON-RPC
+// (no @solana/web3.js, no @solana/spl-token) so we stay well under
+// Supabase Edge Function CPU budget. Long-term goal: this exact code
+// runs unchanged inside future BLOB full nodes.
+//
 // Flow:
 //   1. User burns WBLOB on Solana with a Memo program ix encoding `blob:<dest>`.
 //   2. Client POSTs { sol_signature, blob_address, amount } here.
 //   3. We insert a `pending` row (idempotent on sol_signature) and dispatch
 //      verification + credit as a background task.
-//   4. verifyAndCredit fetches the FINALIZED tx, confirms exactly one
-//      matching burn (mint + amount) AND a memo binding the blob_address,
+//   4. verifyAndCredit fetches the FINALIZED tx via JSON-RPC, confirms exactly
+//      one matching burn (mint + amount) AND a memo binding the blob_address,
 //      then atomically claims the row and signs+broadcasts a normal BLOB tx
 //      from BRIDGE_ADDRESS to blob_address for `amount - BRIDGE_FEE_BLOB`.
 //   5. GET ?sol_signature=... polls status (re-runs verify if still pending).
 import { createClient as _createClient } from "https://esm.sh/@supabase/supabase-js@2.95.0";
-// deno type-check chokes on the 2.95 generics; cast to any so call sites stay clean.
 // deno-lint-ignore no-explicit-any
 const createClient = _createClient as any;
-import { Connection, PublicKey } from "https://esm.sh/@solana/web3.js@1.95.4";
-import { getMint } from "https://esm.sh/@solana/spl-token@0.4.9?deps=@solana/web3.js@1.95.4&bundle-deps";
 import * as secp from "https://esm.sh/@noble/secp256k1@2.1.0";
 import { sha256 } from "https://esm.sh/@noble/hashes@1.5.0/sha256";
 import { ripemd160 } from "https://esm.sh/@noble/hashes@1.5.0/ripemd160";
@@ -29,12 +31,14 @@ const corsHeaders = {
 };
 
 // MUST match GENESIS.bridgeAddress in src/lib/blob/constants.ts (pinned at genesis).
-// The redeem self-check below verifies BRIDGE_BLOB_PRIVATE_KEY derives this address.
 const BRIDGE_ADDRESS = "1E4QWFYb5Pqj8iAV2be8Ee88yEbvhU9iTs";
 const BRIDGE_FEE_BLOB = 0.0015;
 const MEMO_PROGRAM_ID = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
 const TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 const BLOB_UNIT = 1e8;
+// wBLOB mint always has 8 decimals (matches BLOB chain). Hardcoded so we don't
+// need to hit getMint() — saves an RPC call + bigint math is trivial.
+const WBLOB_DECIMALS = 8;
 
 const SOLANA_RPC_URL          = Deno.env.get("SOLANA_RPC_URL") ?? "";
 const SOLANA_SPL_MINT_ADDRESS = Deno.env.get("SOLANA_SPL_MINT_ADDRESS") ?? "";
@@ -81,14 +85,17 @@ async function sha256hex(s: string) {
   return bytesToHex(new Uint8Array(buf));
 }
 
-function canonicalTxBytes(tx: {
-  from: string; to: string; amount: number; timestamp: number;
-  feeRate: number; memo: string; publicKey: string; signature: string;
-}): number {
-  return enc.encode(JSON.stringify({
-    from: tx.from, to: tx.to, amount: tx.amount, timestamp: tx.timestamp,
-    feeRate: tx.feeRate, memo: tx.memo, publicKey: tx.publicKey, signature: tx.signature,
-  })).length;
+// ── Solana JSON-RPC ────────────────────────────────────────────────────
+async function solanaRpc<T>(method: string, params: unknown[]): Promise<T> {
+  const r = await fetch(SOLANA_RPC_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+  });
+  if (!r.ok) throw new Error(`rpc ${method} http ${r.status}`);
+  const j = await r.json();
+  if (j.error) throw new Error(`rpc ${method}: ${j.error.message ?? JSON.stringify(j.error)}`);
+  return j.result as T;
 }
 
 // ── Verification ───────────────────────────────────────────────────────
@@ -100,31 +107,31 @@ async function verifyBurn(sig: string, expectedAmount: number, expectedBlobAddr:
   if (!SOLANA_RPC_URL) return { ok: false, reason: "SOLANA_RPC_URL not configured" };
   if (!SOLANA_SPL_MINT_ADDRESS) return { ok: false, reason: "SOLANA_SPL_MINT_ADDRESS not configured" };
 
-  const conn = new Connection(SOLANA_RPC_URL, "finalized");
-  const tx = await conn.getParsedTransaction(sig, {
-    maxSupportedTransactionVersion: 0,
-    commitment: "finalized",
-  });
+  let tx: any;
+  try {
+    tx = await solanaRpc("getTransaction", [
+      sig,
+      { maxSupportedTransactionVersion: 0, commitment: "finalized", encoding: "jsonParsed" },
+    ]);
+  } catch (e) {
+    return { ok: false, reason: `rpc error: ${(e as Error).message}` };
+  }
   if (!tx) return { ok: false, reason: "Solana tx not finalized yet" };
   if (tx.meta?.err) return { ok: false, reason: `Solana tx failed: ${JSON.stringify(tx.meta.err)}` };
 
-  const ixs = tx.transaction.message.instructions as any[];
+  const ixs = (tx.transaction?.message?.instructions ?? []) as any[];
   const expectedMemo = `blob:${expectedBlobAddr}`;
-
-  // Get mint decimals to convert expectedAmount → base units.
-  const mintInfo = await getMint(conn as any, new PublicKey(SOLANA_SPL_MINT_ADDRESS));
-  const expectedBase = BigInt(Math.round(expectedAmount * 10 ** mintInfo.decimals));
+  const expectedBase = BigInt(Math.round(expectedAmount * 10 ** WBLOB_DECIMALS));
 
   let burnCount = 0;
   let memoCount = 0;
   let burnAuthority: string | null = null;
 
   for (const ix of ixs) {
-    const programId = ix.programId?.toString?.() ?? ix.programId;
+    const programId = ix.programId;
 
     // Memo program ix.
     if (programId === MEMO_PROGRAM_ID) {
-      // parsed memo ix shape: { program: 'spl-memo', parsed: '<utf8>' } OR { data: <base58> }
       let memoText = "";
       if (typeof ix.parsed === "string") memoText = ix.parsed;
       else if (ix.parsed?.info?.memo) memoText = ix.parsed.info.memo;
@@ -133,7 +140,7 @@ async function verifyBurn(sig: string, expectedAmount: number, expectedBlobAddr:
         catch { /* ignore */ }
       }
       if (memoText !== expectedMemo) {
-        return { ok: false, reason: `memo mismatch: expected "${expectedMemo}"` };
+        return { ok: false, reason: `memo mismatch: expected "${expectedMemo}", got "${memoText}"` };
       }
       memoCount++;
       continue;
@@ -147,9 +154,7 @@ async function verifyBurn(sig: string, expectedAmount: number, expectedBlobAddr:
         if (info.mint !== SOLANA_SPL_MINT_ADDRESS) {
           return { ok: false, reason: `wrong mint: ${info.mint}` };
         }
-        const amtStr = ptype === "burnChecked"
-          ? info.tokenAmount?.amount
-          : info.amount;
+        const amtStr = ptype === "burnChecked" ? info.tokenAmount?.amount : info.amount;
         const burned = BigInt(amtStr);
         if (burned !== expectedBase) {
           return { ok: false, reason: `burn amount mismatch: expected ${expectedBase} base units, got ${burned}` };
@@ -164,7 +169,7 @@ async function verifyBurn(sig: string, expectedAmount: number, expectedBlobAddr:
   if (burnCount !== 1) return { ok: false, reason: `expected exactly 1 burn ix, found ${burnCount}` };
   if (memoCount !== 1) return { ok: false, reason: `expected exactly 1 memo ix, found ${memoCount}` };
 
-  const feePayer = tx.transaction.message.accountKeys[0]?.pubkey?.toString() ?? "";
+  const feePayer = tx.transaction?.message?.accountKeys?.[0]?.pubkey ?? "";
   if (burnAuthority && burnAuthority !== feePayer) {
     return { ok: false, reason: "burn authority does not match fee payer" };
   }
@@ -180,7 +185,6 @@ async function signAndBroadcastCredit(
 ): Promise<{ ok: boolean; tx_id?: string; error?: string }> {
   if (!BRIDGE_BLOB_PRIVATE_KEY) return { ok: false, error: "BRIDGE_BLOB_PRIVATE_KEY not configured" };
 
-  // Derive the bridge public key + verify it matches BRIDGE_ADDRESS.
   const privBytes = hexToBytes(BRIDGE_BLOB_PRIVATE_KEY.replace(/^0x/, ""));
   const pubBytes = secp.getPublicKey(privBytes, true);
   const pubHex = bytesToHex(pubBytes);
@@ -189,7 +193,6 @@ async function signAndBroadcastCredit(
     return { ok: false, error: `BRIDGE_BLOB_PRIVATE_KEY derives ${derivedAddr}, expected ${BRIDGE_ADDRESS}` };
   }
 
-  // Get current recommended feeRate from submit-tx (so we comfortably pay).
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? "";
   let feeRate = 10;
@@ -207,7 +210,6 @@ async function signAndBroadcastCredit(
   const memo = `redeem:${solSig.slice(0, 16)}`;
   const amt = Math.round(creditAmount * BLOB_UNIT) / BLOB_UNIT;
 
-  // Sign payload v2 — must match submit-tx exactly.
   const data = `${BRIDGE_ADDRESS}→${blobAddress}:${amt}@${ts}|fr=${feeRate}|m=${memo}`;
   const msgHash = sha256(enc.encode(data));
   const sigObj = await secp.signAsync(msgHash, privBytes);
@@ -239,17 +241,15 @@ async function signAndBroadcastCredit(
 
 // ── Verify + credit pipeline ───────────────────────────────────────────
 async function verifyAndCredit(supa: Supa, solSig: string) {
-  // Re-read current state.
   const { data: row } = await supa.from("bridge_redeems")
     .select("*").eq("sol_signature", solSig).maybeSingle();
   if (!row) return;
   if (row.status === "credited" || row.status === "failed" || row.status === "crediting") return;
 
-  // Step 1 — verify.
+  // Step 1 — verify (skip if already verified).
   if (row.status === "pending") {
     const v = await verifyBurn(solSig, Number(row.amount), row.blob_address);
     if (!v.ok) {
-      // "not finalized yet" is expected — keep pending so polling retries.
       if (/not finalized yet/.test(v.reason)) return;
       await supa.from("bridge_redeems")
         .update({ status: "failed", error: v.reason })
@@ -281,13 +281,12 @@ async function verifyAndCredit(supa: Supa, solSig: string) {
     .eq("sol_signature", solSig)
     .eq("status", "verified")
     .select().maybeSingle();
-  if (!claimed) return; // someone else is crediting (or already done).
+  if (!claimed) return;
 
   // Step 3 — sign + broadcast credit tx.
   const credit = Number(claimed.credit_amount);
   const r = await signAndBroadcastCredit(claimed.blob_address, credit, solSig);
   if (!r.ok) {
-    // Roll back to verified so a retry can pick it up.
     await supa.from("bridge_redeems")
       .update({ status: "verified", error: r.error?.slice(0, 500) ?? "credit failed" })
       .eq("sol_signature", solSig);
@@ -321,7 +320,6 @@ Deno.serve(async (req) => {
       .select("*").eq("sol_signature", sig).maybeSingle();
     if (!row) return bad("not found", 404);
     if (row.status === "pending" || row.status === "verified") {
-      // Re-attempt verification/credit on each poll.
       // @ts-ignore EdgeRuntime is provided by the Supabase Edge runtime.
       EdgeRuntime.waitUntil(verifyAndCredit(supa, sig));
     }
@@ -338,7 +336,6 @@ Deno.serve(async (req) => {
     const amt = Number(amount);
     if (!Number.isFinite(amt) || amt <= 0 || amt > 1_000_000) return bad("invalid amount");
 
-    // Idempotent: keep existing row if present.
     const { data: existing } = await supa.from("bridge_redeems")
       .select("*").eq("sol_signature", sol_signature).maybeSingle();
 
@@ -359,7 +356,6 @@ Deno.serve(async (req) => {
       row = inserted;
     }
 
-    // Kick off background verify + credit.
     // @ts-ignore EdgeRuntime
     EdgeRuntime.waitUntil(verifyAndCredit(supa, sol_signature));
     return ok_(row);

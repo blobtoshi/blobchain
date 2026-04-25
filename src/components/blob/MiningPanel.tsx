@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { calcTotalSupply, winProbability } from "@/lib/blob/chain";
 import { MAX_SUPPLY } from "@/lib/blob/constants";
 import runnerArt from "@/assets/blob-coins-stack.png";

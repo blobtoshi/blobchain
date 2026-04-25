@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Aggregates chain / mempool / entries state, real-time relay subscription,
 // and block-sealing logic. Returns everything Index needs to render.
 import { useCallback, useEffect, useRef, useState } from "react";

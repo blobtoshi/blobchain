@@ -1,4 +1,3 @@
-// @ts-nocheck
 // ═══════════════════════════════════════════════════════════════════════════════
 // BLOB CHAIN — Proof-of-Gaming Blockchain
 // Thin orchestrator. State lives in hooks (useBlockchain, useWalletVault),

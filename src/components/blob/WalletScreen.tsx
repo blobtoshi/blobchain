@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState } from "react";
 import { Trophy, ArrowUpRight, ArrowDownLeft } from "lucide-react";
 import { calcBalance } from "@/lib/blob/chain";

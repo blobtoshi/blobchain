@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Mempool.space-style detailed mempool visualization.
 // Mounted only when the Mempool tab is active so its 1s ticker doesn't
 // re-render the rest of the explorer.

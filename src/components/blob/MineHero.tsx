@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Play } from "lucide-react";
 
 export default function MineHero({ blockInfo, onLaunch }: any) {

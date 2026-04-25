@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useState } from "react";
 import * as Relay from "@/lib/blobRelay";
 import { calcTotalSupply } from "@/lib/blob/chain";

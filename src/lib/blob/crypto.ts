@@ -1,4 +1,3 @@
-// @ts-nocheck
 // secp256k1 wallet + signing primitives shared across the UI.
 import * as secp from "@noble/secp256k1";
 import { sha256 } from "@noble/hashes/sha256";

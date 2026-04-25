@@ -1,4 +1,3 @@
-// @ts-nocheck
 // WBLOB → BLOB reverse bridge UI.
 // User connects a Solana wallet and signs ONE tx that:
 //   - Burns `amount` WBLOB from their associated token account.

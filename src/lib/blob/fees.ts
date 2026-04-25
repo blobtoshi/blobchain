@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { BLOB_UNIT } from "./constants";
 
 export const to8 = (n: number) => Math.round(Number(n) * BLOB_UNIT) / BLOB_UNIT;

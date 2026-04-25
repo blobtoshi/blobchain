@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Wallet lifecycle: create / import / unlock / disconnect.
 // A wallet is identified solely by its address — there is no username.
 import { useEffect, useRef, useState } from "react";

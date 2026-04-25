@@ -58,8 +58,6 @@ export async function saveEncryptedWallet(w: WalletPlain, passphrase: string) {
     },
   };
   localStorage.setItem(VAULT_KEY, JSON.stringify(vault));
-  // Make sure no copies in older-format slots linger
-  for (const k of LEGACY_KEYS) localStorage.removeItem(k);
 }
 
 export function getStoredWalletPublic(): WalletPublic | null {

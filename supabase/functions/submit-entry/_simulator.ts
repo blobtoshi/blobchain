@@ -1,30 +1,33 @@
-// Standalone copy of src/lib/blob/simulator.ts for the Deno edge runtime.
-// Keep BYTE-FOR-BYTE in sync with the client copy. ENGINE_VERSION must match.
+// Pure, deterministic Blob Run physics simulator.
+// SAME module is imported by the React canvas component AND the
+// submit-entry edge function. Any drift = consensus break, so do not
+// change the constants or tick math without bumping ENGINE_VERSION.
+
+import { mkPrng, getRewardForHeight } from "./chain";
+import { GY, PX, GRAVITY, JUMP_V } from "./constants";
 
 export const ENGINE_VERSION = 2;
-export const MAX_FRAMES = 36000;
-export const MAX_INPUTS_PER_RUN = MAX_FRAMES;
 
-const GY = 290;
-const PX = 130;
-const GRAVITY = 0.66;
-const JUMP_V = -14.5;
+// Maximum number of simulated frames we will replay. ~60 fps * 600 s = 36000.
+// A run that lasts longer than this is rejected (would otherwise enable a
+// "trickle inputs forever" DoS on the verifier).
+export const MAX_FRAMES = 36000;
+
+// Maximum input events. A human realistically issues <8 events/sec; we cap
+// at an extremely generous 30/sec averaged across the whole run.
+export const MAX_INPUTS_PER_RUN = MAX_FRAMES; // hard ceiling; cadence checked too
+
+// TYMAP duplicated here to keep this module standalone (level.ts pulls in
+// canvas/Image which can't run in Deno).
 const TYMAP = { low: GY - 52, mid: GY - 94, high: GY - 140 };
 
-function mkPrng(seed: number) {
-  let s = (Math.abs(+seed) * 2654435761) >>> 0;
-  return () => {
-    s = (s + 0x6D2B79F5) | 0;
-    let t = Math.imul(s ^ (s >>> 15), 1 | s);
-    t = t + Math.imul(t ^ (t >>> 7), 61 | t) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function generateLevelPure(seed: number) {
+// Mirror of generateLevel() from level.ts but without sprite imports.
+type ObstacleEv = { at: number; type: string; w: number; h: number };
+type TokenEv = { at: number; height: string };
+export function generateLevelPure(seed) {
   const rng = mkPrng(seed);
-  const obstacles: any[] = [];
-  const tokens: any[] = [];
+  const obstacles: ObstacleEv[] = [];
+  const tokens: TokenEv[] = [];
   let pos = 250;
   let idx = 0;
   while (pos < 400000) {
@@ -47,18 +50,48 @@ function generateLevelPure(seed: number) {
   return { obstacles, tokens };
 }
 
-function initialState() {
+// ---------- Input trace -------------------------------------------------
+// An InputEvent is { f: frame number, t: 0|1|2|3 }
+// 0 = jump press, 1 = jump release, 2 = duck press, 3 = duck release
+// Encoded canonically as "f:t,f:t,..." for hashing.
+export function encodeInputs(events) {
+  // Stable sort by frame then type; reject duplicate exact entries.
+  const sorted = [...events].sort((a, b) => a.f - b.f || a.t - b.t);
+  return sorted.map(e => `${e.f}:${e.t}`).join(",");
+}
+
+export async function hashInputs(canonical) {
+  const enc = new TextEncoder();
+  const buf = await crypto.subtle.digest("SHA-256", enc.encode(canonical));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+// ---------- Initial state --------------------------------------------------
+type LiveObstacle = { x: number; y: number; w: number; h: number; type: string };
+type LiveToken = { x: number; y: number; alive: boolean };
+export function initialState() {
   return {
-    frame: 0, score: 0, dist: 0, speed: 4.5, locked: false,
-    combo: 0, comboTimer: 0, obsIdx: 0, tokIdx: 0,
+    frame: 0,
+    score: 0,
+    dist: 0,
+    speed: 4.5,
+    locked: false,
+    combo: 0,
+    comboTimer: 0,
+    obsIdx: 0,
+    tokIdx: 0,
     player: { y: GY - 28, vy: 0, action: "run", wob: 0, sq: 1 },
-    obstacles: [] as any[], tokens: [] as any[],
-    jumpHeld: false, duckHeld: false, dead: false,
+    obstacles: [] as LiveObstacle[],
+    tokens: [] as LiveToken[],
+    jumpHeld: false,
+    duckHeld: false,
+    dead: false,
     passedFirstObstacle: false,
   };
 }
 
-function applyInputs(state: any, events: any[]) {
+// Apply input events scheduled for the CURRENT frame.
+function applyInputs(state, events) {
   for (const e of events) {
     if (e.t === 0) state.jumpHeld = true;
     else if (e.t === 1) state.jumpHeld = false;
@@ -67,13 +100,20 @@ function applyInputs(state: any, events: any[]) {
   }
 }
 
-function tick(state: any, level: any, frameInputs: any[]) {
+// One physics tick. Mirrors the loop() body in BlobRunGame.tsx exactly.
+// `level` is the precomputed { obstacles, tokens } for this seed.
+// Returns true if the player is alive after the tick, false if the run ended.
+export function tick(state, level, frameInputs) {
   if (state.dead) return false;
   applyInputs(state, frameInputs);
+
   const p = state.player;
   state.frame++;
 
-  if (state.jumpHeld && p.action !== "jump") { p.vy = JUMP_V; p.action = "jump"; }
+  if (state.jumpHeld && p.action !== "jump") {
+    p.vy = JUMP_V;
+    p.action = "jump";
+  }
   if (!state.jumpHeld && state.duckHeld && p.action !== "jump") p.action = "duck";
   else if (!state.duckHeld && p.action === "duck") p.action = "run";
   p.vy += GRAVITY;
@@ -81,7 +121,8 @@ function tick(state: any, level: any, frameInputs: any[]) {
   const fl = p.action === "duck" ? GY - 16 : GY - 28;
   if (p.y >= fl) {
     if (p.vy > 5) p.sq = 0.5;
-    p.y = fl; p.vy = 0;
+    p.y = fl;
+    p.vy = 0;
     if (p.action === "jump") p.action = "run";
   }
   p.sq += (1 - p.sq) * 0.13;
@@ -91,6 +132,7 @@ function tick(state: any, level: any, frameInputs: any[]) {
     state.dist += state.speed;
     state.speed = 4.5 + Math.pow(state.score / 600, 1.15) * 0.9;
   }
+  // Detect first-obstacle clearance: any spawned obstacle whose right edge has moved past the player.
   if (!state.passedFirstObstacle) {
     for (const o of state.obstacles) {
       if (o.x + o.w < PX) { state.passedFirstObstacle = true; break; }
@@ -98,6 +140,7 @@ function tick(state: any, level: any, frameInputs: any[]) {
   }
   if (state.comboTimer > 0 && --state.comboTimer === 0) state.combo = 0;
 
+  // Spawn obstacles/tokens
   while (state.obsIdx < level.obstacles.length && state.dist >= level.obstacles[state.obsIdx].at) {
     const ev = level.obstacles[state.obsIdx++];
     if (ev.type === "low") {
@@ -115,11 +158,13 @@ function tick(state: any, level: any, frameInputs: any[]) {
     state.tokens.push({ x: 780 + 8, y: TYMAP[ev.height], alive: true });
   }
 
+  // Move
   for (const o of state.obstacles) o.x -= state.speed;
-  state.obstacles = state.obstacles.filter((o: any) => o.x > -70);
+  state.obstacles = state.obstacles.filter(o => o.x > -70);
   for (const t of state.tokens) t.x -= state.speed;
-  state.tokens = state.tokens.filter((t: any) => t.x > -35);
+  state.tokens = state.tokens.filter(t => t.x > -35);
 
+  // Collisions
   const dk = p.action === "duck";
   const ph = dk ? 22 : 42;
   const pw = dk ? 46 : 30;
@@ -127,7 +172,8 @@ function tick(state: any, level: any, frameInputs: any[]) {
   const y1 = p.y - ph / 2 + 4, y2 = p.y + ph / 2 - 4;
   for (const o of state.obstacles) {
     if (x2 > o.x + 4 && x1 < o.x + o.w - 4 && y2 > o.y + 4 && y1 < o.y + o.h - 4) {
-      state.dead = true; state.locked = true;
+      state.dead = true;
+      state.locked = true;
       return false;
     }
   }
@@ -144,45 +190,42 @@ function tick(state: any, level: any, frameInputs: any[]) {
   return true;
 }
 
-export function parseCanonicalInputs(canonical: string) {
-  if (!canonical) return [];
-  return canonical.split(",").map(tok => {
-    const [f, t] = tok.split(":");
-    return { f: Number(f), t: Number(t) };
-  });
-}
-
-export function plausibilityCheck(events: any[], frameCount: number, claimedScore: number) {
-  if (!Number.isInteger(frameCount) || frameCount < 1 || frameCount > MAX_FRAMES)
-    return "frame_count out of range";
-  if (events.length > MAX_INPUTS_PER_RUN) return "too many inputs";
-  if (events.length > Math.ceil(frameCount * 0.5) + 20) return "implausible input cadence";
-  if (claimedScore > frameCount * 3 + 500) return "score exceeds physical maximum";
-  let last = -1;
-  for (const e of events) {
-    if (typeof e.f !== "number" || typeof e.t !== "number" || Number.isNaN(e.f) || Number.isNaN(e.t))
-      return "malformed event";
-    if (!Number.isInteger(e.f) || e.f < 1 || e.f > frameCount) return "event frame out of range";
-    if (e.f < last) return "events not sorted";
-    if (!Number.isInteger(e.t) || e.t < 0 || e.t > 3) return "bad event type";
-    last = e.f;
-  }
-  return null;
-}
-
-export function simulate(seed: number, events: any[], frameCount: number) {
+// Replay a full input trace and return the deterministic score + frame count.
+export function simulate(seed, events, frameCount) {
   const level = generateLevelPure(seed);
   const state = initialState();
-  const buckets = new Map<number, any[]>();
+  // Bucket events by frame for O(F + E) replay.
+  const buckets = new Map();
   for (const e of events) {
     if (!buckets.has(e.f)) buckets.set(e.f, []);
-    buckets.get(e.f)!.push(e);
+    buckets.get(e.f).push(e);
   }
   const target = Math.min(frameCount, MAX_FRAMES);
   for (let f = 0; f < target; f++) {
-    const evs = buckets.get(f + 1) || [];
+    const evs = buckets.get(f + 1) || []; // events apply at the frame they were recorded (frame becomes f+1)
     const alive = tick(state, level, evs);
     if (!alive) break;
   }
   return { score: state.score, frame: state.frame, dead: state.dead };
+}
+
+// Cheap plausibility check before paying for a full replay.
+export function plausibilityCheck(events, frameCount, claimedScore) {
+  if (frameCount < 1 || frameCount > MAX_FRAMES) return "frame_count out of range";
+  if (events.length > MAX_INPUTS_PER_RUN) return "too many inputs";
+  // Cadence: max 30 events / second sustained over the whole run (60fps -> 0.5/frame)
+  if (events.length > Math.ceil(frameCount * 0.5) + 20) return "implausible input cadence";
+  // Score upper bound: 1 per frame + up to 137 per token (combo 10 = floor(50*3.5)=175 max)
+  // and tokens spawn at most ~once per 110px. Generous ceiling: frames + frames * 2.
+  if (claimedScore > frameCount * 3 + 500) return "score exceeds physical maximum";
+  // Frames must be monotonic and within bounds.
+  let last = -1;
+  for (const e of events) {
+    if (typeof e.f !== "number" || typeof e.t !== "number") return "malformed event";
+    if (e.f < 1 || e.f > frameCount) return "event frame out of range";
+    if (e.f < last) return "events not sorted";
+    if (e.t < 0 || e.t > 3 || !Number.isInteger(e.t)) return "bad event type";
+    last = e.f;
+  }
+  return null;
 }

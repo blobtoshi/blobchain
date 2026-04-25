@@ -64,6 +64,7 @@ export type Database = {
       }
       blob_chain: {
         Row: {
+          block_hash_v2: string | null
           created_at: string | null
           hash: string
           height: number
@@ -79,6 +80,7 @@ export type Database = {
           winner_score: number | null
         }
         Insert: {
+          block_hash_v2?: string | null
           created_at?: string | null
           hash: string
           height: number
@@ -94,6 +96,7 @@ export type Database = {
           winner_score?: number | null
         }
         Update: {
+          block_hash_v2?: string | null
           created_at?: string | null
           hash?: string
           height?: number
@@ -337,8 +340,49 @@ export type Database = {
         }
         Relationships: []
       }
+      bridge_audit: {
+        Row: {
+          total_bridge_txs: number | null
+          total_locked_blob: number | null
+          total_minted_blob: number | null
+          unreconciled_blob: number | null
+          unreconciled_count: number | null
+        }
+        Relationships: []
+      }
+      bridge_ledger: {
+        Row: {
+          amount: number | null
+          blob_tx_id: string | null
+          block_height: number | null
+          block_timestamp: number | null
+          from_address: string | null
+          memo: string | null
+          memo_sol_address: string | null
+          mint_error: string | null
+          mint_signature: string | null
+          mint_sol_address: string | null
+          mint_status: string | null
+          minted_at: string | null
+          to_address: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      compute_block_hash_v2: {
+        Args: {
+          p_height: number
+          p_previous_hash: string
+          p_reward: number
+          p_seed: string
+          p_timestamp: number
+          p_transactions: string
+          p_winner: string
+          p_winner_score: number
+        }
+        Returns: string
+      }
       get_block_leaderboard: {
         Args: { p_height: number }
         Returns: {

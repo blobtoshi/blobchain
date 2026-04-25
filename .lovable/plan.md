@@ -1,75 +1,61 @@
-## Goal
+# Bridge keypair pinned at genesis (with chain reset)
 
-Remove wallet usernames entirely. A wallet is identified solely by its address. The X (Twitter) handle field on the alpha access gate stays untouched — that is unrelated.
+## Summary
 
-## What changes for the user
+Generate a fresh secp256k1 keypair for the bridge, bake the **public address** into a new `GENESIS` block (chain reset), update the secret with the new **private key** once, and remove the address inconsistency across the codebase. The on-chain bridge logic then never needs DB or secret edits again — it only needs the edge function process running, which your future 4+ full nodes will provide.
 
-- Wallet creation no longer asks for a username — only a passphrase.
-- Wallet import no longer asks for a username.
-- Send form no longer accepts `@handle` recipients — only addresses.
-- Anywhere a name used to appear (wallet header, tx history, mining leaderboard, block winner, mempool, explorer, bridge), a shortened address (`1A2b…xY9z`) is shown instead.
-- Every shortened address becomes a clickable chip that jumps to that account in the Explorer's account drawer (existing behavior, just made consistent).
+## What changes
 
-## Files to change
+### 1. Generate the bridge keypair (one-time, in build mode)
 
-### Frontend — UI
+- Run a one-off Node script via `code--exec` that uses the project's existing `@noble/secp256k1` + `@scure/base` deps to mint a fresh `{ mnemonic, privateKey, publicKey, address }`.
+- Print **mnemonic + privateKey + address** in chat so you can copy them once.
+- I will **only** keep the `address` (and `publicKey`) in the codebase; I will not commit the private key or mnemonic.
+- You then update the `BRIDGE_BLOB_PRIVATE_KEY` secret with the new private key (last time you ever touch it).
 
-- `src/pages/Index.tsx` — drop username state, validation, and inputs from create/import dialogs; drop the seed reveal "username" mention; drop username from settings.
-- `src/components/blob/WalletScreen.tsx` — remove `@username` line in header; show shortened address; replace `fromUsername` fallbacks with `shortAddress(...)`.
-- `src/components/blob/SendTxForm.tsx` — strip `@username` resolution path, the `resolve_username` RPC call, and the related UI states/messages; recipient input becomes "address only".
-- `src/components/blob/BlockExplorer.tsx` — remove username column/sort, swap all `*Username || shortHash(...)` displays for `shortHash(...)`, remove "username" sort option, drop username from search placeholders/filters.
-- `src/components/blob/MempoolView.tsx` — replace `winnerUsername` / `fromUsername` displays with shortened address.
-- `src/components/blob/MiningPanel.tsx` — show shortened address instead of `e.username`.
-- `src/components/blob/NetworkView.tsx` — block tooltip uses shortened winner address.
-- `src/components/blob/BridgeScreen.tsx` — drop `fromUsername` / `from_username` from outbound payloads.
-- `src/components/blob/BlobRunGame.tsx` — drop `username` from the entry submission payload.
+### 2. Reset & extend the genesis block
 
-### Frontend — lib / hooks
+In `src/lib/blob/constants.ts`:
+- Replace the current `BRIDGE_ADDRESS = "13mEv2j…"` with the new generated address.
+- Bump `GENESIS_TIME_MS` to a new "now" so the chain restarts cleanly from height 0.
+- Recompute / update `GENESIS.hash` (deterministic from genesis fields).
+- Add `bridgeAddress` and `bridgePublicKey` fields to the `GENESIS` block so they are part of consensus.
 
-- `src/lib/blob/constants.ts` — delete `USERNAME_RE` and `winnerUsername` from sample data.
-- `src/lib/blob/explorer.ts` — drop `fromUsername` / `toUsername` / `winnerUsername` fields from row types and search matchers.
-- `src/lib/blobRelay.ts` — drop username fields from `Block`, `Tx`, `Player`, `Entry` types and from Supabase row mappers; drop `username` from `registerPlayer` and entry submission payloads.
-- `src/hooks/useWalletVault.ts` — remove `validateUsername`, `name` parameters, and the `resolve_username` RPC call. `createWallet(pass)` and `importWallet(secret, pass)` only.
-- `src/lib/walletVault.ts` — drop `username` from `WalletPlain` and `WalletPublic`; stop persisting it.
+### 3. Single source of truth for `BRIDGE_ADDRESS`
 
-### Edge functions
+Today it's hardcoded in 4 places, with two different values. Fix:
+- `src/lib/blob/constants.ts` — canonical client value.
+- `supabase/functions/bridge-config/index.ts` — replace constant.
+- `supabase/functions/bridge-mint/index.ts` — replace constant.
+- `supabase/functions/bridge-redeem/index.ts` — replace constant. Keep its existing `derivedAddr !== BRIDGE_ADDRESS` self-check — it now guarantees on every call that the loaded private-key secret still matches the genesis-pinned address.
 
-- `supabase/functions/register-player/index.ts` — accept `{address, publicKey, signature, timestamp}` only; sign payload becomes `register:{address}:{timestamp}`; insert without `username`.
-- `supabase/functions/submit-entry/index.ts` — drop the `username` field, the uniqueness check, and the related error branches.
-- `supabase/functions/seal-block/index.ts` — stop selecting/writing `username` and `winner_username`.
-- `supabase/functions/submit-tx/index.ts` — stop accepting/writing `fromUsername` / `from_username`.
-- `supabase/functions/bridge-mint/index.ts` — stop accepting/writing `from_username`.
-- `supabase/functions/bridge-redeem/index.ts` — drop the `fromUsername: "Bridge"` field on broadcasts.
-- `supabase/functions/request-access-code/index.ts` — left alone (X handle gate stays).
+(Edge functions can't `import` from `src/`, so they keep their own copy of the constant. The `derivedAddr` self-check + a code comment "MUST match GENESIS.bridgeAddress" is the safety net.)
 
-### Database migration
+### 4. Reset on-chain state
 
-A single migration that:
+Because genesis changes, all current chain rows are invalid. Migrations:
+- `TRUNCATE` `blob_chain`, `blob_entries`, `blob_players` (and any related tables).
+- This is acceptable per your confirmation.
 
-1. Drops the trigger function reference to `winner_username` and recreates `update_player_on_block` without it.
-2. Drops `public.resolve_username(text)`.
-3. Recreates `public.get_block_leaderboard(bigint)` without the `username` column.
-4. Drops the unique index `blob_players_username_lower_uniq` and constraint `blob_players_username_format`.
-5. `ALTER TABLE` drops:
-   - `blob_players.username`
-   - `blob_chain.winner_username`
-   - `blob_mempool.from_username`
-   - `blob_entries.username`
-   - `bridge_requests.from_username`
+### 5. Surface in UI (small)
 
-The X handle table (`access_requests.x_username`) is untouched.
+In `NetworkView.tsx` (Consensus / supply card), add a row: **Bridge address** with the genesis-pinned value and a 🔒 icon, so anyone can verify it's locked at genesis.
 
-## Display helper
+## Security model after this change
 
-A tiny `shortAddress(addr, head=6, tail=4)` helper is added to `src/lib/blob/explorer.ts` (or reused from existing `shortHash`) and used everywhere a username used to render. Each rendering site that previously was just text becomes a `<button>` styled as a chip that calls into the Explorer's existing account drawer (the BlockExplorer already has account selection — we expose a small `setSelectedAccount` route via URL hash `#acct=<address>` so non-explorer screens can deep-link).
+- **BLOB side bridge key**: pinned at genesis, address verifiable by anyone, private key held only by the node operator (you / your 4+ full nodes). Lose the secret → bridge stops; can't be silently swapped.
+- **Solana mint authority**: unchanged. Still a server secret. (You confirmed this is fine.)
+- **No DB writes ever needed for the bridge** to function correctly.
 
-## Risks / notes
+## Files touched
 
-- Dropping columns is irreversible. Any historical context (who won block #N by handle) is lost — only addresses remain.
-- Existing wallets in browsers carry a `username` field in their encrypted vault; on next unlock it is simply ignored.
-- The site title, README, and copy that mention "Username" / "@handle" are also scrubbed.
+- `src/lib/blob/constants.ts`
+- `src/components/blob/NetworkView.tsx` (small addition)
+- `supabase/functions/bridge-config/index.ts`
+- `supabase/functions/bridge-mint/index.ts`
+- `supabase/functions/bridge-redeem/index.ts`
+- New migration: `supabase/migrations/<ts>_reset_chain_for_genesis.sql`
 
-## Out of scope
+## What I need from you to proceed
 
-- The X (Twitter) handle on the alpha access gate.
-- The encrypted vault format (no migration needed; extra field becomes inert).
+Confirm: I'll generate the keypair via `code--exec`, paste the **mnemonic + private key + address** into chat **once** (you save them immediately), then commit only the address. OK to proceed?

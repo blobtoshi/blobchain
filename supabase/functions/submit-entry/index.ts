@@ -47,7 +47,7 @@ async function sha256hex(s: string) {
 }
 
 const BLOCK_TIME = 120;
-const GENESIS_TIME_MS = 1776731760000;
+const GENESIS_TIME_MS = 1777084251161;
 function timeBasedHeight() {
   const now = Math.floor(Date.now() / 1000);
   const genesis = Math.floor(GENESIS_TIME_MS / 1000);

@@ -5,7 +5,7 @@ import { calcTotalSupply } from "@/lib/blob/chain";
 import { memoBytes } from "@/lib/blob/fees";
 import {
   BLOCK_TIME, MAX_SUPPLY, MAX_BLOCK_SIZE, HALVING_BLOCKS, BASE_FEE_RATE, MIN_FEE_RATE,
-  BLOB_DECIMALS, MAX_MEMO_BYTES,
+  BLOB_DECIMALS, MAX_MEMO_BYTES, BRIDGE_ADDRESS,
 } from "@/lib/blob/constants";
 import blobCoin from "@/assets/blob-coin.png";
 
@@ -225,6 +225,7 @@ export default function NetworkView({ nodeCount, chain, blockInfo, mempool = [] 
         <Row k="Score proof" v="ECDSA P-256" />
         <Row k="Tx fee model" v="drops/byte × tx size" />
         <Row k="Memo limit" v={`${MAX_MEMO_BYTES} bytes`} />
+        <Row k="🔒 Bridge address" v={BRIDGE_ADDRESS} tone="text-primary" />
       </div>
     </div>
   );

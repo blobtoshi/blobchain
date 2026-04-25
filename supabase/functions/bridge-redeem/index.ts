@@ -28,7 +28,9 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
-const BRIDGE_ADDRESS = "19xGuoUEng3w4Y2DjP6te2LLTSKt7fKs27";
+// MUST match GENESIS.bridgeAddress in src/lib/blob/constants.ts (pinned at genesis).
+// The redeem self-check below verifies BRIDGE_BLOB_PRIVATE_KEY derives this address.
+const BRIDGE_ADDRESS = "1E4QWFYb5Pqj8iAV2be8Ee88yEbvhU9iTs";
 const BRIDGE_FEE_BLOB = 0.0015;
 const MEMO_PROGRAM_ID = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
 const TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";

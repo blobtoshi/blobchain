@@ -71,7 +71,7 @@ export function useWalletVault() {
     }
     const nameErr = await validateUsername(name, address);
     if (nameErr) return { ok: false, error: nameErr };
-    const w: any = { address, publicKey, privateKey: priv, username: name };
+    const w: any = { address, publicKey, privateKey: priv, username: name, mnemonic };
     await Vault.saveEncryptedWallet(w, pass);
     const ts = Date.now();
     const sig = await signData(priv, `register:${address}:${name}:${ts}`);

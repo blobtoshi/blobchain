@@ -29,25 +29,13 @@ import { createClient as _createClient } from "https://esm.sh/@supabase/supabase
 // deno-lint-ignore no-explicit-any
 const createClient = _createClient as any;
 
-// Heavy Solana SDK imports — at top-level so they load during BOOT (where the
-// runtime allows more CPU) instead of during a request (where dynamic-import
-// + heavy code can hit the per-request CPU limit and be terminated).
-// Using npm: specifiers — Deno's native npm support is lighter than esm.sh
-// shims for these packages.
-import {
-  Connection,
-  Keypair,
-  PublicKey,
-  sendAndConfirmTransaction,
-  Transaction,
-} from "https://esm.sh/@solana/web3.js@1.95.4";
-import {
-  createAssociatedTokenAccountIdempotentInstruction,
-  createMintToInstruction,
-  getAssociatedTokenAddress,
-  getMint,
-} from "https://esm.sh/@solana/spl-token@0.4.9?deps=@solana/web3.js@1.95.4&bundle-deps";
-import bs58 from "https://esm.sh/bs58@5.0.0";
+// NOTE: This function is intentionally lean — no Solana SDK imports — so it
+// stays well under the edge runtime's per-request CPU budget. The actual SPL
+// mint is performed by the separate `bridge-execute-mint` function, which we
+// invoke via fetch() once a bridge tx is confirmed on-chain. Splitting the
+// work this way gives each step its own CPU budget.
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

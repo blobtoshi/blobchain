@@ -42,7 +42,10 @@ export function useBlockchain(walletRef: React.MutableRefObject<any>) {
       if (cancelled) return;
       if (c.length) setChain(c);
       setMempool(m);
-      setEntries(e);
+      const expectedSeed = String(getBlockInfo(c.length ? c : [GENESIS], true).seed);
+      setEntries(e.filter((en: any) =>
+        en.block_seed == null || String(en.block_seed) === expectedSeed
+      ));
     })();
 
     const unsub = Relay.subscribeRelay({

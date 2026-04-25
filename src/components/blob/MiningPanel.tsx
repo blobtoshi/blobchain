@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { calcTotalSupply, winProbability } from "@/lib/blob/chain";
 import { MAX_SUPPLY } from "@/lib/blob/constants";
-import runnerArt from "@/assets/blob-sprite.png";
+import runnerArt from "@/assets/blob-coins-stack.png";
 
 export default function MiningPanel({ blockInfo, entries, myEntry, chain }: any) {
   const sorted = [...entries].sort((a, b) => b.score - a.score);

@@ -85,7 +85,6 @@ export default function BlobChainApp() {
   const [connectOpen, setConnectOpen] = useState(false);
   const [connectMode, setConnectMode] = useState<"choose" | "create" | "import">("choose");
   const [importMode, setImportMode] = useState<"seed" | "privkey">("seed");
-  const [nameIn, setNameIn] = useState("");
   const [pass1, setPass1] = useState("");
   const [pass2, setPass2] = useState("");
   const [importJson, setImportJson] = useState("");
@@ -106,17 +105,15 @@ export default function BlobChainApp() {
   function resetConnect() {
     setConnectMode("choose");
     setImportMode("seed");
-    setNameIn(""); setPass1(""); setPass2(""); setImportJson(""); setConnectErr("");
+    setPass1(""); setPass2(""); setImportJson(""); setConnectErr("");
   }
 
   async function handleCreate() {
-    const name = nameIn.trim();
-    if (!name) return;
     if (pass1.length < 6) { setConnectErr("Passphrase must be at least 6 characters"); return; }
     if (pass1 !== pass2) { setConnectErr("Passphrases do not match"); return; }
     setCreating(true); setConnectErr("");
     try {
-      const r = await createWallet(name, pass1);
+      const r = await createWallet(pass1);
       if (!r.ok) { setConnectErr(r.error); return; }
       // Show seed phrase reveal dialog before closing connect flow.
       setSeedPhrase(r.mnemonic);
@@ -134,12 +131,10 @@ export default function BlobChainApp() {
 
   async function handleImport() {
     setConnectErr("");
-    const name = nameIn.trim();
-    if (!name) { setConnectErr("Enter a username"); return; }
     if (pass1.length < 6) { setConnectErr("Passphrase must be at least 6 characters"); return; }
     if (pass1 !== pass2) { setConnectErr("Passphrases do not match"); return; }
     try {
-      const r = await importWallet(name, importJson, pass1);
+      const r = await importWallet(importJson, pass1);
       if (!r.ok) { setConnectErr(r.error); return; }
       setConnectOpen(false); resetConnect();
     } catch (e: any) {

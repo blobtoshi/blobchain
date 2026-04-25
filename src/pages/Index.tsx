@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Send, Wallet, Plus, Download, Lock, Settings as SettingsIcon, LogOut, ChevronDown, Eye, EyeOff, ArrowLeftRight, Copy, Check, ShieldAlert, KeyRound, FileKey } from "lucide-react";
 import blobLogo from "@/assets/blob-logo.png";
+import minerSlime from "@/assets/miner-slime.png";
 
 import { useBlockchain } from "@/hooks/useBlockchain";
 import { useWalletVault } from "@/hooks/useWalletVault";
@@ -514,9 +515,12 @@ export default function BlobChainApp() {
               <div className="relative overflow-hidden rounded-3xl glass-hi px-6 py-16 sm:py-20 text-center">
                 <div className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-[480px] h-[480px] rounded-full bg-primary/10 blur-3xl" />
                 <div className="relative">
-                  <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-primary/10 border border-primary/30 text-primary mb-5">
-                    <Lock className="w-5 h-5" />
-                  </div>
+                  <img
+                    src={minerSlime}
+                    alt=""
+                    aria-hidden="true"
+                    className="mx-auto mb-5 w-24 h-24 sm:w-28 sm:h-28 object-contain opacity-70 drop-shadow-[0_0_30px_hsl(var(--primary)/0.4)] [image-rendering:pixelated]"
+                  />
                   <h1 className="text-3xl sm:text-5xl font-semibold tracking-tight mb-3">
                     <span className="text-foreground">{vaultPub ? "Unlock to mine " : "Connect to mine "}</span>
                     <span className="text-primary drop-shadow-[0_0_24px_hsl(var(--primary)/0.5)]">BLOB</span>

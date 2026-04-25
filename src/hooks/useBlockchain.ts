@@ -81,13 +81,20 @@ export function useBlockchain(walletRef: React.MutableRefObject<any>) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Refresh entries when active block changes.
+  // Refresh entries when active block changes. Filter out forked submissions
+  // whose block_seed doesn't match the seed of the current active block — these
+  // come from players who finished a level on the previous seed after the timer
+  // expired and would otherwise pollute the next block's entry list.
   useEffect(() => {
     (async () => {
       const e = await Relay.fetchEntries(blockInfo.height);
-      setEntries(e);
+      const expectedSeed = String(blockInfo.seed);
+      const filtered = e.filter((en: any) =>
+        en.block_seed == null || String(en.block_seed) === expectedSeed
+      );
+      setEntries(filtered);
     })();
-  }, [blockInfo.height]);
+  }, [blockInfo.height, blockInfo.seed]);
 
   // Block sealing — both reactive and 10s safety net.
   const sealingRef = useRef(false);

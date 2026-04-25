@@ -208,7 +208,7 @@ export default function NetworkView({ nodeCount, chain, blockInfo, mempool = [] 
                 <div
                   className={`w-full rounded-sm transition-all ${b.winner ? "bg-primary/70" : "bg-foreground/10"}`}
                   style={{ height: `${h}%` }}
-                  title={`#${b.height} · ${txs} tx${b.winner ? ` · won by ${b.winnerUsername || "?"}` : " · empty"}`}
+                  title={`#${b.height} · ${txs} tx${b.winner ? ` · won by ${"?"}` : " · empty"}`}
                 />
               </div>
             );

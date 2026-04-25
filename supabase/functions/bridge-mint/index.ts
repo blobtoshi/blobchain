@@ -2,7 +2,7 @@
 // Flow:
 //   1. Client signs a normal $BLOB tx to BRIDGE_ADDRESS with memo `sol:<sol_address>`
 //      and broadcasts it via submit-tx (mempool).
-//   2. Client POSTs to this function with { blob_tx_id, sol_address, amount, from_address, from_username? }
+//   2. Client POSTs to this function with { blob_tx_id, sol_address, amount, from_address }
 //      → we record a `pending` bridge_request.
 //   3. Once the originating tx lands in a sealed block (verified by reading
 //      blob_chain), we mint exactly `amount` SPL tokens to the recipient SOL

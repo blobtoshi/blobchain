@@ -128,18 +128,6 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // ---- Username / address ownership ----
-    const { data: nameOwner } = await supa
-      .from("blob_players").select("address").ilike("username", username).maybeSingle();
-    if (nameOwner && nameOwner.address !== address) {
-      return bad(`username "${username}" is taken`);
-    }
-    const { data: addrOwner } = await supa
-      .from("blob_players").select("username").eq("address", address).maybeSingle();
-    if (addrOwner && addrOwner.username && addrOwner.username.toLowerCase() !== username.toLowerCase()) {
-      return bad(`address already registered as "${addrOwner.username}"`);
-    }
-
     // ---- Persist (keep highest verified score) ----
     const { data: existing } = await supa
       .from("blob_entries").select("score").eq("address", address).eq("block_height", block_height).maybeSingle();
@@ -149,7 +137,7 @@ Deno.serve(async (req) => {
     const persistedFrames = finalScore === Math.floor(sc) ? frame_count : null;
 
     const { error } = await supa.from("blob_entries").upsert({
-      address, username, score: finalScore, block_height,
+      address, score: finalScore, block_height,
       block_seed: String(block_seed), signature,
       inputs: persistedInputs, inputs_hash: persistedHash, frame_count: persistedFrames,
     }, { onConflict: "address,block_height" });
@@ -160,10 +148,9 @@ Deno.serve(async (req) => {
     }
 
     const { error: pErr } = await supa.from("blob_players").upsert({
-      address, username, public_key: publicKey, last_active: new Date().toISOString(),
+      address, public_key: publicKey, last_active: new Date().toISOString(),
     }, { onConflict: "address" });
     if (pErr) {
-      if ((pErr as any).code === "23505") return bad(`username "${username}" is taken`);
       console.error("[submit-entry] player upsert failed", pErr);
       return bad("internal error", 500);
     }

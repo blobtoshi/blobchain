@@ -39,7 +39,7 @@ export default function WalletScreen({ wallet, chain, mempool, onBroadcast }: an
             kind: tx.from === wallet.address ? "send" : "receive",
             amount: tx.amount,
             fee: tx.fee || TX_FEE,
-            counterparty: tx.from === wallet.address ? tx.to : (tx.from === "coinbase" ? "blob" : (tx.fromUsername || tx.from)),
+            counterparty: tx.from === wallet.address ? tx.to : (tx.from === "coinbase" ? "blob" : tx.from),
             ts: tx.timestamp,
             status: "confirmed",
             id: tx.id,
@@ -54,7 +54,7 @@ export default function WalletScreen({ wallet, chain, mempool, onBroadcast }: an
           kind: tx.from === wallet.address ? "send" : "receive",
           amount: tx.amount,
           fee: tx.fee || TX_FEE,
-          counterparty: tx.from === wallet.address ? tx.to : (tx.from === "coinbase" ? "blob" : (tx.fromUsername || tx.from)),
+          counterparty: tx.from === wallet.address ? tx.to : (tx.from === "coinbase" ? "blob" : tx.from),
           ts: tx.timestamp,
           status: "pending",
           id: tx.id,
@@ -74,8 +74,6 @@ export default function WalletScreen({ wallet, chain, mempool, onBroadcast }: an
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <span className="label-eyebrow">Balance</span>
-                <span className="text-[10px] tracking-wider uppercase text-foreground/40">·</span>
-                <span className="text-xs font-medium text-foreground/80">@{wallet.username}</span>
               </div>
               <div className="num text-4xl sm:text-6xl font-semibold leading-none text-primary drop-shadow-[0_0_24px_hsl(var(--primary)/0.4)]">
                 {balance.toFixed(BLOB_DECIMALS)}

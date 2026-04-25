@@ -1,14 +1,13 @@
 // @ts-nocheck
 import { useEffect, useMemo, useState } from "react";
 import * as Relay from "@/lib/blobRelay";
-import { supabase } from "@/integrations/supabase/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Zap } from "lucide-react";
 import { sha256hex, signData } from "@/lib/blob/crypto";
 import { calcBalance } from "@/lib/blob/chain";
 import { canonicalTxBytes, estimateTxBytes, feeFromRate, memoBytes, to8 } from "@/lib/blob/fees";
 import {
-  ADDR_RE, USER_RE, BASE_FEE_RATE, MIN_FEE_RATE, MAX_MEMO_BYTES, BLOB_DECIMALS, BLOB_UNIT,
+  ADDR_RE, BASE_FEE_RATE, MIN_FEE_RATE, MAX_MEMO_BYTES, BLOB_DECIMALS, BLOB_UNIT,
 } from "@/lib/blob/constants";
 
 export default function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent }: any) {
@@ -17,8 +16,6 @@ export default function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent
   const [memo, setMemo] = useState("");
   const [st, setSt] = useState("idle");
   const [err, setErr] = useState("");
-  const [resolved, setResolved] = useState<{ address: string; username?: string } | null>(null);
-  const [resolving, setResolving] = useState(false);
   const [feeInfo, setFeeInfo] = useState<{ recommendedFeeRate: number; minFeeRate: number; baseFeeRate: number } | null>(null);
   const [preset, setPreset] = useState<"slow" | "normal" | "fast" | "custom">("normal");
   const [customRate, setCustomRate] = useState<string>("");
@@ -46,33 +43,13 @@ export default function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent
     ? Math.max(MIN_FEE_RATE, Math.floor(Number(customRate) || 0))
     : presetRates[preset];
 
-  useEffect(() => {
-    setErr("");
-    const raw = to.trim().replace(/^@/, "");
-    if (!raw) { setResolved(null); return; }
-    if (ADDR_RE.test(raw)) {
-      setResolved({ address: raw });
-      return;
-    }
-    if (!USER_RE.test(raw)) {
-      setResolved(null);
-      return;
-    }
-    let cancelled = false;
-    setResolving(true);
-    (async () => {
-      const { data, error } = await supabase.rpc("resolve_username", { p_username: raw });
-      if (cancelled) return;
-      setResolving(false);
-      const row = (data as any[])?.[0];
-      if (error || !row) { setResolved(null); return; }
-      setResolved({ address: row.address, username: row.username });
-    })();
-    return () => { cancelled = true; };
-  }, [to]);
+  useEffect(() => { setErr(""); }, [to]);
+
+  const trimmedTo = to.trim();
+  const validToAddress = ADDR_RE.test(trimmedTo) ? trimmedTo : "";
 
   const parsedAmt = (() => { const n = parseFloat(amt); return Number.isFinite(n) && n > 0 ? to8(n) : 0; })();
-  const previewToAddress = resolved?.address || (ADDR_RE.test(to.trim().replace(/^@/, "")) ? to.trim().replace(/^@/, "") : "");
+  const previewToAddress = validToAddress;
   const memoLen = memoBytes(memo);
   const memoOver = memoLen > MAX_MEMO_BYTES;
   const previewBytes = previewToAddress && parsedAmt > 0 && activeFeeRate >= MIN_FEE_RATE && !memoOver
@@ -84,12 +61,10 @@ export default function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent
   async function send() {
     setErr("");
     const parsed = parseFloat(amt);
-    const raw = to.trim().replace(/^@/, "");
-    if (!raw) { setErr("Enter a recipient (address or @username)"); return; }
-    let toAddress = "";
-    if (ADDR_RE.test(raw)) toAddress = raw;
-    else if (resolved?.address) toAddress = resolved.address;
-    else { setErr("Recipient not found"); return; }
+    const raw = to.trim();
+    if (!raw) { setErr("Enter a recipient address"); return; }
+    if (!ADDR_RE.test(raw)) { setErr("Invalid address"); return; }
+    const toAddress = raw;
     if (toAddress === wallet.address) { setErr("Cannot send to yourself"); return; }
     if (!Number.isFinite(parsed) || parsed <= 0) { setErr("Invalid amount"); return; }
     const amount = to8(parsed);
@@ -115,7 +90,7 @@ export default function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent
       }
       const tx = {
         id: txid.slice(0, 40),
-        from: wallet.address, fromUsername: wallet.username,
+        from: wallet.address,
         to: toAddress, amount, fee,
         feeRate: activeFeeRate, memo,
         signature: sig, publicKey: wallet.publicKey,
@@ -126,7 +101,7 @@ export default function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent
       const res = await Relay.pushTx(tx);
       if (!res.ok) { setErr(res.error || "Broadcast failed"); setSt("idle"); return; }
       onBroadcast(tx);
-      setSt("sent"); setTo(""); setAmt(""); setMemo(""); setResolved(null);
+      setSt("sent"); setTo(""); setAmt(""); setMemo("");
       setTimeout(() => { setSt("idle"); onSent?.(); }, 1500);
     } catch (e) { setErr(String(e)); setSt("idle"); }
   }
@@ -137,10 +112,9 @@ export default function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent
               : st === "broadcasting" ? "Broadcasting…"
               : "✓ Sent";
 
-  const trimmed = to.trim().replace(/^@/, "");
-  const looksLikeUser = trimmed && !ADDR_RE.test(trimmed) && USER_RE.test(trimmed);
+  const trimmed = to.trim();
   const looksLikeAddr = trimmed && ADDR_RE.test(trimmed);
-  const unknownInput = trimmed && !looksLikeUser && !looksLikeAddr;
+  const unknownInput = trimmed && !looksLikeAddr;
 
   return (
     <div className="space-y-3">
@@ -153,25 +127,16 @@ export default function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent
         <input
           value={to}
           onChange={e => setTo(e.target.value)}
-          placeholder="@username or address"
+          placeholder="Recipient address (1…)"
           className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm num placeholder:text-muted-foreground/60 placeholder:font-sans"
         />
         {trimmed && (
           <div className="text-[11px] min-h-[14px]">
-            {resolving && <span className="text-muted-foreground">Resolving…</span>}
-            {!resolving && looksLikeUser && resolved && (
-              <span className="text-primary/80">
-                ✓ @{resolved.username} → <span className="num text-muted-foreground">{resolved.address.slice(0, 14)}…{resolved.address.slice(-6)}</span>
-              </span>
-            )}
-            {!resolving && looksLikeUser && !resolved && (
-              <span className="text-destructive">Username not registered</span>
-            )}
-            {!resolving && looksLikeAddr && (
+            {looksLikeAddr && (
               <span className="text-muted-foreground">Sending to address</span>
             )}
             {unknownInput && (
-              <span className="text-destructive">Not a valid address or username</span>
+              <span className="text-destructive">Not a valid address</span>
             )}
           </div>
         )}

@@ -226,7 +226,7 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
           block_height: blockInfo.height,
           block_seed: String(blockInfo.seed),
           address: wallet.address,
-          username: wallet.username,
+          
           score: finalScore,
           frame_count: frameCount,
           inputs: canonical,

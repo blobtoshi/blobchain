@@ -202,7 +202,7 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast, config: configProp
       const fee = feeFromRate(activeFeeRate, bytes);
       const tx = {
         id: txid,
-        from: wallet.address, fromUsername: wallet.username,
+        from: wallet.address,
         to: config.bridgeAddress, amount: parsedAmt, fee,
         feeRate: activeFeeRate, memo: memoStr,
         signature: sig, publicKey: wallet.publicKey,
@@ -220,7 +220,7 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast, config: configProp
         sol_address: solAddr.trim(),
         amount: parsedAmt,
         from_address: wallet.address,
-        from_username: wallet.username,
+        
       });
       if (!reg.ok || !reg.data) { setErr(reg.error || "Bridge registration failed"); setSt("failed"); return; }
       setActiveRequest(reg.data);

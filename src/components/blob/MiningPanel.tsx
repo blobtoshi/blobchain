@@ -77,7 +77,7 @@ export default function MiningPanel({ blockInfo, entries, myEntry, chain }: any)
                       {i === 0 ? "👑" : i === 1 ? "🥈" : i === 2 ? "🥉" : <span className="text-muted-foreground">{i + 1}</span>}
                     </span>
                     <span className={`flex-1 text-sm truncate ${isMe ? "text-primary" : "text-foreground/80"}`}>
-                      {e.username || e.address?.slice(0, 14)}
+                      {e.address?.slice(0, 14)}
                     </span>
                     <span className="num text-sm font-medium">{e.score.toLocaleString()}</span>
                     <div className="w-24 h-1 rounded-full bg-secondary overflow-hidden">

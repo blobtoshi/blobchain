@@ -482,7 +482,7 @@ export default function BlobChainApp() {
                   <DropdownMenuItem onClick={() => setScreen("bridge")} className="cursor-pointer">
                     <ArrowLeftRight className="w-4 h-4 mr-2" /> Bridge to Solana
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => { setShowPriv(false); setSettingsOpen(true); }} className="cursor-pointer">
+                  <DropdownMenuItem onClick={() => { setShowPriv(false); setShowSeed(false); setSettingsOpen(true); }} className="cursor-pointer">
                     <SettingsIcon className="w-4 h-4 mr-2" /> Settings
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />

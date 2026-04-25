@@ -89,7 +89,7 @@ export default function BlobChainApp() {
   async function handleImport() {
     setConnectErr("");
     const name = nameIn.trim();
-    if (!name) { setConnectErr("Enter a miner name"); return; }
+    if (!name) { setConnectErr("Enter a username"); return; }
     if (pass1.length < 6) { setConnectErr("Passphrase must be at least 6 characters"); return; }
     if (pass1 !== pass2) { setConnectErr("Passphrases do not match"); return; }
     try {
@@ -169,12 +169,12 @@ export default function BlobChainApp() {
         {connectMode === "create" && (
           <div className="space-y-3 pt-1">
             <div>
-              <label className="label-eyebrow block mb-2">Miner name</label>
+              <label className="label-eyebrow block mb-2">Username</label>
               <input
                 value={nameIn}
                 onChange={e => setNameIn(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && !creating && handleCreate()}
-                placeholder="SatoshiBlob…"
+                placeholder="Blobtoshi"
                 maxLength={24}
                 autoFocus
                 className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm"
@@ -222,10 +222,10 @@ export default function BlobChainApp() {
         {connectMode === "import" && (
           <div className="space-y-3 pt-1">
             <div>
-              <label className="label-eyebrow block mb-2">Miner name</label>
+              <label className="label-eyebrow block mb-2">Username</label>
               <input
                 value={nameIn} onChange={e => setNameIn(e.target.value)}
-                placeholder="SatoshiBlob…" maxLength={24}
+                placeholder="Blobtoshi" maxLength={24}
                 className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm"
               />
             </div>
@@ -534,7 +534,7 @@ export default function BlobChainApp() {
           {wallet && (
             <div className="space-y-4 pt-1">
               <div>
-                <div className="label-eyebrow mb-2">Miner name</div>
+                <div className="label-eyebrow mb-2">Username</div>
                 <div className="text-sm font-medium">{wallet.username}</div>
               </div>
               <div>

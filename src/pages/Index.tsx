@@ -115,7 +115,7 @@ export default function BlobChainApp() {
     setCreating(true); setConnectErr("");
     try {
       const r = await createWallet(pass1);
-      if (!r.ok) { setConnectErr(r.error); return; }
+      if ('error' in r) { setConnectErr(r.error); return; }
       // Show seed phrase reveal dialog before closing connect flow.
       setSeedPhrase(r.mnemonic);
       setSeedConfirmed(false);
@@ -136,7 +136,7 @@ export default function BlobChainApp() {
     if (pass1 !== pass2) { setConnectErr("Passphrases do not match"); return; }
     try {
       const r = await importWallet(importJson, pass1);
-      if (!r.ok) { setConnectErr(r.error); return; }
+      if ('error' in r) { setConnectErr(r.error); return; }
       setConnectOpen(false); resetConnect();
     } catch (e: any) {
       setConnectErr(String(e?.message || e));

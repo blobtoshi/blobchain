@@ -52,7 +52,7 @@ export function isValidMnemonic(phrase: string): boolean {
 
 export function mnemonicToPrivateKey(phrase: string): string {
   const seed = mnemonicToSeedSync(normalizeMnemonic(phrase));
-  let priv = seed.slice(0, 32);
+  let priv: Uint8Array = seed.slice(0, 32);
   if (!secp.utils.isValidPrivateKey(priv)) priv = sha256(seed);
   return bytesToHex(priv);
 }

@@ -16,6 +16,11 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
   const jRef = useRef(false);
   const dRef = useRef(false);
   const stRef = useRef("idle");
+  // Render-only scratch (NOT part of deterministic simulator state).
+  const renderRef = useRef<{
+    trail: Array<{ x: number; y: number; action: string }>;
+    lastCombo: number;
+  }>({ trail: [], lastCombo: 0 });
   const [gs, setGs] = useState({ status: "idle", score: 0, combo: 0 });
 
   const level = useRef(generateLevelPure(blockInfo.seed));
@@ -70,6 +75,7 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
     jRef.current = false; dRef.current = false;
     stRef.current = "playing";
     inputsRef.current = [];
+    renderRef.current = { trail: [], lastCombo: 0 };
     const lev = level.current;
     const state = initialState();
     stateRef.current = state;
@@ -155,17 +161,17 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
       bgNodes.current.forEach(n => { n.x -= n.spd; if (n.x < -15) n.x = CW + 15; });
       drawBG(ctx, state.frame, bgNodes.current);
       if (!state.locked && p.action !== "dead" && _blobImg && _blobImg.complete && _blobImg.naturalWidth > 0) {
-        if (!state._trail) state._trail = [];
+        const trail = renderRef.current.trail;
         const tT = p.wob * 0.08;
         const trailFloatY = p.action === "duck" ? 0 : Math.sin(tT) * 5;
-        state._trail.unshift({ x: PX, y: p.y + trailFloatY - (p.action === "duck" ? 0 : 4), action: p.action });
-        if (state._trail.length > 8) state._trail.length = 8;
+        trail.unshift({ x: PX, y: p.y + trailFloatY - (p.action === "duck" ? 0 : 4), action: p.action });
+        if (trail.length > 8) trail.length = 8;
         const duck = p.action === "duck";
         const baseW = duck ? 78 : 64;
         const baseH = duck ? 46 : 72;
-        for (let i = state._trail.length - 1; i >= 1; i--) {
-          const tr = state._trail[i];
-          const a = (1 - i / state._trail.length) * 0.28;
+        for (let i = trail.length - 1; i >= 1; i--) {
+          const tr = trail[i];
+          const a = (1 - i / trail.length) * 0.28;
           ctx.save();
           ctx.globalAlpha = a;
           ctx.globalCompositeOperation = "lighter";
@@ -175,8 +181,8 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
           ctx.drawImage(_blobImg, -baseW / 2, -baseH / 2, baseW, baseH);
           ctx.restore();
         }
-      } else if (state._trail) {
-        state._trail.length = 0;
+      } else {
+        renderRef.current.trail.length = 0;
       }
       state.obstacles.forEach(o => o.type === "low" ? drawLowBar(ctx, o) : drawFork(ctx, o));
       state.tokens.forEach(t => { if (t.alive) drawToken(ctx, t.x, t.y, state.frame); });
@@ -252,8 +258,8 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
       for (let i = parts.length - 1; i >= 0; i--) if (parts[i].life <= 0) parts.splice(i, 1);
 
       draw();
-      if (state.combo !== state._lastCombo) {
-        state._lastCombo = state.combo;
+      if (state.combo !== renderRef.current.lastCombo) {
+        renderRef.current.lastCombo = state.combo;
         setGs(prev => ({ ...prev, score: state.score, combo: state.combo }));
       }
       raf.current = requestAnimationFrame(loop);

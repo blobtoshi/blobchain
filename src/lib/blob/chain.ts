@@ -32,10 +32,10 @@ export function getBlockInfo(chain?: any[], hasEntry?: boolean) {
   const awaitingMiner = overdue && !hasEntry;
   const overtime = overdue ? elapsed - BLOCK_TIME : 0;
   const reward = getRewardForHeight(height);
-  const seed = height * 6364136223846793 + 1442695040888963407;
+  const seed = BigInt(height) * 6364136223846793n + 1442695040888963407n;
   return {
     height, elapsed, remaining, reward,
-    seed: Math.abs(seed % 2147483647),
+    seed: Number(BigInt.asUintN(31, seed)),
     awaitingMiner, overtime, overdue,
   };
 }

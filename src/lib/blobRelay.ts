@@ -500,23 +500,67 @@ export type RelayHandlers = {
 };
 
 export function subscribeRelay(h: RelayHandlers) {
-  const ch = supabase
-    .channel("blob-chain-relay")
-    .on("postgres_changes",
-      { event: "INSERT", schema: "public", table: "blob_chain" },
-      (p) => h.onBlock?.(blockFromRow(p.new)))
-    .on("postgres_changes",
-      { event: "INSERT", schema: "public", table: "blob_mempool" },
-      (p) => h.onTx?.(txFromRow(p.new)))
-    .on("postgres_changes",
-      { event: "DELETE", schema: "public", table: "blob_mempool" },
-      (p) => { const id = (p.old as any)?.id; if (id) h.onTxRemoved?.(id); })
-    .on("postgres_changes",
-      { event: "INSERT", schema: "public", table: "blob_entries" },
-      (p) => h.onEntry?.(entryFromRow(p.new)))
-    .on("postgres_changes",
-      { event: "UPDATE", schema: "public", table: "blob_entries" },
-      (p) => h.onEntry?.(entryFromRow(p.new)))
-    .subscribe();
-  return () => { supabase.removeChannel(ch); };
+  let cancelled = false;
+  let supabaseUnsub: (() => void) | null = null;
+  let nodeWired = false;
+
+  // Two backends: pick after the mode probe resolves. Returned unsubscribe
+  // tears down whichever path actually wired up.
+  ensureRelayMode().then((mode) => {
+    if (cancelled) return;
+
+    if (mode === "node" && nodeClient) {
+      nodeWired = true;
+      // The node has no DELETE-tx event; we synthesize onTxRemoved by tracking
+      // mempool ids and diffing on every newBlock (its txs are the ones that
+      // just left the mempool).
+      const liveMempool = new Set<string>();
+      nodeClient.setHandlers({
+        onBlock: (b) => {
+          for (const t of b.transactions ?? []) {
+            const id = (t as any)?.id;
+            if (id && liveMempool.delete(id)) h.onTxRemoved?.(id);
+          }
+          h.onBlock?.(b);
+        },
+        onTx: (t) => {
+          if (t.id) liveMempool.add(t.id);
+          h.onTx?.(t);
+        },
+        onEntry: (e) => h.onEntry?.(e),
+      });
+      nodeClient.connect();
+      return;
+    }
+
+    // Supabase realtime fallback (original behavior).
+    const ch = supabase
+      .channel("blob-chain-relay")
+      .on("postgres_changes",
+        { event: "INSERT", schema: "public", table: "blob_chain" },
+        (p) => h.onBlock?.(blockFromRow(p.new)))
+      .on("postgres_changes",
+        { event: "INSERT", schema: "public", table: "blob_mempool" },
+        (p) => h.onTx?.(txFromRow(p.new)))
+      .on("postgres_changes",
+        { event: "DELETE", schema: "public", table: "blob_mempool" },
+        (p) => { const id = (p.old as any)?.id; if (id) h.onTxRemoved?.(id); })
+      .on("postgres_changes",
+        { event: "INSERT", schema: "public", table: "blob_entries" },
+        (p) => h.onEntry?.(entryFromRow(p.new)))
+      .on("postgres_changes",
+        { event: "UPDATE", schema: "public", table: "blob_entries" },
+        (p) => h.onEntry?.(entryFromRow(p.new)))
+      .subscribe();
+    supabaseUnsub = () => { supabase.removeChannel(ch); };
+  });
+
+  return () => {
+    cancelled = true;
+    if (supabaseUnsub) supabaseUnsub();
+    if (nodeWired && nodeClient) {
+      // Detach handlers but keep socket alive for other subscribers / next mount.
+      nodeClient.setHandlers({});
+    }
+  };
 }

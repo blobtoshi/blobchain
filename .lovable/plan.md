@@ -1,98 +1,75 @@
+## Goal
 
-## Mempool.space-style Mempool UI
+Remove wallet usernames entirely. A wallet is identified solely by its address. The X (Twitter) handle field on the alpha access gate stays untouched — that is unrelated.
 
-Rebuild the **Mempool tab** inside `BlockExplorer.tsx` into a rich, real-time visualization modeled on mempool.space. All other tabs (Overview, Blocks, Transactions, Addresses) stay as-is. Network tab stays as-is.
+## What changes for the user
 
-### Layout (top → bottom)
+- Wallet creation no longer asks for a username — only a passphrase.
+- Wallet import no longer asks for a username.
+- Send form no longer accepts `@handle` recipients — only addresses.
+- Anywhere a name used to appear (wallet header, tx history, mining leaderboard, block winner, mempool, explorer, bridge), a shortened address (`1A2b…xY9z`) is shown instead.
+- Every shortened address becomes a clickable chip that jumps to that account in the Explorer's account drawer (existing behavior, just made consistent).
 
-```text
-┌─────────────────────────────────────────────────────────┐
-│ HEADER STRIP                                             │
-│  Pending • 12 txs   Vsize • 3.4 KB / 1 MB   Fees • 0.41 │
-│  Congestion bar [▓▓▓░░░░░░░] 28% Light                   │
-└─────────────────────────────────────────────────────────┘
-┌─────────────────────────────────────────────────────────┐
-│ INCOMING / OUTGOING (last 60s)                           │
-│  ↑ in: 4 tx   ↓ confirmed: 2 tx   ⌀ rate 11.2 drops/B   │
-└─────────────────────────────────────────────────────────┘
-┌─────────────────────────────────────────────────────────┐
-│ PROJECTED BLOCKS (next 1–3 blocks)                       │
-│  ┌─────────┐ ┌─────────┐ ┌─────────┐                    │
-│  │ ~12 d/B │ │  ~8 d/B │ │  ~3 d/B │                    │
-│  │ next    │ │ in 2    │ │ in 3    │                    │
-│  │ 2.1 KB  │ │ 0.9 KB  │ │ 0.4 KB  │                    │
-│  │ 7 tx    │ │ 3 tx    │ │ 2 tx    │                    │
-│  └─────────┘ └─────────┘ └─────────┘                    │
-└─────────────────────────────────────────────────────────┘
-┌─────────────────────────────────────────────────────────┐
-│ FEE HISTOGRAM (drops/B buckets)                          │
-│      ▆                                                   │
-│   ▆  █  ▃                                                │
-│ ▂ █  █  █  ▁                                             │
-│ 1  5 10 20 50 100+   ← fee-rate buckets                  │
-└─────────────────────────────────────────────────────────┘
-┌─────────────────────────────────────────────────────────┐
-│ MEMPOOL GOGGLES — block-fill preview                     │
-│  Each square = one pending tx, sized by vbytes,          │
-│  colored by fee-rate bucket. Hover/tap → tx detail.      │
-│  ┌──┬─┬───┬──┬─┐                                         │
-│  │  │ │   │  │ │                                         │
-│  └──┴─┴───┴──┴─┘                                         │
-└─────────────────────────────────────────────────────────┘
-┌─────────────────────────────────────────────────────────┐
-│ LIVE TX STREAM (sortable: fee-rate ▼ / time / amount)    │
-│  ┌──────────────────────────────────────────────────┐    │
-│  │ ●12 d/B │ 0.50 BLOB │ Bob → BigBlobba │ 42 B │5s│    │
-│  │ ●10 d/B │ 1.00 BLOB │ Alice → Bob     │ 38 B │8s│    │
-│  └──────────────────────────────────────────────────┘    │
-│  (existing FilterPanel kept — addr / amount / sort)      │
-└─────────────────────────────────────────────────────────┘
-┌─────────────────────────────────────────────────────────┐
-│ RECENTLY CONFIRMED (kept, condensed)                     │
-└─────────────────────────────────────────────────────────┘
-```
+## Files to change
 
-### Concrete behavior
+### Frontend — UI
 
-1. **Header strip** — pending count, total vbytes (sum of `estimateTxBytes`-style sizes from existing `memoBytes`/`canonicalTxBytes` in `src/lib/blob/fees.ts`), total fees in BLOB, congestion bar driven by `vbytes / MAX_BLOCK_SIZE` matching the existing Network tab logic.
+- `src/pages/Index.tsx` — drop username state, validation, and inputs from create/import dialogs; drop the seed reveal "username" mention; drop username from settings.
+- `src/components/blob/WalletScreen.tsx` — remove `@username` line in header; show shortened address; replace `fromUsername` fallbacks with `shortAddress(...)`.
+- `src/components/blob/SendTxForm.tsx` — strip `@username` resolution path, the `resolve_username` RPC call, and the related UI states/messages; recipient input becomes "address only".
+- `src/components/blob/BlockExplorer.tsx` — remove username column/sort, swap all `*Username || shortHash(...)` displays for `shortHash(...)`, remove "username" sort option, drop username from search placeholders/filters.
+- `src/components/blob/MempoolView.tsx` — replace `winnerUsername` / `fromUsername` displays with shortened address.
+- `src/components/blob/MiningPanel.tsx` — show shortened address instead of `e.username`.
+- `src/components/blob/NetworkView.tsx` — block tooltip uses shortened winner address.
+- `src/components/blob/BridgeScreen.tsx` — drop `fromUsername` / `from_username` from outbound payloads.
+- `src/components/blob/BlobRunGame.tsx` — drop `username` from the entry submission payload.
 
-2. **In/out counters** — track tx ids seen in the last 60s using a small `useRef<Map<id, ts>>` populated from prop changes; "confirmed in last 60s" derived from `chain` slice and matched against previously-seen mempool ids.
+### Frontend — lib / hooks
 
-3. **Projected blocks** — bucket `mempool` by descending `feeRate`, greedily pack into virtual blocks of `MAX_BLOCK_SIZE` bytes. Display up to 3 cards with median fee-rate, vbyte total, tx count, est. reward (sum of fees + `blockInfo.reward`). Click a card → filters the live stream to that bucket.
+- `src/lib/blob/constants.ts` — delete `USERNAME_RE` and `winnerUsername` from sample data.
+- `src/lib/blob/explorer.ts` — drop `fromUsername` / `toUsername` / `winnerUsername` fields from row types and search matchers.
+- `src/lib/blobRelay.ts` — drop username fields from `Block`, `Tx`, `Player`, `Entry` types and from Supabase row mappers; drop `username` from `registerPlayer` and entry submission payloads.
+- `src/hooks/useWalletVault.ts` — remove `validateUsername`, `name` parameters, and the `resolve_username` RPC call. `createWallet(pass)` and `importWallet(secret, pass)` only.
+- `src/lib/walletVault.ts` — drop `username` from `WalletPlain` and `WalletPublic`; stop persisting it.
 
-4. **Fee histogram** — fixed buckets `[1, 2-5, 6-10, 11-20, 21-50, 51-100, 100+]` drops/B. Pure SVG bars (no chart lib). Hover tooltip = tx count + vbytes. Bucket of the recommended fee-rate is highlighted in cyan.
+### Edge functions
 
-5. **Mempool goggles** — flex grid; each tx is a `<button>` with `width = clamp(8, vbytes/40, 60)px`, `height = 28px`, color from a 6-step cobalt→cyan→amber→red gradient mapped to fee-rate bucket. Title attribute shows quick info; click opens the existing tx detail by reusing `setSelTx`.
+- `supabase/functions/register-player/index.ts` — accept `{address, publicKey, signature, timestamp}` only; sign payload becomes `register:{address}:{timestamp}`; insert without `username`.
+- `supabase/functions/submit-entry/index.ts` — drop the `username` field, the uniqueness check, and the related error branches.
+- `supabase/functions/seal-block/index.ts` — stop selecting/writing `username` and `winner_username`.
+- `supabase/functions/submit-tx/index.ts` — stop accepting/writing `fromUsername` / `from_username`.
+- `supabase/functions/bridge-mint/index.ts` — stop accepting/writing `from_username`.
+- `supabase/functions/bridge-redeem/index.ts` — drop the `fromUsername: "Bridge"` field on broadcasts.
+- `supabase/functions/request-access-code/index.ts` — left alone (X handle gate stays).
 
-6. **Live tx stream** — replaces the current pending-pool list. Adds a fee-rate column (computed from `t.feeRate ?? Math.ceil(t.fee*1e8 / vbytes)`), a vbytes column, and a sort toggle (`feeRate-desc | time-desc | amount-desc`). Existing `FilterPanel` for the mempool stays and just feeds the same list.
+### Database migration
 
-7. **Per-tx row enhancements** — left-edge color stripe matches the histogram bucket. Pending duration shown as live ticker (already have `setTick` pattern in NetworkView; lift the same effect into BlockExplorer for the mempool tab only so other tabs don't re-render).
+A single migration that:
 
-8. **Empty / busy states** — when mempool is empty, show a calm "Mempool is clear · next block has no pending txs" panel with the projected-block skeleton dimmed out.
+1. Drops the trigger function reference to `winner_username` and recreates `update_player_on_block` without it.
+2. Drops `public.resolve_username(text)`.
+3. Recreates `public.get_block_leaderboard(bigint)` without the `username` column.
+4. Drops the unique index `blob_players_username_lower_uniq` and constraint `blob_players_username_format`.
+5. `ALTER TABLE` drops:
+   - `blob_players.username`
+   - `blob_chain.winner_username`
+   - `blob_mempool.from_username`
+   - `blob_entries.username`
+   - `bridge_requests.from_username`
 
-### Files touched
+The X handle table (`access_requests.x_username`) is untouched.
 
-- `src/components/blob/BlockExplorer.tsx` — replace the `tab === "mempool"` block (~lines 593–674) with the new layout. Add small local helpers (bucketing, vbyte estimate, projected-block packer) at the top of the file or as a new sibling util.
-- `src/lib/blob/explorer.ts` — add three pure helpers: `estimateMempoolTxBytes(t)`, `feeRateOf(t, bytes)`, `bucketForRate(rate)` returning `{ idx, label, color, ringClass }`. Keeps the component thin.
-- `src/lib/blob/constants.ts` — add `FEE_BUCKETS = [1,5,10,20,50,100]` (read-only).
+## Display helper
 
-### Performance notes
+A tiny `shortAddress(addr, head=6, tail=4)` helper is added to `src/lib/blob/explorer.ts` (or reused from existing `shortHash`) and used everywhere a username used to render. Each rendering site that previously was just text becomes a `<button>` styled as a chip that calls into the Explorer's existing account drawer (the BlockExplorer already has account selection — we expose a small `setSelectedAccount` route via URL hash `#acct=<address>` so non-explorer screens can deep-link).
 
-- Per-second tick is **scoped to the mempool tab only** (`useEffect` mounted inside the tab branch via a small `<MempoolTab/>` sub-component) so other tabs and the rest of the app don't re-render every second.
-- All derived data (`bucketed`, `projectedBlocks`, `histogram`, `goggleCells`) computed in a single `useMemo` keyed on `mempool` length + tick.
+## Risks / notes
 
-### Explicitly NOT changed
+- Dropping columns is irreversible. Any historical context (who won block #N by handle) is lost — only addresses remain.
+- Existing wallets in browsers carry a `username` field in their encrypted vault; on next unlock it is simply ignored.
+- The site title, README, and copy that mention "Username" / "@handle" are also scrubbed.
 
-- No backend / table changes — uses only existing `blob_mempool` fields (`amount`, `fee`, `fee_rate`, `signature`, `memo`, `timestamp`, `from_address`, etc.).
-- No new dependencies.
-- Network tab, Wallet, Mine, Bridge, other Explorer tabs untouched.
-- Existing mempool filter panel and pagination kept.
-- Brand cobalt/cyan and the heavy-glass surfaces stay; new mempool panels use existing `glass` / `glass-hi` utilities.
+## Out of scope
 
-### Verification after apply
-
-At 414×646 mobile and desktop, with the live testnet (currently 1 chain row, mempool empty):
-- Empty state renders cleanly.
-- Manually broadcast a tx via Send → projected-block card appears, histogram bucket fills, goggle cell appears, live row shows ticking pending duration.
-- Block seal → row disappears from mempool, "confirmed in last 60s" counter increments.
-
+- The X (Twitter) handle on the alpha access gate.
+- The encrypted vault format (no migration needed; extra field becomes inert).

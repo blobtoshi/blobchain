@@ -127,7 +127,7 @@ export function useBlockchain(walletRef: React.MutableRefObject<WalletLike>) {
         const currentKey = `${blockInfoRef.current.height}:${blockInfoRef.current.seed}`;
         if (currentKey !== key) return;
         const expectedSeed = String(blockInfo.seed);
-        const filtered = e.filter((en: any) =>
+        const filtered = e.filter((en) =>
           en.block_seed == null || String(en.block_seed) === expectedSeed
         );
         lastFetchedKeyRef.current = key;

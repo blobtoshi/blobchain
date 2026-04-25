@@ -32,9 +32,22 @@ export function generateLevel(seed) {
 }
 
 // Sprite image for the player blob — loaded once at module init.
+export let _blobImgFailed = false;
 export const _blobImg: HTMLImageElement | null = (() => {
   if (typeof window === "undefined") return null;
   const img = new Image();
+  img.onerror = (e) => {
+    _blobImgFailed = true;
+    // eslint-disable-next-line no-console
+    console.warn("[blob] sprite failed to load, falling back to ellipse", { src: blobSprite, e });
+  };
+  img.onload = () => {
+    if (img.naturalWidth === 0) {
+      _blobImgFailed = true;
+      // eslint-disable-next-line no-console
+      console.warn("[blob] sprite loaded but has zero dimensions", { src: blobSprite });
+    }
+  };
   img.src = blobSprite;
   return img;
 })();

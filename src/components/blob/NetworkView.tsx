@@ -183,7 +183,7 @@ export default function NetworkView({ nodeCount, chain, blockInfo, mempool = [] 
           </div>
         </div>
         <Bar pct={supplyPct} tone="bg-gradient-to-r from-primary to-[hsl(var(--info))]" />
-        <div className="text-[11px] text-foreground/50 num mt-1.5">{supplyPct.toFixed(5)}% of max supply minted</div>
+        <div className="text-[11px] text-foreground/50 num mt-1.5">{supplyPct.toFixed(5)}% of max supply mined</div>
         <div className="mt-4 pt-4 border-t border-foreground/5">
           <Row k="Divisibility" v={`${BLOB_DECIMALS} decimals`} />
           <Row k="Base unit" v="1 drop = 0.00000001 BLOB" />

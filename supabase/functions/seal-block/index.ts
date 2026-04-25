@@ -9,21 +9,23 @@ import { corsHeaders } from "https://esm.sh/@supabase/supabase-js@2.95.0/cors";
 
 const BLOCK_TIME = 120;
 const INITIAL_REWARD = 10;
-const HALVING_BLOCKS = 1_000_000;   // halves every 1M blocks
-const MAX_SUPPLY = 20_000_000;       // hard cap: Σ rewards = 10 × 1M × 2 = 20M
+const HALVING_BLOCKS = 1_000_000; // halves every 1M blocks
+const MAX_SUPPLY = 20_000_000; // hard cap: Σ rewards = 10 × 1M × 2 = 20M
 const GENESIS_TIME_MS = 1777084251161;
-const MAX_BLOCK_SIZE = 1_000_000;   // 1 MB
-const MAX_TX_SIZE = 100_000;        // 100 KB standard tx limit
-const BLOB_UNIT = 1e8;               // 8-decimal base unit
+const TX_FEE = 0.001;
+const MAX_BLOCK_SIZE = 1_000_000; // 1 MB
+const MAX_TX_SIZE = 100_000; // 100 KB
+const BLOB_UNIT = 1e8; // 8-decimal base unit
 const to8 = (n: number) => Math.round(Number(n) * BLOB_UNIT) / BLOB_UNIT;
 
-const GENESIS_HASH =
-  "412c22f77b50de1a3faec282597d49b58a04bb5161e6d414f9885ab09de24bc7";
+const GENESIS_HASH = "412c22f77b50de1a3faec282597d49b58a04bb5161e6d414f9885ab09de24bc7";
 
 const enc = new TextEncoder();
 async function sha256hex(s: string) {
   const buf = await crypto.subtle.digest("SHA-256", enc.encode(s));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function getRewardForHeight(h: number) {
@@ -38,9 +40,9 @@ function currentHeight() {
 function mkPrng(seed: number) {
   let s = (Math.abs(+seed) * 2654435761) >>> 0;
   return () => {
-    s = (s + 0x6D2B79F5) | 0;
+    s = (s + 0x6d2b79f5) | 0;
     let t = Math.imul(s ^ (s >>> 15), 1 | s);
-    t = t + Math.imul(t ^ (t >>> 7), 61 | t) ^ t;
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
@@ -65,8 +67,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const { height } = body ?? {};
     const targetHeight = Number(height);
-    if (!Number.isFinite(targetHeight) || targetHeight < 1)
-      return bad("invalid height");
+    if (!Number.isFinite(targetHeight) || targetHeight < 1) return bad("invalid height");
 
     // Self-gating: reject any future height. Past/catch-up heights are still
     // bounded by the "previous block must exist" + "block window must have
@@ -77,21 +78,20 @@ Deno.serve(async (req) => {
       return bad(`block #${targetHeight} not yet open (current #${wallHeight})`);
     }
 
-    const supa = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
+    const supa = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
     // Idempotent: already sealed?
-    const { data: existing } = await supa
-      .from("blob_chain").select("height").eq("height", targetHeight).maybeSingle();
+    const { data: existing } = await supa.from("blob_chain").select("height").eq("height", targetHeight).maybeSingle();
     if (existing) return ok_({ already: true });
 
     // Sequential progression: a block can only be sealed if its predecessor exists.
     // Combined with the "must have entries" rule below, the chain halts on an unmined block.
     const { data: prev } = await supa
-      .from("blob_chain").select("hash,total_supply,height,timestamp")
-      .order("height", { ascending: false }).limit(1).maybeSingle();
+      .from("blob_chain")
+      .select("hash,total_supply,height,timestamp")
+      .order("height", { ascending: false })
+      .limit(1)
+      .maybeSingle();
     const prevHeight = Number(prev?.height ?? 0);
     if (targetHeight !== prevHeight + 1) {
       return bad(`out-of-order seal (expected #${prevHeight + 1}, got #${targetHeight})`);
@@ -108,7 +108,8 @@ Deno.serve(async (req) => {
 
     // Verified entries (only those that passed signature check at write time)
     const { data: entriesRaw } = await supa
-      .from("blob_entries").select("address,score,signature")
+      .from("blob_entries")
+      .select("address,score,signature")
       .eq("block_height", targetHeight);
     const entries = entriesRaw ?? [];
 
@@ -126,15 +127,23 @@ Deno.serve(async (req) => {
     // Mempool txs stay pending and roll over to a future block that has a winner.
     // This makes the gaming layer load-bearing: no players → no settlement.
     let txs: Array<{
-      id: string; from: string; to: string;
-      amount: number; fee: number; feeRate: number; memo: string;
-      signature: string; publicKey: string; timestamp: number;
+      id: string;
+      from: string;
+      to: string;
+      amount: number;
+      fee: number;
+      feeRate: number;
+      memo: string;
+      signature: string;
+      publicKey: string;
+      timestamp: number;
     }> = [];
     if (winner) {
       // Pull mempool txs to include. Order by fee_rate DESC (highest priority
-      // first) — standard fee-priority block-template construction.
+      // first) — Bitcoin-style block-template construction.
       const { data: txRows } = await supa
-        .from("blob_mempool").select("*")
+        .from("blob_mempool")
+        .select("*")
         .order("fee_rate", { ascending: false })
         .order("timestamp", { ascending: true })
         .limit(5000);
@@ -185,11 +194,18 @@ Deno.serve(async (req) => {
       total_supply: newSupply,
       hash: "",
     };
-    block.hash = await sha256hex([
-      block.height, block.previous_hash, block.timestamp,
-      block.winner ?? "null", block.winner_score, block.reward, block.seed,
-      txs.length,
-    ].join("|"));
+    block.hash = await sha256hex(
+      [
+        block.height,
+        block.previous_hash,
+        block.timestamp,
+        block.winner ?? "null",
+        block.winner_score,
+        block.reward,
+        block.seed,
+        txs.length,
+      ].join("|"),
+    );
 
     const { error } = await supa.from("blob_chain").insert(block);
     if (error) {
@@ -202,7 +218,13 @@ Deno.serve(async (req) => {
 
     // Clear included mempool txs
     if (txs.length) {
-      await supa.from("blob_mempool").delete().in("id", txs.map(t => t.id));
+      await supa
+        .from("blob_mempool")
+        .delete()
+        .in(
+          "id",
+          txs.map((t) => t.id),
+        );
     }
 
     return ok_({ height: targetHeight, winner: block.winner, reward });
@@ -214,11 +236,13 @@ Deno.serve(async (req) => {
 
 function bad(msg: string, status = 400) {
   return new Response(JSON.stringify({ error: msg }), {
-    status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
 function ok_(obj: unknown) {
   return new Response(JSON.stringify(obj), {
-    status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    status: 200,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }

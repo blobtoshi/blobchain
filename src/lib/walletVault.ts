@@ -27,14 +27,12 @@ export type WalletPlain = {
   address: string;
   publicKey: string;
   privateKey: string;
-  username: string;
   mnemonic?: string; // present for wallets created or imported via 12-word seed
 };
 
 export type WalletPublic = {
   address: string;
   publicKey: string;
-  username: string;
 };
 
 export async function saveEncryptedWallet(w: WalletPlain, passphrase: string) {
@@ -53,7 +51,6 @@ export async function saveEncryptedWallet(w: WalletPlain, passphrase: string) {
     v: 1,
     address: w.address,
     publicKey: w.publicKey,
-    username: w.username,
     enc: {
       salt: base64.encode(salt),
       iv: base64.encode(iv),
@@ -72,7 +69,7 @@ export function getStoredWalletPublic(): WalletPublic | null {
     if (!raw) return null;
     const v = JSON.parse(raw);
     if (v?.v !== 1 || !v.address || !v.publicKey) return null;
-    return { address: v.address, publicKey: v.publicKey, username: v.username ?? "anon" };
+    return { address: v.address, publicKey: v.publicKey };
   } catch {
     return null;
   }
@@ -109,7 +106,6 @@ export async function unlockWallet(passphrase: string): Promise<WalletPlain> {
   let iv: Uint8Array;
   let ct: Uint8Array;
   try {
-    // Copy into fresh ArrayBuffer-backed Uint8Arrays to satisfy BufferSource typing.
     salt = new Uint8Array(base64.decode(v.enc.salt));
     iv = new Uint8Array(base64.decode(v.enc.iv));
     ct = new Uint8Array(base64.decode(v.enc.ct));
@@ -143,7 +139,6 @@ export async function unlockWallet(passphrase: string): Promise<WalletPlain> {
     address: v.address,
     publicKey: v.publicKey,
     privateKey,
-    username: v.username ?? "anon",
     mnemonic,
   };
 }

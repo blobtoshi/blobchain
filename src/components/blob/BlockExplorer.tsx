@@ -189,7 +189,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
     const out = (chain as any[]).filter(b => {
       if (winner) {
         const ok = (b.winner || "").toLowerCase().includes(winner) ||
-                   (b.winnerUsername || "").toLowerCase().includes(winner);
+                   "".toLowerCase().includes(winner);
         if (!ok) return false;
       }
       if (minH !== null && b.height < minH) return false;
@@ -293,7 +293,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                     className="w-full text-left glass px-3 py-2 mb-1 hover:bg-secondary/30 transition flex items-center justify-between text-xs">
                     <span className="num text-[hsl(var(--warning))]">#{b.height}</span>
                     <span className="num text-muted-foreground truncate mx-2">{shortHash(b.hash, 10)}</span>
-                    <span className="text-foreground/70">{b.winnerUsername || shortHash(b.winner, 6)}</span>
+                    <span className="text-foreground/70">{shortHash(b.winner, 6)}</span>
                   </button>
                 ))}
               </div>
@@ -358,7 +358,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                 <button key={b.height} onClick={() => { setTab("blocks"); setSelBlock(b.height); }}
                   className="w-full text-left glass px-3 py-2.5 hover:bg-secondary/30 transition flex items-center justify-between gap-2 text-xs">
                   <span className="num text-[hsl(var(--warning))] shrink-0">#{b.height}</span>
-                  <span className="text-foreground/80 truncate flex-1">{b.winnerUsername || shortHash(b.winner, 6)}</span>
+                  <span className="text-foreground/80 truncate flex-1">{shortHash(b.winner, 6)}</span>
                   <span className="num text-muted-foreground shrink-0">{(b.transactions || []).length} tx</span>
                   <span className="num text-primary/80 shrink-0">{Number(b.reward).toFixed(0)} BLOB</span>
                 </button>
@@ -445,7 +445,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
               <div onClick={() => setSelBlock(selBlock === b.height ? null : b.height)}
                 className="glass px-3 py-2.5 cursor-pointer hover:bg-secondary/30 transition grid grid-cols-[50px_1fr_60px_70px_40px] sm:grid-cols-[60px_1fr_80px_100px_50px] gap-2 items-center text-xs">
                 <span className="num text-muted-foreground">#{b.height}</span>
-                <span className="truncate text-foreground/80">{b.winnerUsername || shortHash(b.winner, 8)}</span>
+                <span className="truncate text-foreground/80">{shortHash(b.winner, 8)}</span>
                 <span className="num text-muted-foreground">{b.winnerScore > 0 ? b.winnerScore : "—"}</span>
                 <span className="num text-primary/80">{b.reward > 0 ? `${b.reward} BLOB` : "—"}</span>
                 <span className="num text-right text-muted-foreground">{(b.transactions || []).length}</span>
@@ -467,7 +467,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                       <div className="label-eyebrow mb-1">Transactions ({b.transactions.length})</div>
                       {b.transactions.map((tx: any, i: number) => (
                         <div key={i} className="num text-foreground/60 text-[11px]">
-                          {tx.from === "coinbase" ? "blob" : (tx.fromUsername || shortHash(tx.from, 6))} → {tx.toUsername || shortHash(tx.to, 6)} · {tx.amount} BLOB · fee {tx.fee || 0}
+                          {tx.from === "coinbase" ? "blob" : shortHash(tx.from, 6)} → {shortHash(tx.to, 6)} · {tx.amount} BLOB · fee {tx.fee || 0}
                         </div>
                       ))}
                     </div>
@@ -552,7 +552,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                 {t.kind === "reward"
                   ? <HandCoins className="w-3.5 h-3.5 text-[hsl(var(--warning))]" />
                   : <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground" />}
-                <span className="text-foreground/80 truncate">{t.kind === "reward" ? "Block Reward" : (t.from === "coinbase" ? "blob" : (t.fromUsername || shortHash(t.from, 6)))}</span>
+                <span className="text-foreground/80 truncate">{t.kind === "reward" ? "Block Reward" : (t.from === "coinbase" ? "blob" : shortHash(t.from, 6))}</span>
                 <span className="hidden sm:block text-foreground/80 truncate">{t.toUsername || shortHash(t.to, 6)}</span>
                 <span className="num text-primary/80">{t.amount} BLOB</span>
                 <span className="num text-muted-foreground">{t.status === "pending" ? "—" : `#${t.block}`}</span>

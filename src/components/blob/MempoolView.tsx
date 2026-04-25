@@ -353,7 +353,7 @@ export default function MempoolView({
                   fillPct={Math.max(2, fillPct)}
                   feeLow={s.minRate} feeMed={s.medRate} feeHigh={s.maxRate}
                   rewardOrFees={`reward ${Number(b.reward || 0)} BLOB${s.totalFees ? ` · +${s.totalFees.toFixed(4)} fees` : ""}`}
-                  miner={b.winnerUsername || (b.winner ? shortHash(b.winner, 4) : "—")}
+                  miner={(b.winner ? shortHash(b.winner, 4) : "—")}
                   bucketBg={bucket.bg} bucketRing={bucket.ring} bucketText={bucket.text}
                   onClick={() => onSelectBlock?.(b.height)}
                 />
@@ -585,7 +585,7 @@ export default function MempoolView({
                   className={`w-full text-left glass px-3 py-2.5 hover:bg-secondary/30 transition border-l-2 ${bucket.ring.replace("ring-", "border-l-")} grid grid-cols-[52px_1fr_56px_44px_44px_36px] sm:grid-cols-[70px_1fr_80px_60px_60px_50px] gap-2 items-center text-xs`}
                 >
                   <span className={`num font-semibold ${bucket.text}`}>{rate} <span className="text-[9px] font-normal text-muted-foreground">d/B</span></span>
-                  <span className="text-foreground/80 truncate">{t.from === "coinbase" ? "blob" : (t.fromUsername || shortHash(t.from, 6))} → {shortHash(t.to, 6)}</span>
+                  <span className="text-foreground/80 truncate">{t.from === "coinbase" ? "blob" : shortHash(t.from, 6)} → {shortHash(t.to, 6)}</span>
                   <span className="num text-primary/90">{t.amount}</span>
                   <span className="num text-muted-foreground">{bytes}B</span>
                   <span className="num text-[10px] text-foreground/70">{eta ? `+${eta}` : "—"}</span>

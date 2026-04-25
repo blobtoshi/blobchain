@@ -136,31 +136,10 @@ async function findPendingBridgeTx(
   return data;
 }
 
-// Lazy, memoized loader for the heavy Solana SDK. Kept out of module top-level
-// to keep cold-start CPU under the edge runtime budget. Memoization means
-// background mints reuse the already-loaded modules.
-let _solanaDeps: Promise<any> | null = null;
-function loadSolana() {
-  if (!_solanaDeps) {
-    _solanaDeps = Promise.all([
-      import("https://esm.sh/@solana/web3.js@1.95.4"),
-      import("https://esm.sh/@solana/spl-token@0.4.9?deps=@solana/web3.js@1.95.4&bundle-deps"),
-      import("https://esm.sh/bs58@5.0.0"),
-    ]);
-  }
-  return _solanaDeps;
-}
-
 async function mintSpl(recipient: string, amount: number): Promise<string> {
   if (!SOLANA_RPC_URL) throw new Error("SOLANA_RPC_URL is not configured");
   if (!SOLANA_MINT_AUTHORITY) throw new Error("SOLANA_MINT_AUTHORITY_SECRET_KEY is not configured");
   if (!SOLANA_SPL_MINT_ADDRESS) throw new Error("SOLANA_SPL_MINT_ADDRESS is not configured");
-
-  const [{ Connection, Keypair, PublicKey, sendAndConfirmTransaction, Transaction },
-         { createAssociatedTokenAccountIdempotentInstruction, createMintToInstruction,
-           getAssociatedTokenAddress, getMint },
-         bs58Mod] = await loadSolana();
-  const bs58 = (bs58Mod as any).default ?? bs58Mod;
 
   const raw = SOLANA_MINT_AUTHORITY.trim();
   const authority = raw.startsWith("[")

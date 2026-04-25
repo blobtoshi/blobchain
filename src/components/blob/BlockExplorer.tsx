@@ -678,8 +678,8 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
               <div className="flex items-center justify-between px-1 text-[10px] text-muted-foreground num">
                 <span>{addrFiltered.length} of {addressBook.length} addresses</span>
               </div>
-              <div className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_auto_auto_60px] gap-3 px-3 py-1">
-                {(window.innerWidth < 640 ? ["Address", "Balance / Mined"] : ["Address", "Balance", "Mined", "Tx"]).map(h => <div key={h} className="label-eyebrow">{h}</div>)}
+              <div className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_auto_60px] gap-3 px-3 py-1">
+                {(window.innerWidth < 640 ? ["Address", "Balance"] : ["Address", "Balance", "Tx"]).map(h => <div key={h} className="label-eyebrow">{h}</div>)}
               </div>
               {addressBook.length === 0 ? (
                 <div className="glass text-center py-10 text-xs text-muted-foreground">No addresses tracked yet</div>
@@ -690,16 +690,14 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                 const balance = a.received + a.mined - a.sent;
                 return (
                   <button key={a.address} onClick={() => setSelAddr(a.address)}
-                    className="w-full text-left glass px-3 py-2.5 hover:bg-secondary/30 transition grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_auto_auto_60px] gap-3 items-center text-xs">
+                    className="w-full text-left glass px-3 py-2.5 hover:bg-secondary/30 transition grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_auto_60px] gap-3 items-center text-xs">
                     <div className="min-w-0">
                       <div className="num text-foreground/80 truncate">{shortHash(a.address, 8)}</div>
                       
                     </div>
                     <div className="text-right">
                       <div className="num text-primary/80 whitespace-nowrap">{balance.toFixed(8)} BLOB</div>
-                      <div className="num text-[10px] text-muted-foreground whitespace-nowrap sm:hidden">mined {a.mined.toFixed(8)}</div>
                     </div>
-                    <span className="hidden sm:block num text-muted-foreground text-right whitespace-nowrap">{a.mined.toFixed(8)}</span>
                     <span className="hidden sm:block num text-right text-muted-foreground">{a.txCount}</span>
                   </button>
                 );

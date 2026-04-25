@@ -2,16 +2,28 @@
 // and block-sealing logic. Returns everything Index needs to render.
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as Relay from "@/lib/blobRelay";
+import type { Block, Tx, Entry } from "@/lib/blobRelay";
 import { getBlockInfo } from "@/lib/blob/chain";
 import { GENESIS, BLOCK_TIME, GENESIS_TIME_MS } from "@/lib/blob/constants";
 
-export function useBlockchain(walletRef: React.MutableRefObject<any>) {
-  const [chain, setChain] = useState<any[]>([GENESIS]);
-  const [mempool, setMempool] = useState<any[]>([]);
-  const [entries, setEntries] = useState<any[]>([]);
-  const [myEntry, setMyEntry] = useState<any>(null);
-  const [blockInfo, setBlock] = useState(getBlockInfo());
-  const [newBlock, setNewBlock] = useState<any>(null);
+export type BlockInfo = ReturnType<typeof getBlockInfo>;
+export type NewBlock = Block & { isMine: boolean };
+export type WalletLike = { address: string; [k: string]: unknown } | null;
+export type SubmittedEntry = Entry & {
+  frame_count?: number;
+  inputs?: string;
+  inputs_hash?: string;
+  engine_version?: number;
+  submitted_at?: string;
+};
+
+export function useBlockchain(walletRef: React.MutableRefObject<WalletLike>) {
+  const [chain, setChain] = useState<Block[]>([GENESIS as unknown as Block]);
+  const [mempool, setMempool] = useState<Tx[]>([]);
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [myEntry, setMyEntry] = useState<Entry | null>(null);
+  const [blockInfo, setBlock] = useState<BlockInfo>(getBlockInfo());
+  const [newBlock, setNewBlock] = useState<NewBlock | null>(null);
 
   // Tick block info every second.
   useEffect(() => {

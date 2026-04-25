@@ -146,11 +146,10 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
   const memTxs = useMemo(() => mempoolToTxs(mempool || []), [mempool]);
 
   const addressBook = useMemo(() => {
-    const m = new Map<string, { address: string; username?: string; sent: number; received: number; mined: number; txCount: number; lastSeen: number }>();
+    const m = new Map<string, { address: string; sent: number; received: number; mined: number; txCount: number; lastSeen: number }>();
     for (const p of players) {
       m.set(p.address, {
         address: p.address,
-        username: p.username,
         sent: 0, received: 0, mined: 0, txCount: 0,
         lastSeen: p.lastActive ? new Date(p.lastActive).getTime() : 0,
       });
@@ -158,17 +157,15 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
     const touch = (addr: string) => {
       if (!addr || addr === "coinbase") return;
       if (!m.has(addr)) m.set(addr, { address: addr, sent: 0, received: 0, mined: 0, txCount: 0, lastSeen: 0 });
-      const e = m.get(addr)!;
-      
-      return e;
+      return m.get(addr)!;
     };
     for (const tx of allTxs) {
       const ts = tx.timestamp;
       if (tx.kind === "reward") {
-        const e = touch(tx.to, tx); if (e) { e.mined += tx.amount; e.lastSeen = Math.max(e.lastSeen, ts); }
+        const e = touch(tx.to); if (e) { e.mined += tx.amount; e.lastSeen = Math.max(e.lastSeen, ts); }
       } else {
-        const f = touch(tx.from, tx);
-        const t = touch(tx.to, tx);
+        const f = touch(tx.from);
+        const t = touch(tx.to);
         if (f) { f.sent += tx.amount + tx.fee; f.txCount++; f.lastSeen = Math.max(f.lastSeen, ts); }
         if (t) { t.received += tx.amount; t.txCount++; t.lastSeen = Math.max(t.lastSeen, ts); }
       }
@@ -188,8 +185,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
     const to = dateToTs(blkF.dateTo, true);
     const out = (chain as any[]).filter(b => {
       if (winner) {
-        const ok = (b.winner || "").toLowerCase().includes(winner) ||
-                   "".toLowerCase().includes(winner);
+        const ok = (b.winner || "").toLowerCase().includes(winner);
         if (!ok) return false;
       }
       if (minH !== null && b.height < minH) return false;
@@ -214,7 +210,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
     const q = addrF.q.trim().toLowerCase();
     const minB = addrF.minBalance === "" ? null : Number(addrF.minBalance);
     const out = addressBook.filter(a => {
-      if (q && !a.address.toLowerCase().includes(q) && !false) return false;
+      if (q && !a.address.toLowerCase().includes(q)) return false;
       const bal = a.received + a.mined - a.sent;
       if (minB !== null && bal < minB) return false;
       if (addrF.hasMined === "yes" && a.mined <= 0) return false;
@@ -228,7 +224,6 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
       case "mined-desc": out.sort((a, b) => b.mined - a.mined); break;
       case "tx-desc": out.sort((a, b) => b.txCount - a.txCount); break;
       case "recent": out.sort((a, b) => b.lastSeen - a.lastSeen); break;
-      case "username": out.sort((a, b) => "~".localeCompare(b.username || "~")); break;
       default: out.sort((a, b) => (b.received + b.mined - b.sent) - (a.received + a.mined - a.sent));
     }
     return out;
@@ -242,7 +237,6 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
       b.hash?.toLowerCase().includes(q) ||
       b.previousHash?.toLowerCase().includes(q) ||
       b.winner?.toLowerCase().includes(q) ||
-      b?.toLowerCase().includes(q) ||
       b.seed?.toLowerCase().includes(q)
     ).slice(0, 10);
     const txs = [...memTxs, ...allTxs].filter(t =>
@@ -250,13 +244,10 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
       t.signature?.toLowerCase().includes(q) ||
       t.from?.toLowerCase().includes(q) ||
       t.to?.toLowerCase().includes(q) ||
-      t?.toLowerCase().includes(q) ||
-      t?.toLowerCase().includes(q) ||
       String(t.amount).includes(q)
     ).slice(0, 15);
     const addresses = addressBook.filter(a =>
       a.address.toLowerCase().includes(q) ||
-      
       (q === "blob" && a.address === "coinbase")
     ).slice(0, 10);
     return { blocks, txs, addresses };

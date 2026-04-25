@@ -24,6 +24,8 @@ export function useBlockchain(walletRef: React.MutableRefObject<any>) {
   const entriesRef = useRef(entries);
   const chainRef = useRef(chain);
   const blockInfoRef = useRef(blockInfo);
+  const lastFetchedKeyRef = useRef<string>("");
+  const inFlightFetchRef = useRef<string>("");
   useEffect(() => { entriesRef.current = entries; }, [entries]);
   useEffect(() => { chainRef.current = chain; }, [chain]);
   useEffect(() => { blockInfoRef.current = blockInfo; }, [blockInfo]);

@@ -1846,6 +1846,8 @@
 
     "@solana/wallet-adapter-base-ui/@solana/wallet-adapter-react": ["@solana/wallet-adapter-react@0.15.39", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/@solana/wallet-adapter-react/-/wallet-adapter-react-0.15.39.tgz", { "dependencies": { "@solana-mobile/wallet-adapter-mobile": "^2.2.0", "@solana/wallet-adapter-base": "^0.9.27", "@solana/wallet-standard-wallet-adapter-react": "^1.1.4" }, "peerDependencies": { "@solana/web3.js": "^1.98.0", "react": "*" } }, "sha512-WXtlo88ith5m22qB+qiGw301/Zb9r5pYr4QdXWmlXnRNqwST5MGmJWhG+/RVrzc+OG7kSb3z1gkVNv+2X/Y0Gg=="],
 
+    "@solana/wallet-standard-wallet-adapter-base/@solana/wallet-adapter-base": ["@solana/wallet-adapter-base@0.9.27", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/@solana/wallet-adapter-base/-/wallet-adapter-base-0.9.27.tgz", { "dependencies": { "@solana/wallet-standard-features": "^1.3.0", "@wallet-standard/base": "^1.1.0", "@wallet-standard/features": "^1.1.0", "eventemitter3": "^5.0.1" }, "peerDependencies": { "@solana/web3.js": "^1.98.0" } }, "sha512-kXjeNfNFVs/NE9GPmysBRKQ/nf+foSaq3kfVSeMcO/iVgigyRmB551OjU3WyAolLG/1jeEfKLqF9fKwMCRkUqg=="],
+
     "@solana/wallet-standard-wallet-adapter-base/bs58": ["bs58@6.0.0", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/bs58/-/bs58-6.0.0.tgz", { "dependencies": { "base-x": "^5.0.0" } }, "sha512-PD0wEnEYg6ijszw/u8s+iI3H17cTymlrwkKhDhPZq+Sokl3AU4htyBFTjAeNAlCCmg0f53g6ih3jATyCKftTfw=="],
 
     "@solflare-wallet/metamask-sdk/bs58": ["bs58@5.0.0", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/bs58/-/bs58-5.0.0.tgz", { "dependencies": { "base-x": "^4.0.0" } }, "sha512-r+ihvQJvahgYT50JD05dyJNKlmmSlMoOGwn1lCcEzanPglg7TxYjioQUYehQ9mAR/+hOSd2jRc/Z2y5UxBymvQ=="],
@@ -1941,6 +1943,8 @@
     "jest-worker/supports-color": ["supports-color@8.1.1", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/supports-color/-/supports-color-8.1.1.tgz", { "dependencies": { "has-flag": "^4.0.0" } }, "sha512-MpUEN2OodtUzxvKQl72cUF7RQ5EiHsGvSsVG0ia9c5RbWGL2CI4C7EpPS8UTBIplnlzZiNuV56w+FuNxy3ty2Q=="],
 
     "lighthouse-logger/debug": ["debug@2.6.9", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/debug/-/debug-2.6.9.tgz", { "dependencies": { "ms": "2.0.0" } }, "sha512-bC7ElrdJaJnPbAP+1EotYvqZsb3ecl5wi6Bfi6BJTUcNowp6cvspg0jXznRTKDjm/E7AdgFBVeAPVMNcKGsHMA=="],
+
+    "md5.js/hash-base": ["hash-base@3.1.2", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/hash-base/-/hash-base-3.1.2.tgz", { "dependencies": { "inherits": "^2.0.4", "readable-stream": "^2.3.8", "safe-buffer": "^5.2.1", "to-buffer": "^1.2.1" } }, "sha512-Bb33KbowVTIj5s7Ked1OsqHUeCpz//tPwR+E2zJgJKo9Z5XolZ9b6bdUgjmYlwnWhoOQKoTd1TYToZGn5mAYOg=="],
 
     "metro/debug": ["debug@4.4.3", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/debug/-/debug-4.4.3.tgz", { "dependencies": { "ms": "^2.1.3" } }, "sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA=="],
 
@@ -2058,6 +2062,8 @@
 
     "@solana/wallet-adapter-base-ui/@solana/wallet-adapter-react/@solana/wallet-adapter-base": ["@solana/wallet-adapter-base@0.9.27", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/@solana/wallet-adapter-base/-/wallet-adapter-base-0.9.27.tgz", { "dependencies": { "@solana/wallet-standard-features": "^1.3.0", "@wallet-standard/base": "^1.1.0", "@wallet-standard/features": "^1.1.0", "eventemitter3": "^5.0.1" }, "peerDependencies": { "@solana/web3.js": "^1.98.0" } }, "sha512-kXjeNfNFVs/NE9GPmysBRKQ/nf+foSaq3kfVSeMcO/iVgigyRmB551OjU3WyAolLG/1jeEfKLqF9fKwMCRkUqg=="],
 
+    "@solana/wallet-standard-wallet-adapter-base/@solana/wallet-adapter-base/eventemitter3": ["eventemitter3@5.0.4", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/eventemitter3/-/eventemitter3-5.0.4.tgz", {}, "sha512-mlsTRyGaPBjPedk6Bvw+aqbsXDtoAyAzm5MO7JgU+yVRyMQ5O8bD4Kcci7BS85f93veegeCPkL8R4GLClnjLFw=="],
+
     "@solana/wallet-standard-wallet-adapter-base/bs58/base-x": ["base-x@5.0.1", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/base-x/-/base-x-5.0.1.tgz", {}, "sha512-M7uio8Zt++eg3jPj+rHMfCC+IuygQHHCOU+IYsVtik6FWjuYpVt/+MRKcgsAMHh8mMFAwnB+Bs+mTrFiXjMzKg=="],
 
     "@solflare-wallet/metamask-sdk/bs58/base-x": ["base-x@4.0.1", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/base-x/-/base-x-4.0.1.tgz", {}, "sha512-uAZ8x6r6S3aUM9rbHGVOIsR15U/ZSc82b3ymnCPsT45Gk1DDvhDPdIgB5MrhirZWt+5K0EEPQH985kNqZgNPFw=="],
@@ -2081,6 +2087,8 @@
     "jest-validate/pretty-format/ansi-styles": ["ansi-styles@5.2.0", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/ansi-styles/-/ansi-styles-5.2.0.tgz", {}, "sha512-Cxwpt2SfTzTtXcfOlzGEee8O+c+MmUgGrNiBcXnuWxuFJHe6a5Hz7qwhwe5OgaSYI0IJvkLqWX1ASG+cJOkEiA=="],
 
     "lighthouse-logger/debug/ms": ["ms@2.0.0", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/ms/-/ms-2.0.0.tgz", {}, "sha512-Tpp60P6IUJDTuOq/5Z8cdskzJujfwqfOTkrwIwj7IRISpnkJnT6SyJ4PCPnGMoFjC9ddhal5KVIYtAt97ix05A=="],
+
+    "md5.js/hash-base/readable-stream": ["readable-stream@2.3.8", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/readable-stream/-/readable-stream-2.3.8.tgz", { "dependencies": { "core-util-is": "~1.0.0", "inherits": "~2.0.3", "isarray": "~1.0.0", "process-nextick-args": "~2.0.0", "safe-buffer": "~5.1.1", "string_decoder": "~1.1.1", "util-deprecate": "~1.0.1" } }, "sha512-8p0AUk4XODgIewSi0l8Epjs+EVnWiK7NoDIEGU0HhE7+ZyY8D1IMY7odu5lRrFXGg71L15KG8QrPmum45RTtdA=="],
 
     "metro-babel-transformer/hermes-parser/hermes-estree": ["hermes-estree@0.35.0", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/hermes-estree/-/hermes-estree-0.35.0.tgz", {}, "sha512-xVx5Opwy8Oo1I5yGpVRhCvWL/iV3M+ylksSKVNlxxD90cpDpR/AR1jLYqK8HWihm065a6UI3HeyAmYzwS8NOOg=="],
 
@@ -2163,6 +2171,10 @@
     "@solana-mobile/mobile-wallet-adapter-protocol/@solana/codecs-strings/@solana/errors/commander": ["commander@14.0.3", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/commander/-/commander-14.0.3.tgz", {}, "sha512-H+y0Jo/T1RZ9qPP4Eh1pkcQcLRglraJaSLoyOtHxu6AapkjWVCy2Sit1QQ4x3Dng8qDlSsZEet7g5Pq06MvTgw=="],
 
     "@solana/wallet-adapter-base-ui/@solana/wallet-adapter-react/@solana/wallet-adapter-base/eventemitter3": ["eventemitter3@5.0.4", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/eventemitter3/-/eventemitter3-5.0.4.tgz", {}, "sha512-mlsTRyGaPBjPedk6Bvw+aqbsXDtoAyAzm5MO7JgU+yVRyMQ5O8bD4Kcci7BS85f93veegeCPkL8R4GLClnjLFw=="],
+
+    "md5.js/hash-base/readable-stream/safe-buffer": ["safe-buffer@5.1.2", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/safe-buffer/-/safe-buffer-5.1.2.tgz", {}, "sha512-Gd2UZBJDkXlY7GbJxfsE8/nvKkUEU1G38c1siN6QP6a9PT9MmHB8GnpscSmMJSoF8LOIrt8ud/wPtojys4G6+g=="],
+
+    "md5.js/hash-base/readable-stream/string_decoder": ["string_decoder@1.1.1", "https://europe-west4-npm.pkg.dev/lovable-core-prod/sandbox-npm-cache/string_decoder/-/string_decoder-1.1.1.tgz", { "dependencies": { "safe-buffer": "~5.1.0" } }, "sha512-n/ShnvDi6FHbbVfviro+WojiFzv+s8MPMHBczVePfUpDJLwoLT0ht1l4YwBCbi8pJAveEEdnkHyPyTP/mzRfwg=="],
 
     "qrcode/yargs/cliui/strip-ansi": ["strip-ansi@6.0.1", "", { "dependencies": { "ansi-regex": "^5.0.1" } }, "sha512-Y38VPSHcqkFrCpFnQ9vuSXmquuv5oXOKpGeT6aGrr3o3Gc9AlVa6JBfUSOCnbxGGZF+/0ooI7KrPuUSztUdU5A=="],
 

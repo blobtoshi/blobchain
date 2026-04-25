@@ -139,7 +139,7 @@ Deno.serve(async (req) => {
         .order("fee_rate", { ascending: false })
         .order("timestamp", { ascending: true })
         .limit(5000);
-      const allTxs = (txRows ?? []).map(r => ({
+      const allTxs = (txRows ?? []).map((r: any) => ({
         id: r.id,
         from: r.from_address,
         fromUsername: r.from_username,

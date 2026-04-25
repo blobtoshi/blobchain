@@ -1,6 +1,6 @@
 import { base64 } from "@scure/base";
 
-const VAULT_KEY = "blob_wallet_vault_v2"; // v2: secp256k1 hex keys (Bitcoin-style)
+const VAULT_KEY = "blob_wallet_vault_v2"; // v2: secp256k1 hex keys
 const LEGACY_KEYS = ["blob_wallet_v2", "blob_wallet_vault_v1"]; // older formats to purge
 
 const enc = new TextEncoder();
@@ -91,11 +91,7 @@ export async function unlockWallet(passphrase: string): Promise<WalletPlain> {
   if (typeof v.address !== "string") throw new Error("Corrupt wallet vault");
   if (typeof v.publicKey !== "string") throw new Error("Corrupt wallet vault");
   if (!v.enc || typeof v.enc !== "object") throw new Error("Corrupt wallet vault");
-  if (
-    typeof v.enc.salt !== "string" ||
-    typeof v.enc.iv !== "string" ||
-    typeof v.enc.ct !== "string"
-  ) {
+  if (typeof v.enc.salt !== "string" || typeof v.enc.iv !== "string" || typeof v.enc.ct !== "string") {
     throw new Error("Corrupt wallet vault");
   }
   if (v.enc.iter !== undefined && typeof v.enc.iter !== "number") {
@@ -133,7 +129,9 @@ export async function unlockWallet(passphrase: string): Promise<WalletPlain> {
       const obj = JSON.parse(plain);
       if (typeof obj.privateKey === "string") privateKey = obj.privateKey;
       if (typeof obj.mnemonic === "string" && obj.mnemonic) mnemonic = obj.mnemonic;
-    } catch { /* fall back to raw */ }
+    } catch {
+      /* fall back to raw */
+    }
   }
   return {
     address: v.address,

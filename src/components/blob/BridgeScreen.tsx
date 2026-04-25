@@ -325,7 +325,27 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast, config: configProp
                 </Label>
                 <button
                   type="button"
-                  onClick={() => setAmt(Math.max(0, balance - (previewFee || 0.0001)).toFixed(BLOB_DECIMALS))}
+                  onClick={() => {
+                    // Recompute fee at click time so a fee-rate change between
+                    // renders can't make the Max amount slightly off.
+                    const rate = Math.max(
+                      MIN_FEE_RATE,
+                      feeInfo?.recommendedFeeRate ?? BASE_FEE_RATE,
+                    );
+                    const memoNow = solAddr.trim() ? `sol:${solAddr.trim()}` : "";
+                    const bridgeAddr = config?.bridgeAddress ?? wallet.address;
+                    // Try to leave room for the fee on the *max* amount itself.
+                    // Iterate twice since fee depends on the encoded amount.
+                    let candidate = balance;
+                    for (let i = 0; i < 2; i++) {
+                      const bytes = estimateTxBytes(
+                        wallet.address, bridgeAddr, to8(candidate), Date.now(), rate, memoNow,
+                      );
+                      const fee = feeFromRate(rate, bytes);
+                      candidate = Math.max(0, balance - fee);
+                    }
+                    setAmt(candidate.toFixed(BLOB_DECIMALS));
+                  }}
                   className="text-[10px] text-muted-foreground hover:text-primary transition"
                   disabled={balance <= 0}
                 >

@@ -89,7 +89,7 @@ export default function BlobChainApp() {
   async function handleImport() {
     setConnectErr("");
     const name = nameIn.trim();
-    if (!name) { setConnectErr("Enter a miner name"); return; }
+    if (!name) { setConnectErr("Enter a username"); return; }
     if (pass1.length < 6) { setConnectErr("Passphrase must be at least 6 characters"); return; }
     if (pass1 !== pass2) { setConnectErr("Passphrases do not match"); return; }
     try {

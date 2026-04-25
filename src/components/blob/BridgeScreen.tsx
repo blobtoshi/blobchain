@@ -13,6 +13,7 @@ import { canonicalTxBytes, estimateTxBytes, feeFromRate, memoBytes, to8 } from "
 import {
   BASE_FEE_RATE, MIN_FEE_RATE, MAX_MEMO_BYTES, BLOB_DECIMALS, SOL_ADDR_RE,
 } from "@/lib/blob/constants";
+import bridgeCoinsImg from "@/assets/bridge-coins.png";
 
 // Lazy-load the Solana wallet adapter + redeem panel — keeps the heavy
 // @solana/web3.js + wallet-adapter modules out of the initial bridge bundle.
@@ -42,7 +43,13 @@ export default function BridgeScreen(props: any) {
       <div className="relative overflow-hidden rounded-3xl glass-pane px-5 sm:px-8 py-8 sm:py-10">
         <div className="pointer-events-none absolute -top-32 right-0 w-[420px] h-[420px] rounded-full bg-primary/10 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 -left-12 w-[320px] h-[320px] rounded-full bg-accent/10 blur-3xl" />
-        <div className="relative flex flex-col gap-3">
+        <img
+          src={bridgeCoinsImg}
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none select-none absolute -right-6 sm:right-2 top-1/2 -translate-y-1/2 w-40 sm:w-56 md:w-64 opacity-40 sm:opacity-50 mix-blend-screen drop-shadow-[0_0_30px_hsl(var(--accent)/0.35)]"
+        />
+        <div className="relative flex flex-col gap-3 pr-32 sm:pr-48">
           <div className="flex items-center gap-2">
             <div className="relative inline-flex items-center justify-center w-9 h-9 rounded-full bg-primary/10 border border-primary/30 text-primary shadow-[0_0_24px_hsl(var(--accent)/0.25)]">
               <span className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_30%_30%,hsl(var(--accent)/0.35),transparent_70%)]" />

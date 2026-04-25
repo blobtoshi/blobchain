@@ -637,7 +637,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                           ? <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                           : <ArrowDownLeft className="w-3.5 h-3.5 text-primary/80 shrink-0" />}
                       <span className="text-foreground/70 truncate flex-1">
-                        {t.from === selAddr ? `→ ${shortHash(t.to, 8)}` : `← ${t.kind === "reward" ? "Block Reward" : shortHash(t.from, 8)}`}
+                        {t.from === selAddr ? `→ ${shortHash(t.to, 8)}` : `← ${t.kind === "reward" ? "Block Reward" : (t.from === "coinbase" ? "blob" : shortHash(t.from, 8))}`}
                       </span>
                       <span className={`num shrink-0 ${t.from === selAddr ? "text-muted-foreground" : "text-primary/80"}`}>
                         {t.from === selAddr ? "-" : "+"}{t.amount} BLOB

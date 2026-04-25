@@ -29,6 +29,26 @@ import { createClient as _createClient } from "https://esm.sh/@supabase/supabase
 // deno-lint-ignore no-explicit-any
 const createClient = _createClient as any;
 
+// Heavy Solana SDK imports — at top-level so they load during BOOT (where the
+// runtime allows more CPU) instead of during a request (where dynamic-import
+// + heavy code can hit the per-request CPU limit and be terminated).
+// Using npm: specifiers — Deno's native npm support is lighter than esm.sh
+// shims for these packages.
+import {
+  Connection,
+  Keypair,
+  PublicKey,
+  sendAndConfirmTransaction,
+  Transaction,
+} from "npm:@solana/web3.js@1.95.4";
+import {
+  createAssociatedTokenAccountIdempotentInstruction,
+  createMintToInstruction,
+  getAssociatedTokenAddress,
+  getMint,
+} from "npm:@solana/spl-token@0.4.9";
+import bs58 from "npm:bs58@5.0.0";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":

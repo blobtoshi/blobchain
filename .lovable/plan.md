@@ -1,70 +1,66 @@
-## Problem
+## Phase 1 — Decentralization groundwork
 
-Every meaningful source file in the project starts with `// @ts-nocheck` — 23 files in total, covering essentially the entire app and edge function:
+You picked: deliver `full-node.ts` + protocol first, run locally on `ws://localhost:8080`, persist with SQLite, move bridge to the full node eventually but keep access-code/locked-gate untouched. Browser code is **not** modified in this phase — current Supabase relay keeps working.
 
-- All of `src/lib/blob/*` (chain, simulator, level, fees, explorer, crypto, constants)
-- All of `src/components/blob/*` (BlobRunGame, BlockExplorer, BridgeScreen, MempoolView, MineHero, MiningPanel, NetworkView, RedeemPanel, SendTxForm, SolanaProvider, WalletScreen)
-- All hooks (`useBlockchain`, `useWalletVault`, `useMempoolHistory`)
-- `src/pages/Index.tsx`
-- `supabase/functions/submit-entry/_simulator.ts`
+### Deliverables
 
-On top of that, `tsconfig.app.json` has `strict: false`, `noImplicitAny: false`, `noUnusedLocals: false`, `noUnusedParameters: false`. So even without `@ts-nocheck`, the safety net is loose. Right now `tsc` reports 0 errors — not because the code is clean, but because it isn't being checked.
+1. **`node/full-node.ts`** — standalone Node 20 + TypeScript full node
+   - HTTP (Express) + WebSocket (`ws`) on port `8080`
+   - SQLite via `better-sqlite3` at `./data/blobchain.db`
+   - Tables: `blocks`, `mempool`, `entries`, `addresses` (mirrors current Supabase schema)
+   - Block sealer: 120s ticker that reuses the exact logic from `supabase/functions/seal-block` (PRNG, weighted lottery, halving, 20M cap, deterministic hash). Ported verbatim so block hashes match the current chain rules.
+   - Validators for `submitTx` (secp256k1 verify, balance, fee floor) and `submitEntry` (signature over `address|score|block_height|block_seed`, replay-input hashing — same as `submit-entry`).
+   - Gossip: on accepted tx/entry/block, broadcast to all subscribed WS clients.
+   - REST helpers for debugging: `GET /chain/tip`, `GET /blocks?from=&limit=`, `GET /mempool`, `GET /health`.
+   - Graceful shutdown, structured logs, reconnection-friendly (idempotent inserts).
 
-## What the real error count looks like
+2. **`node/wsProtocol.ts`** — shared message types
+   - `ClientMsg = Subscribe | SubmitTx | SubmitEntry | GetChainTip | GetBlocks`
+   - `ServerMsg = NewBlock | NewTx | NewEntry | ChainTip | BlocksRange | Ack | ErrorMsg`
+   - Discriminated unions, exported so the browser can import the same file later.
+   - Lives under `node/` so the browser can `import type` from it without bundling Node deps.
 
-I temporarily stripped `@ts-nocheck` from all 23 files and ran `tsc`. Result: only **14 real errors**, all in 2 files:
+3. **`node/package.json`** — minimal manifest
+   - Deps: `better-sqlite3`, `ws`, `express`, `@noble/secp256k1`, `@noble/hashes`, `tsx`, `typescript`, `@types/node`, `@types/ws`, `@types/express`
+   - Scripts: `"dev": "tsx watch full-node.ts"`, `"start": "tsx full-node.ts"`
 
-- `src/components/blob/BlobRunGame.tsx` — 12 errors: `state._trail` (10x) and `state._lastCombo` (2x) are mutated directly on the simulator state object but aren't declared on its type.
-- `src/pages/Index.tsx` — 2 errors: narrowing on a discriminated union `{ ok: true; ... } | { ok: false; error: string }` — code reads `.error` without first checking `ok === false`.
+4. **`node/README.md`** — local run instructions
+   - `cd node && npm i && npm run dev`
+   - Env vars: `PORT`, `DB_PATH`, `GENESIS_TIME_MS` (default matches current chain)
+   - How to point a future browser build at `ws://localhost:8080`
+   - Notes on later deploying 4 nodes (Fly.io/Railway placeholder section)
 
-Everything else type-checks cleanly today.
+5. **`node/lib/`** (small internal modules to keep `full-node.ts` readable)
+   - `crypto.ts` — sha256 + secp256k1 verify wrappers
+   - `consensus.ts` — `mkPrng`, `pickWinner`, `getRewardForHeight`, `computeBlockHash`
+   - `validate.ts` — tx + entry validation
+   - `db.ts` — SQLite schema bootstrap + prepared statements
+   - `gossip.ts` — WS broadcast helpers
 
-## Plan
+### Out of scope for this phase
 
-### 1. Fix the 12 errors in `BlobRunGame.tsx`
+- No edits to `src/`, no rewrite of `blobRelay.ts`, no `useLightChain.ts`, no `BlobChainApp.tsx` changes.
+- Bridge port to full node (`bridge-mint`, `bridge-redeem`, Solana RPC) — deferred to Phase 3.
+- Multi-node peer-to-peer gossip — Phase 2 will add node↔node WS peering once one node is proven.
+- Access code / locked gate — left fully alone (you said it's being removed at launch).
 
-`_trail` and `_lastCombo` are render-only fields the canvas component bolts onto the simulator state. The cleanest fix without touching the deterministic simulator is to keep them on a sibling object owned by the component, not on `state`:
+### How it integrates with existing code
 
-- Add `const renderState = useRef<{ trail: Array<{x:number;y:number;a:number}>; lastCombo: number }>({ trail: [], lastCombo: 0 })`.
-- Replace every `state._trail` with `renderState.current.trail` and every `state._lastCombo` with `renderState.current.lastCombo`.
-- Reset `renderState.current` whenever a new run starts (same place the simulator state is reset).
+- The full node does **not** read/write Supabase. It is a parallel implementation of the same consensus rules.
+- For local testing you can manually copy the genesis hash + `GENESIS_TIME_MS` from the current chain so a fresh node starts at height 1 with the same rules.
+- Once you confirm the node runs and seals blocks correctly locally, Phase 2 will wire the browser to it via a new `useLightChain.ts` hook behind a feature flag, so you can A/B against the Supabase relay.
 
-This keeps the simulator's state shape pure (important — it's hashed/replayed server-side) and gives the render scratch its own typed home.
+### Verification
 
-### 2. Fix the 2 errors in `Index.tsx`
+- `cd node && npm run dev` boots without errors.
+- Hit `curl http://localhost:8080/health` → `{ ok: true, height, tipHash }`.
+- Open a `wscat` connection, send `{"type":"subscribe"}`, then `{"type":"submitEntry", ...}` with a valid signed entry — server acks and the next block (after 120s) lists it.
+- SQLite file persists across restarts; restart resumes at the same tip.
 
-Lines 118 and 139 read `result.error` on a union without narrowing. Wrap each in `if (!result.ok) { /* use result.error */ }` (or `if ('error' in result)`). Two small edits.
+### Phase 2 preview (not part of this plan)
 
-### 3. Remove `// @ts-nocheck` from all 23 files
-
-Once the 14 errors above are fixed, strip the directive from every file in the list. No other code changes are needed — the rest already type-checks.
-
-### 4. Tighten `tsconfig.app.json` so this can't silently regress
-
-Update `tsconfig.app.json`:
-
-- `"strict": true` (turns on `strictNullChecks`, `noImplicitAny`, etc.)
-- `"noImplicitAny": true` (explicit, in case `strict` is loosened later)
-- Keep `noUnusedLocals` / `noUnusedParameters` off for now — flipping those will surface dozens of cosmetic warnings unrelated to safety. Can be a follow-up.
-
-Then re-run `tsc -p tsconfig.app.json --noEmit`. Strict mode will likely surface a handful of additional null/undefined issues. I'll fix any that appear (expect a small number — these files compile cleanly today under loose settings, so the strict diff should be modest). If the strict-mode error count turns out to be large (>30), I'll pause and report back rather than blindly chase them, so you can decide whether to defer step 4.
-
-### 5. Add an ESLint rule to prevent `@ts-nocheck` from creeping back
-
-Add `"@typescript-eslint/ban-ts-comment": ["error", { "ts-nocheck": true, "ts-ignore": "allow-with-description" }]` to `eslint.config.js`. From now on, anyone adding `// @ts-nocheck` will get a lint error.
-
-## Verification
-
-- `npx tsc -p tsconfig.app.json --noEmit` → 0 errors
-- `npm run lint` → no new errors
-- Manual smoke: load the game, play a run, confirm the trail/combo visuals still render correctly (this is what `_trail` and `_lastCombo` drove).
-
-## Files touched
-
-- `src/components/blob/BlobRunGame.tsx` (fix + remove nocheck)
-- `src/pages/Index.tsx` (fix + remove nocheck)
-- 21 other files: remove the `// @ts-nocheck` line only
-- `tsconfig.app.json` (enable strict)
-- `eslint.config.js` (add ban-ts-comment rule)
-
-No runtime behavior changes except the render-state refactor in `BlobRunGame.tsx`, which is behavior-equivalent.
+Once you approve Phase 1 and the node runs cleanly:
+- Build `src/lib/lightChain.ts` + `src/hooks/useLightChain.ts` (IndexedDB last-500 blocks, header chain).
+- Rewrite `blobRelay.ts` to speak the WS protocol with auto-reconnect + node failover.
+- Add Network tab indicator showing connected node URL + peer count.
+- Feature-flag rollout so the Supabase path stays available until you flip the switch.

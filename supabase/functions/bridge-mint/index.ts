@@ -48,8 +48,6 @@ const corsHeaders = {
 // MUST match GENESIS.bridgeAddress in src/lib/blob/constants.ts (pinned at genesis).
 const BRIDGE_ADDRESS = "1E4QWFYb5Pqj8iAV2be8Ee88yEbvhU9iTs";
 
-const SOLANA_RPC_URL          = Deno.env.get("SOLANA_RPC_URL") ?? "";
-const SOLANA_MINT_AUTHORITY   = Deno.env.get("SOLANA_MINT_AUTHORITY_SECRET_KEY") ?? "";
 const SOLANA_SPL_MINT_ADDRESS = Deno.env.get("SOLANA_SPL_MINT_ADDRESS") ?? "";
 
 const SOL_ADDR_RE  = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;

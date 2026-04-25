@@ -24,6 +24,8 @@ export function useBlockchain(walletRef: React.MutableRefObject<any>) {
   const entriesRef = useRef(entries);
   const chainRef = useRef(chain);
   const blockInfoRef = useRef(blockInfo);
+  const lastFetchedKeyRef = useRef<string>("");
+  const inFlightFetchRef = useRef<string>("");
   useEffect(() => { entriesRef.current = entries; }, [entries]);
   useEffect(() => { chainRef.current = chain; }, [chain]);
   useEffect(() => { blockInfoRef.current = blockInfo; }, [blockInfo]);
@@ -43,7 +45,9 @@ export function useBlockchain(walletRef: React.MutableRefObject<any>) {
       if (cancelled) return;
       if (c.length) setChain(c);
       setMempool(m);
-      const expectedSeed = String(getBlockInfo(c.length ? c : [GENESIS], true).seed);
+      const initialInfo = getBlockInfo(c.length ? c : [GENESIS], true);
+      const expectedSeed = String(initialInfo.seed);
+      lastFetchedKeyRef.current = `${initialInfo.height}:${initialInfo.seed}`;
       setEntries(e.filter((en: any) =>
         en.block_seed == null || String(en.block_seed) === expectedSeed
       ));
@@ -57,6 +61,12 @@ export function useBlockchain(walletRef: React.MutableRefObject<any>) {
         });
         setNewBlock({ ...b, isMine: b.winner === walletRef.current?.address });
         setTimeout(() => setNewBlock(null), 5000);
+        // Mark the new active block as already "fetched" (empty) so the
+        // height/seed effect doesn't race a redundant fetchEntries call.
+        const newChain = [...chainRef.current.filter(x => x.height !== b.height), b]
+          .sort((a, b2) => a.height - b2.height);
+        const nextInfo = getBlockInfo(newChain, false);
+        lastFetchedKeyRef.current = `${nextInfo.height}:${nextInfo.seed}`;
         setEntries([]);
         setMyEntry(null);
       },
@@ -89,14 +99,30 @@ export function useBlockchain(walletRef: React.MutableRefObject<any>) {
   // whose block_seed doesn't match the seed of the current active block — these
   // come from players who finished a level on the previous seed after the timer
   // expired and would otherwise pollute the next block's entry list.
+  //
+  // Guarded against races with onBlock (which proactively clears entries) and
+  // the initial-load effect: we skip if we've already fetched this height+seed,
+  // and we drop the response if the active block has moved on while in flight.
   useEffect(() => {
+    const key = `${blockInfo.height}:${blockInfo.seed}`;
+    if (lastFetchedKeyRef.current === key) return;
+    if (inFlightFetchRef.current === key) return;
+    inFlightFetchRef.current = key;
     (async () => {
-      const e = await Relay.fetchEntries(blockInfo.height);
-      const expectedSeed = String(blockInfo.seed);
-      const filtered = e.filter((en: any) =>
-        en.block_seed == null || String(en.block_seed) === expectedSeed
-      );
-      setEntries(filtered);
+      try {
+        const e = await Relay.fetchEntries(blockInfo.height);
+        // Stale response — active block changed while we were fetching.
+        const currentKey = `${blockInfoRef.current.height}:${blockInfoRef.current.seed}`;
+        if (currentKey !== key) return;
+        const expectedSeed = String(blockInfo.seed);
+        const filtered = e.filter((en: any) =>
+          en.block_seed == null || String(en.block_seed) === expectedSeed
+        );
+        lastFetchedKeyRef.current = key;
+        setEntries(filtered);
+      } finally {
+        if (inFlightFetchRef.current === key) inFlightFetchRef.current = "";
+      }
     })();
   }, [blockInfo.height, blockInfo.seed]);
 

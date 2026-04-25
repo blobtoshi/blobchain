@@ -210,8 +210,8 @@ export default function BlobChainApp() {
                 <div className="text-xs text-muted-foreground">Restore from an exported private key</div>
               </div>
             </button>
-            <div className="text-[11px] text-muted-foreground/70 text-center pt-1">
-              Keys never leave your device · Stored only in this browser
+            <div className="text-muted-foreground/70 text-center pt-1 text-xs font-normal">
+              Save your private keys before deleting browser cookies.
             </div>
           </div>
         )}
@@ -257,7 +257,7 @@ export default function BlobChainApp() {
                 {creating ? "Generating keypair…" : "Generate wallet"}
               </button>
             </div>
-            <div className="text-[11px] text-muted-foreground/70 text-center pt-1">
+            <div className="text-muted-foreground/70 text-center pt-1 text-xs font-normal">
               secp256k1 keypair generated on Blob Chain. (elliptic curve)
             </div>
           </div>

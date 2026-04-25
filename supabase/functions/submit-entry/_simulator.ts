@@ -2,7 +2,7 @@
 // Standalone copy of src/lib/blob/simulator.ts for the Deno edge runtime.
 // Keep BYTE-FOR-BYTE in sync with the client copy. ENGINE_VERSION must match.
 
-export const ENGINE_VERSION = 1;
+export const ENGINE_VERSION = 2;
 export const MAX_FRAMES = 36000;
 export const MAX_INPUTS_PER_RUN = MAX_FRAMES;
 
@@ -55,6 +55,7 @@ function initialState() {
     player: { y: GY - 28, vy: 0, action: "run", wob: 0, sq: 1 },
     obstacles: [] as any[], tokens: [] as any[],
     jumpHeld: false, duckHeld: false, dead: false,
+    passedFirstObstacle: false,
   };
 }
 
@@ -87,9 +88,14 @@ function tick(state: any, level: any, frameInputs: any[]) {
   p.sq += (1 - p.sq) * 0.13;
   p.wob++;
   if (!state.locked) {
-    state.score++;
+    if (state.passedFirstObstacle) state.score++;
     state.dist += state.speed;
     state.speed = 4.5 + Math.pow(state.score / 600, 1.15) * 0.9;
+  }
+  if (!state.passedFirstObstacle) {
+    for (const o of state.obstacles) {
+      if (o.x + o.w < PX) { state.passedFirstObstacle = true; break; }
+    }
   }
   if (state.comboTimer > 0 && --state.comboTimer === 0) state.combo = 0;
 
@@ -129,9 +135,11 @@ function tick(state: any, level: any, frameInputs: any[]) {
   for (const t of state.tokens) {
     if (t.alive && Math.abs(PX - t.x) < 28 && Math.abs(p.y - t.y) < 28) {
       t.alive = false;
-      state.combo = Math.min(state.combo + 1, 10);
-      state.comboTimer = 150;
-      state.score += Math.floor(50 * (1 + state.combo * 0.25));
+      if (state.passedFirstObstacle) {
+        state.combo = Math.min(state.combo + 1, 10);
+        state.comboTimer = 150;
+        state.score += Math.floor(50 * (1 + state.combo * 0.25));
+      }
     }
   }
   return true;

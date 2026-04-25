@@ -680,10 +680,6 @@ export default function BlobChainApp() {
           {wallet && (
             <div className="space-y-4 pt-1">
               <div>
-                <div className="label-eyebrow mb-2">Username</div>
-                <div className="text-sm font-medium">{wallet.username}</div>
-              </div>
-              <div>
                 <div className="label-eyebrow mb-2">Address</div>
                 <div className="num text-xs text-foreground/80 break-all leading-relaxed p-3 rounded-md bg-secondary/40 border border-border">
                   {wallet.address}

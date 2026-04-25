@@ -94,7 +94,6 @@ export default function MiningPanel({ blockInfo, entries, myEntry, chain }: any)
             {myEntry && (
               <div className="mt-3 text-xs text-center text-muted-foreground">
                 Your win probability: <span className="text-primary num">{winProbability(myEntry.score, entries)}%</span>
-                {" · weighted random lottery"}
               </div>
             )}
           </>

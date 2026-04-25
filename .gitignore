@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 *.local
+VITE_BLOB_NODE_URL=http://localhost:8080
+VITE_BLOB_RELAY_MODE=auto
 
 # Editor directories and files
 .vscode/*

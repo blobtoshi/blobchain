@@ -60,7 +60,7 @@ export function useBlockchain(walletRef: React.MutableRefObject<WalletLike>) {
       const initialInfo = getBlockInfo(c.length ? c : [GENESIS], true);
       const expectedSeed = String(initialInfo.seed);
       lastFetchedKeyRef.current = `${initialInfo.height}:${initialInfo.seed}`;
-      setEntries(e.filter((en: any) =>
+      setEntries(e.filter((en) =>
         en.block_seed == null || String(en.block_seed) === expectedSeed
       ));
     })();

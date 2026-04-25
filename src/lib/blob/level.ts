@@ -39,17 +39,31 @@ export const _blobImg: HTMLImageElement | null = (() => {
   return img;
 })();
 
-export function drawBG(ctx, frame, nodes) {
-  const sky = ctx.createLinearGradient(0, 0, 0, GY);
-  sky.addColorStop(0, "#070b18");
-  sky.addColorStop(1, "#0a1828");
-  ctx.fillStyle = sky;
+// Cached static gradients — created lazily once per ctx.
+let _skyGrad: CanvasGradient | null = null;
+let _haloGrad: CanvasGradient | null = null;
+let _groundGrad: CanvasGradient | null = null;
+let _gradCtx: CanvasRenderingContext2D | null = null;
+function ensureBGGrads(ctx: CanvasRenderingContext2D) {
+  if (_gradCtx === ctx && _skyGrad && _haloGrad && _groundGrad) return;
+  _gradCtx = ctx;
+  _skyGrad = ctx.createLinearGradient(0, 0, 0, GY);
+  _skyGrad.addColorStop(0, "#070b18");
+  _skyGrad.addColorStop(1, "#0a1828");
+  _haloGrad = ctx.createRadialGradient(CW / 2, GY, 10, CW / 2, GY, CW * 0.7);
+  _haloGrad.addColorStop(0, "rgba(0, 255, 204, 0.10)");
+  _haloGrad.addColorStop(1, "rgba(0, 255, 204, 0)");
+  _groundGrad = ctx.createLinearGradient(0, GY, 0, CH);
+  _groundGrad.addColorStop(0, "#0d2233");
+  _groundGrad.addColorStop(1, "#04080f");
+}
+
+export function drawBG(ctx: CanvasRenderingContext2D, frame: number, nodes: Array<{x:number;y:number;r:number;a:number}>) {
+  ensureBGGrads(ctx);
+  ctx.fillStyle = _skyGrad!;
   ctx.fillRect(0, 0, CW, GY);
 
-  const halo = ctx.createRadialGradient(CW / 2, GY, 10, CW / 2, GY, CW * 0.7);
-  halo.addColorStop(0, "rgba(0, 255, 204, 0.10)");
-  halo.addColorStop(1, "rgba(0, 255, 204, 0)");
-  ctx.fillStyle = halo;
+  ctx.fillStyle = _haloGrad!;
   ctx.fillRect(0, 0, CW, GY);
 
   nodes.forEach(n => {

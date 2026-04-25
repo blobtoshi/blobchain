@@ -115,7 +115,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
   const [selBlock, setSelBlock] = useState<number | null>(null);
   const [selTx, setSelTx] = useState<string | null>(null);
   const [selAddr, setSelAddr] = useState<string | null>(null);
-  const [players, setPlayers] = useState<Relay.Player[]>([]);
+  const [addresses, setAddresses] = useState<Relay.AddressRecord[]>([]);
 
   const [pBlocks, setPBlocks] = useState(0);
   const [pTxs, setPTxs] = useState(0);
@@ -136,8 +136,8 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const p = await Relay.fetchPlayers();
-      if (!cancelled) setPlayers(p);
+      const a = await Relay.fetchAddresses();
+      if (!cancelled) setAddresses(a);
     })();
     return () => { cancelled = true; };
   }, [chain.length, mempool.length]);
@@ -147,11 +147,11 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
 
   const addressBook = useMemo(() => {
     const m = new Map<string, { address: string; sent: number; received: number; mined: number; txCount: number; lastSeen: number }>();
-    for (const p of players) {
-      m.set(p.address, {
-        address: p.address,
+    for (const a of addresses) {
+      m.set(a.address, {
+        address: a.address,
         sent: 0, received: 0, mined: 0, txCount: 0,
-        lastSeen: p.lastActive ? new Date(p.lastActive).getTime() : 0,
+        lastSeen: a.lastActive ? new Date(a.lastActive).getTime() : 0,
       });
     }
     const touch = (addr: string) => {
@@ -171,7 +171,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
       }
     }
     return Array.from(m.values()).sort((a, b) => (b.mined + b.received) - (a.mined + a.received));
-  }, [allTxs, players]);
+  }, [allTxs, addresses]);
 
   const txsAll = useMemo(() => [...memTxs, ...allTxs], [memTxs, allTxs]);
   const txsFiltered = useMemo(() => applyTxFilters(txsAll, txF), [txsAll, txF]);

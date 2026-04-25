@@ -25,9 +25,10 @@ async function deriveKey(passphrase: string, salt: Uint8Array, iter: number) {
 
 export type WalletPlain = {
   address: string;
-  publicKey: string; // JWK string
-  privateKey: string; // JWK string
+  publicKey: string;
+  privateKey: string;
   username: string;
+  mnemonic?: string; // present for wallets created or imported via 12-word seed
 };
 
 export type WalletPublic = {
@@ -44,7 +45,9 @@ export async function saveEncryptedWallet(w: WalletPlain, passphrase: string) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const iter = 600_000; // OWASP 2023 recommendation for PBKDF2-HMAC-SHA256
   const key = await deriveKey(passphrase, salt, iter);
-  const ctBuf = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, enc.encode(w.privateKey));
+  // Encrypt a JSON envelope so we can persist the mnemonic alongside the key.
+  const payload = JSON.stringify({ privateKey: w.privateKey, mnemonic: w.mnemonic ?? null });
+  const ctBuf = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, enc.encode(payload));
   const ct = new Uint8Array(ctBuf);
   const vault = {
     v: 1,
@@ -125,12 +128,23 @@ export async function unlockWallet(passphrase: string): Promise<WalletPlain> {
   } catch {
     throw new Error("Wrong passphrase");
   }
-  const privateKey = dec.decode(plainBuf);
+  const plain = dec.decode(plainBuf);
+  // Backward compatible: older vaults stored the raw private key as plaintext.
+  let privateKey = plain;
+  let mnemonic: string | undefined;
+  if (plain.startsWith("{")) {
+    try {
+      const obj = JSON.parse(plain);
+      if (typeof obj.privateKey === "string") privateKey = obj.privateKey;
+      if (typeof obj.mnemonic === "string" && obj.mnemonic) mnemonic = obj.mnemonic;
+    } catch { /* fall back to raw */ }
+  }
   return {
     address: v.address,
     publicKey: v.publicKey,
     privateKey,
     username: v.username ?? "anon",
+    mnemonic,
   };
 }
 

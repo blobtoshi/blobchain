@@ -132,7 +132,7 @@ Deno.serve(async (req) => {
     }> = [];
     if (winner) {
       // Pull mempool txs to include. Order by fee_rate DESC (highest priority
-      // first) — Bitcoin-style block-template construction.
+      // first) — standard fee-priority block-template construction.
       const { data: txRows } = await supa
         .from("blob_mempool").select("*")
         .order("fee_rate", { ascending: false })

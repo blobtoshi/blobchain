@@ -65,6 +65,62 @@ const safeParse = (s: any, fallback: any) => {
   catch { return fallback; }
 };
 
+// ── Mode + node singleton ───────────────────────────────────────────────
+export type RelayMode = "node" | "supabase";
+
+const env = (import.meta as any).env ?? {};
+const NODE_URL: string | undefined = env.VITE_BLOB_NODE_URL || undefined;
+const RELAY_MODE_RAW: string = String(env.VITE_BLOB_RELAY_MODE ?? "auto").toLowerCase();
+
+let activeMode: RelayMode = "supabase";
+let nodeClient: BlobNodeClient | null = null;
+let modeReady: Promise<RelayMode> | null = null;
+const modeListeners = new Set<(m: RelayMode) => void>();
+
+function emitMode() {
+  for (const l of modeListeners) { try { l(activeMode); } catch { /* ignore */ } }
+}
+
+export function onRelayModeChange(fn: (m: RelayMode) => void) {
+  modeListeners.add(fn);
+  try { fn(activeMode); } catch { /* ignore */ }
+  return () => modeListeners.delete(fn);
+}
+
+export function getRelayMode(): RelayMode { return activeMode; }
+export function getNodeClient(): BlobNodeClient | null { return nodeClient; }
+
+async function initRelayMode(): Promise<RelayMode> {
+  if (RELAY_MODE_RAW === "supabase" || !NODE_URL) {
+    activeMode = "supabase";
+    return activeMode;
+  }
+  if (RELAY_MODE_RAW === "node") {
+    nodeClient = new BlobNodeClient(NODE_URL);
+    activeMode = "node";
+    return activeMode;
+  }
+  // auto: probe /health.
+  const healthy = await BlobNodeClient.healthcheck(NODE_URL);
+  if (healthy) {
+    nodeClient = new BlobNodeClient(NODE_URL);
+    activeMode = "node";
+  } else {
+    activeMode = "supabase";
+  }
+  emitMode();
+  return activeMode;
+}
+
+export function ensureRelayMode(): Promise<RelayMode> {
+  if (!modeReady) modeReady = initRelayMode();
+  return modeReady;
+}
+
+// Kick off the probe immediately so the first call to fetchChain isn't
+// slowed down by it (the promise is cached).
+ensureRelayMode();
+
 // ── BLOCKS ──────────────────────────────────────────────────────────────
 function blockFromRow(r: any): Block {
   return {

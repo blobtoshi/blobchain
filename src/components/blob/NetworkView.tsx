@@ -225,6 +225,7 @@ export default function NetworkView({ nodeCount, chain, blockInfo, mempool = [] 
         <Row k="Score proof" v="ECDSA P-256" />
         <Row k="Tx fee model" v="drops/byte × tx size" />
         <Row k="Memo limit" v={`${MAX_MEMO_BYTES} bytes`} />
+        <Row k="🔒 Bridge address" v={BRIDGE_ADDRESS} tone="text-primary" />
       </div>
     </div>
   );

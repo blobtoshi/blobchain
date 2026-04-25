@@ -49,7 +49,7 @@ export default function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent
   const validToAddress = ADDR_RE.test(trimmedTo) ? trimmedTo : "";
 
   const parsedAmt = (() => { const n = parseFloat(amt); return Number.isFinite(n) && n > 0 ? to8(n) : 0; })();
-  const previewToAddress = resolved?.address || (ADDR_RE.test(to.trim().replace(/^@/, "")) ? to.trim().replace(/^@/, "") : "");
+  const previewToAddress = validToAddress;
   const memoLen = memoBytes(memo);
   const memoOver = memoLen > MAX_MEMO_BYTES;
   const previewBytes = previewToAddress && parsedAmt > 0 && activeFeeRate >= MIN_FEE_RATE && !memoOver
@@ -61,12 +61,10 @@ export default function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent
   async function send() {
     setErr("");
     const parsed = parseFloat(amt);
-    const raw = to.trim().replace(/^@/, "");
-    if (!raw) { setErr("Enter a recipient (address or @username)"); return; }
-    let toAddress = "";
-    if (ADDR_RE.test(raw)) toAddress = raw;
-    else if (resolved?.address) toAddress = resolved.address;
-    else { setErr("Recipient not found"); return; }
+    const raw = to.trim();
+    if (!raw) { setErr("Enter a recipient address"); return; }
+    if (!ADDR_RE.test(raw)) { setErr("Invalid address"); return; }
+    const toAddress = raw;
     if (toAddress === wallet.address) { setErr("Cannot send to yourself"); return; }
     if (!Number.isFinite(parsed) || parsed <= 0) { setErr("Invalid amount"); return; }
     const amount = to8(parsed);
@@ -103,7 +101,7 @@ export default function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent
       const res = await Relay.pushTx(tx);
       if (!res.ok) { setErr(res.error || "Broadcast failed"); setSt("idle"); return; }
       onBroadcast(tx);
-      setSt("sent"); setTo(""); setAmt(""); setMemo(""); setResolved(null);
+      setSt("sent"); setTo(""); setAmt(""); setMemo("");
       setTimeout(() => { setSt("idle"); onSent?.(); }, 1500);
     } catch (e) { setErr(String(e)); setSt("idle"); }
   }
@@ -114,10 +112,9 @@ export default function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent
               : st === "broadcasting" ? "Broadcasting…"
               : "✓ Sent";
 
-  const trimmed = to.trim().replace(/^@/, "");
-  const looksLikeUser = trimmed && !ADDR_RE.test(trimmed) && USER_RE.test(trimmed);
+  const trimmed = to.trim();
   const looksLikeAddr = trimmed && ADDR_RE.test(trimmed);
-  const unknownInput = trimmed && !looksLikeUser && !looksLikeAddr;
+  const unknownInput = trimmed && !looksLikeAddr;
 
   return (
     <div className="space-y-3">
@@ -130,25 +127,16 @@ export default function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent
         <input
           value={to}
           onChange={e => setTo(e.target.value)}
-          placeholder="@username or address"
+          placeholder="Recipient address (1…)"
           className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm num placeholder:text-muted-foreground/60 placeholder:font-sans"
         />
         {trimmed && (
           <div className="text-[11px] min-h-[14px]">
-            {resolving && <span className="text-muted-foreground">Resolving…</span>}
-            {!resolving && looksLikeUser && resolved && (
-              <span className="text-primary/80">
-                ✓ @{resolved.username} → <span className="num text-muted-foreground">{resolved.address.slice(0, 14)}…{resolved.address.slice(-6)}</span>
-              </span>
-            )}
-            {!resolving && looksLikeUser && !resolved && (
-              <span className="text-destructive">Username not registered</span>
-            )}
-            {!resolving && looksLikeAddr && (
+            {looksLikeAddr && (
               <span className="text-muted-foreground">Sending to address</span>
             )}
             {unknownInput && (
-              <span className="text-destructive">Not a valid address or username</span>
+              <span className="text-destructive">Not a valid address</span>
             )}
           </div>
         )}

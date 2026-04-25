@@ -2,16 +2,28 @@
 // and block-sealing logic. Returns everything Index needs to render.
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as Relay from "@/lib/blobRelay";
+import type { Block, Tx, Entry } from "@/lib/blobRelay";
 import { getBlockInfo } from "@/lib/blob/chain";
 import { GENESIS, BLOCK_TIME, GENESIS_TIME_MS } from "@/lib/blob/constants";
 
-export function useBlockchain(walletRef: React.MutableRefObject<any>) {
-  const [chain, setChain] = useState<any[]>([GENESIS]);
-  const [mempool, setMempool] = useState<any[]>([]);
-  const [entries, setEntries] = useState<any[]>([]);
-  const [myEntry, setMyEntry] = useState<any>(null);
-  const [blockInfo, setBlock] = useState(getBlockInfo());
-  const [newBlock, setNewBlock] = useState<any>(null);
+export type BlockInfo = ReturnType<typeof getBlockInfo>;
+export type NewBlock = Block & { isMine: boolean };
+export type WalletLike = { address: string; [k: string]: unknown } | null;
+export type SubmittedEntry = Entry & {
+  frame_count?: number;
+  inputs?: string;
+  inputs_hash?: string;
+  engine_version?: number;
+  submitted_at?: string;
+};
+
+export function useBlockchain(walletRef: React.MutableRefObject<WalletLike>) {
+  const [chain, setChain] = useState<Block[]>([GENESIS as unknown as Block]);
+  const [mempool, setMempool] = useState<Tx[]>([]);
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [myEntry, setMyEntry] = useState<Entry | null>(null);
+  const [blockInfo, setBlock] = useState<BlockInfo>(getBlockInfo());
+  const [newBlock, setNewBlock] = useState<NewBlock | null>(null);
 
   // Tick block info every second.
   useEffect(() => {
@@ -48,7 +60,7 @@ export function useBlockchain(walletRef: React.MutableRefObject<any>) {
       const initialInfo = getBlockInfo(c.length ? c : [GENESIS], true);
       const expectedSeed = String(initialInfo.seed);
       lastFetchedKeyRef.current = `${initialInfo.height}:${initialInfo.seed}`;
-      setEntries(e.filter((en: any) =>
+      setEntries(e.filter((en) =>
         en.block_seed == null || String(en.block_seed) === expectedSeed
       ));
     })();
@@ -115,7 +127,7 @@ export function useBlockchain(walletRef: React.MutableRefObject<any>) {
         const currentKey = `${blockInfoRef.current.height}:${blockInfoRef.current.seed}`;
         if (currentKey !== key) return;
         const expectedSeed = String(blockInfo.seed);
-        const filtered = e.filter((en: any) =>
+        const filtered = e.filter((en) =>
           en.block_seed == null || String(en.block_seed) === expectedSeed
         );
         lastFetchedKeyRef.current = key;
@@ -159,7 +171,7 @@ export function useBlockchain(walletRef: React.MutableRefObject<any>) {
     if (entries.length > 0) attemptSeal();
   }, [entries.length, attemptSeal]);
 
-  const onEntrySubmit = useCallback(entry => {
+  const onEntrySubmit = useCallback((entry: SubmittedEntry) => {
     const current = blockInfoRef.current;
     const matchesActiveBlock =
       Number(entry.block_height) === Number(current.height) &&
@@ -168,11 +180,15 @@ export function useBlockchain(walletRef: React.MutableRefObject<any>) {
     if (!matchesActiveBlock) return;
 
     setMyEntry(entry);
-    setEntries(e => e.find(x => x.address === entry.address) ? e.map(x => x.address === entry.address ? entry : x) : [...e, entry]);
+    setEntries((e) =>
+      e.find((x) => x.address === entry.address)
+        ? e.map((x) => (x.address === entry.address ? entry : x))
+        : [...e, entry]
+    );
   }, []);
 
-  const onTxBroadcast = useCallback(tx => {
-    setMempool(m => [...m, tx]);
+  const onTxBroadcast = useCallback((tx: Tx) => {
+    setMempool((m) => [...m, tx]);
   }, []);
 
   return {

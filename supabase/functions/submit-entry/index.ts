@@ -122,6 +122,7 @@ Deno.serve(async (req) => {
     if (!result.dead) return bad("replay did not terminate (player still alive)");
     if (result.frame !== frame_count) return bad(`frame_count mismatch (replay=${result.frame})`);
     if (result.score !== Math.floor(sc)) return bad(`score mismatch (replay=${result.score})`);
+    if (result.score === 0) return bad("replay rejected: must clear first obstacle");
 
     const supa = createClient(
       Deno.env.get("SUPABASE_URL")!,

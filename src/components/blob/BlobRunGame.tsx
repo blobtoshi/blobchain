@@ -218,25 +218,29 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
         stRef.current = "dead";
         const finalScore = state.score;
         const frameCount = state.frame;
-        const canonical = encodeInputs(inputsRef.current);
-        const inputsHash = await hashInputs(canonical);
-        const payload = `${blockInfo.height}:${wallet.address}:${finalScore}:${inputsHash}`;
-        const sig = await signData(wallet.privateKey, payload);
-        const entry = {
-          block_height: blockInfo.height,
-          block_seed: String(blockInfo.seed),
-          address: wallet.address,
-          
-          score: finalScore,
-          frame_count: frameCount,
-          inputs: canonical,
-          inputs_hash: inputsHash,
-          engine_version: ENGINE_VERSION,
-          signature: sig,
-          submitted_at: new Date().toISOString(),
-        };
-        Relay.pushEntry({ ...entry, publicKey: wallet.publicKey });
-        onEntrySubmit(entry);
+        // Anti-Sybil: only submit entries from runs that cleared the first obstacle.
+        // Score === 0 means the player died before passing obstacle 1.
+        if (finalScore > 0) {
+          const canonical = encodeInputs(inputsRef.current);
+          const inputsHash = await hashInputs(canonical);
+          const payload = `${blockInfo.height}:${wallet.address}:${finalScore}:${inputsHash}`;
+          const sig = await signData(wallet.privateKey, payload);
+          const entry = {
+            block_height: blockInfo.height,
+            block_seed: String(blockInfo.seed),
+            address: wallet.address,
+
+            score: finalScore,
+            frame_count: frameCount,
+            inputs: canonical,
+            inputs_hash: inputsHash,
+            engine_version: ENGINE_VERSION,
+            signature: sig,
+            submitted_at: new Date().toISOString(),
+          };
+          Relay.pushEntry({ ...entry, publicKey: wallet.publicKey });
+          onEntrySubmit(entry);
+        }
         setGs(prev => ({ ...prev, status: "dead", score: finalScore }));
         // Update particles one last time for the fade-out frame
         parts.forEach(pt => { pt.x += pt.vx; pt.y += pt.vy; pt.vy += .18; pt.life -= .028; });

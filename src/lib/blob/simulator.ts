@@ -7,7 +7,7 @@
 import { mkPrng, getRewardForHeight } from "./chain";
 import { GY, PX, GRAVITY, JUMP_V } from "./constants";
 
-export const ENGINE_VERSION = 1;
+export const ENGINE_VERSION = 2;
 
 // Maximum number of simulated frames we will replay. ~60 fps * 600 s = 36000.
 // A run that lasts longer than this is rejected (would otherwise enable a
@@ -83,6 +83,7 @@ export function initialState() {
     jumpHeld: false,
     duckHeld: false,
     dead: false,
+    passedFirstObstacle: false,
   };
 }
 
@@ -124,9 +125,15 @@ export function tick(state, level, frameInputs) {
   p.sq += (1 - p.sq) * 0.13;
   p.wob++;
   if (!state.locked) {
-    state.score++;
+    if (state.passedFirstObstacle) state.score++;
     state.dist += state.speed;
     state.speed = 4.5 + Math.pow(state.score / 600, 1.15) * 0.9;
+  }
+  // Detect first-obstacle clearance: any spawned obstacle whose right edge has moved past the player.
+  if (!state.passedFirstObstacle) {
+    for (const o of state.obstacles) {
+      if (o.x + o.w < PX) { state.passedFirstObstacle = true; break; }
+    }
   }
   if (state.comboTimer > 0 && --state.comboTimer === 0) state.combo = 0;
 
@@ -170,9 +177,11 @@ export function tick(state, level, frameInputs) {
   for (const t of state.tokens) {
     if (t.alive && Math.abs(PX - t.x) < 28 && Math.abs(p.y - t.y) < 28) {
       t.alive = false;
-      state.combo = Math.min(state.combo + 1, 10);
-      state.comboTimer = 150;
-      state.score += Math.floor(50 * (1 + state.combo * 0.25));
+      if (state.passedFirstObstacle) {
+        state.combo = Math.min(state.combo + 1, 10);
+        state.comboTimer = 150;
+        state.score += Math.floor(50 * (1 + state.combo * 0.25));
+      }
     }
   }
   return true;

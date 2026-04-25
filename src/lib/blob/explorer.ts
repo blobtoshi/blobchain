@@ -5,8 +5,6 @@ export type ExplorerTx = {
   id: string;
   from: string;
   to: string;
-  fromUsername?: string;
-  toUsername?: string;
   amount: number;
   fee: number;
   feeRate?: number;
@@ -26,7 +24,6 @@ export function flattenChainTxs(chain: any[]): ExplorerTx[] {
         id: `reward-${b.height}`,
         from: "coinbase",
         to: b.winner,
-        toUsername: b.winnerUsername,
         amount: Number(b.reward),
         fee: 0,
         timestamp: b.timestamp,
@@ -40,8 +37,6 @@ export function flattenChainTxs(chain: any[]): ExplorerTx[] {
         id: tx.id || `${b.height}-${tx.signature?.slice(0, 12)}`,
         from: tx.from,
         to: tx.to,
-        fromUsername: tx.fromUsername,
-        toUsername: tx.toUsername,
         amount: Number(tx.amount),
         fee: Number(tx.fee || 0),
         feeRate: tx.feeRate != null ? Number(tx.feeRate) : undefined,
@@ -62,7 +57,6 @@ export function mempoolToTxs(mempool: any[]): ExplorerTx[] {
     id: tx.id,
     from: tx.from,
     to: tx.to,
-    fromUsername: tx.fromUsername,
     amount: Number(tx.amount),
     fee: Number(tx.fee || 0),
     feeRate: tx.feeRate != null ? Number(tx.feeRate) : undefined,
@@ -78,6 +72,14 @@ export function shortHash(s?: string, n = 8) {
   if (!s) return "—";
   if (s.length <= n * 2 + 1) return s;
   return `${s.slice(0, n)}…${s.slice(-n)}`;
+}
+
+// Display helper used everywhere a wallet identity used to render as @username.
+// "coinbase" is the protocol's reward source; render it as the "blob" mint.
+export function shortAddress(addr?: string | null, n = 6): string {
+  if (!addr) return "—";
+  if (addr === "coinbase") return "blob";
+  return shortHash(addr, n);
 }
 
 export function timeAgo(ts: number) {
@@ -125,7 +127,7 @@ export type AddrFilters = {
   minBalance: string;
   hasMined: "all" | "yes" | "no";
   hasTxs: "all" | "yes" | "no";
-  sort: "balance-desc" | "balance-asc" | "mined-desc" | "tx-desc" | "recent" | "username";
+  sort: "balance-desc" | "balance-asc" | "mined-desc" | "tx-desc" | "recent";
 };
 export const emptyAddrFilters: AddrFilters = {
   q: "", minBalance: "", hasMined: "all", hasTxs: "all", sort: "balance-desc",
@@ -143,8 +145,8 @@ export function applyTxFilters(list: ExplorerTx[], f: TxFilters): ExplorerTx[] {
   const max = f.maxAmount === "" ? null : Number(f.maxAmount);
   const from = dateToTs(f.dateFrom);
   const to = dateToTs(f.dateTo, true);
-  const matchAddr = (val?: string, uname?: string) =>
-    !!val && (val.toLowerCase().includes(addr) || (uname || "").toLowerCase().includes(addr));
+  const matchAddr = (val?: string) =>
+    !!val && val.toLowerCase().includes(addr);
   const out = list.filter(t => {
     if (f.kind !== "all" && t.kind !== f.kind) return false;
     if (f.status !== "all" && t.status !== f.status) return false;
@@ -153,8 +155,8 @@ export function applyTxFilters(list: ExplorerTx[], f: TxFilters): ExplorerTx[] {
     if (from !== null && t.timestamp < from) return false;
     if (to !== null && t.timestamp > to) return false;
     if (addr) {
-      const inFrom = matchAddr(t.from, t.fromUsername);
-      const inTo = matchAddr(t.to, t.toUsername);
+      const inFrom = matchAddr(t.from);
+      const inTo = matchAddr(t.to);
       if (f.addrSide === "from" && !inFrom) return false;
       if (f.addrSide === "to" && !inTo) return false;
       if (f.addrSide === "any" && !inFrom && !inTo) return false;

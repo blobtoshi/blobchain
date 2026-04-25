@@ -24,8 +24,6 @@ export const GRAVITY = 0.66;
 export const JUMP_V = -14.5;
 
 export const ADDR_RE = /^[1][1-9A-HJ-NP-Za-km-z]{25,34}$/;
-export const USER_RE = /^[A-Za-z0-9_]{3,24}$/;
-export const USERNAME_RE = /^[A-Za-z0-9_]{3,24}$/;
 export const SOL_ADDR_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 export const PAGE_SIZE = 100;
@@ -48,10 +46,18 @@ export const GENESIS = {
   miningEntries: [],
   winner: null,
   winnerScore: 0,
-  winnerUsername: "Satoshi Blobamoto",
   reward: 0,
   seed: "genesis",
   hash: "genesis00000000000000000000000000000000000000000000000000000000blob",
   totalSupply: 0,
   nodeCount: 0,
 };
+
+// Custom event used to navigate the explorer to a specific address from
+// anywhere in the app. Listened to by Index (to switch screens) and by
+// BlockExplorer (to open the address drawer).
+export const ADDRESS_SELECT_EVENT = "blob:select-address";
+export function emitSelectAddress(address: string) {
+  if (!address || address === "coinbase") return;
+  window.dispatchEvent(new CustomEvent(ADDRESS_SELECT_EVENT, { detail: address }));
+}

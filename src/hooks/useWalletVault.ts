@@ -1,12 +1,14 @@
 // @ts-nocheck
-// Wallet lifecycle: create / import / unlock / disconnect, plus username validation.
+// Wallet lifecycle: create / import / unlock / disconnect.
+// A wallet is identified solely by its address — there is no username.
 import { useEffect, useRef, useState } from "react";
 import * as Relay from "@/lib/blobRelay";
 import * as Vault from "@/lib/walletVault";
 import * as secp from "@noble/secp256k1";
-import { supabase } from "@/integrations/supabase/client";
-import { generateWallet, signData, bytesToHex, hexToBytes, pubKeyToAddress, isValidMnemonic, mnemonicToPrivateKey, normalizeMnemonic } from "@/lib/blob/crypto";
-import { USERNAME_RE } from "@/lib/blob/constants";
+import {
+  generateWallet, signData, bytesToHex, hexToBytes, pubKeyToAddress,
+  isValidMnemonic, mnemonicToPrivateKey, normalizeMnemonic,
+} from "@/lib/blob/crypto";
 
 export function useWalletVault() {
   const [wallet, setWallet] = useState<any>(null);
@@ -20,34 +22,22 @@ export function useWalletVault() {
     setVaultPub(Vault.getStoredWalletPublic());
   }, []);
 
-  async function validateUsername(name: string, ownAddress?: string): Promise<string | null> {
-    const u = name.trim();
-    if (!USERNAME_RE.test(u)) return "Username must be 3–24 chars (letters, numbers, _)";
-    const { data } = await supabase.rpc("resolve_username", { p_username: u });
-    const row = (data as any[])?.[0];
-    if (row && row.address !== ownAddress) return `Username "${u}" is taken`;
-    return null;
-  }
-
-  async function createWallet(name: string, pass: string): Promise<{ ok: true; mnemonic: string } | { ok: false; error: string }> {
-    const nameErr = await validateUsername(name);
-    if (nameErr) return { ok: false, error: nameErr };
+  async function createWallet(pass: string): Promise<{ ok: true; mnemonic: string } | { ok: false; error: string }> {
     const w: any = await generateWallet();
-    w.username = name;
     await Vault.saveEncryptedWallet(w, pass);
     const ts = Date.now();
-    const sig = await signData(w.privateKey, `register:${w.address}:${name}:${ts}`);
+    const sig = await signData(w.privateKey, `register:${w.address}:${ts}`);
     const reg = await Relay.registerPlayer({
-      address: w.address, username: name, publicKey: w.publicKey, signature: sig, timestamp: ts,
+      address: w.address, publicKey: w.publicKey, signature: sig, timestamp: ts,
     });
     if (!reg.ok) return { ok: false, error: reg.error || "Failed to register wallet" };
-    setVaultPub({ address: w.address, publicKey: w.publicKey, username: w.username });
+    setVaultPub({ address: w.address, publicKey: w.publicKey });
     setWallet(w);
     return { ok: true, mnemonic: w.mnemonic };
   }
 
   // secret = either a 64-hex private key or a 12-word BIP39 mnemonic.
-  async function importWallet(name: string, secret: string, pass: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  async function importWallet(secret: string, pass: string): Promise<{ ok: true } | { ok: false; error: string }> {
     const raw = secret.trim();
     let priv = "";
     let mnemonic: string | undefined;
@@ -69,17 +59,15 @@ export function useWalletVault() {
     } catch {
       return { ok: false, error: "Invalid key material" };
     }
-    const nameErr = await validateUsername(name, address);
-    if (nameErr) return { ok: false, error: nameErr };
-    const w: any = { address, publicKey, privateKey: priv, username: name, mnemonic };
+    const w: any = { address, publicKey, privateKey: priv, mnemonic };
     await Vault.saveEncryptedWallet(w, pass);
     const ts = Date.now();
-    const sig = await signData(priv, `register:${address}:${name}:${ts}`);
+    const sig = await signData(priv, `register:${address}:${ts}`);
     const reg = await Relay.registerPlayer({
-      address, username: name, publicKey, signature: sig, timestamp: ts,
+      address, publicKey, signature: sig, timestamp: ts,
     });
     if (!reg.ok) return { ok: false, error: reg.error || "Failed to register wallet" };
-    setVaultPub({ address: w.address, publicKey: w.publicKey, username: w.username });
+    setVaultPub({ address: w.address, publicKey: w.publicKey });
     setWallet(w);
     return { ok: true };
   }

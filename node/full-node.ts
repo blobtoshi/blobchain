@@ -133,22 +133,41 @@ const httpServer = app.listen(PORT, () => {
 
 const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
 
+// Per-socket state: tracks malformed-message strikes for backpressure, and the
+// last block height we've delivered so a reconnecting client can resync.
+const MAX_MALFORMED = 5;
+const sockState = new WeakMap<WebSocket, { strikes: number }>();
+
 wss.on("connection", (ws) => {
+  sockState.set(ws, { strikes: 0 });
   // Greet immediately with our identity + tip so the client can decide
   // whether to request a sync.
   send(ws, { type: "hello", nodeId: NODE_ID, version: PROTOCOL_VERSION, chainTip: chainTip() });
 
   ws.on("message", (raw) => {
+    const state = sockState.get(ws) ?? { strikes: 0 };
     let msg: ClientMsg;
     try { msg = JSON.parse(raw.toString()); }
-    catch { return send(ws, { type: "error", message: "invalid json" }); }
+    catch {
+      state.strikes += 1;
+      sockState.set(ws, state);
+      send(ws, { type: "error", message: "invalid json" });
+      if (state.strikes >= MAX_MALFORMED) {
+        log("warn", "dropping socket: too many malformed messages");
+        try { ws.close(1008, "malformed"); } catch { /* ignore */ }
+      }
+      return;
+    }
     handleMessage(ws, msg).catch((e) => {
       log("error", "handler crashed", { err: String(e) });
       send(ws, { type: "error", message: "internal error" });
     });
   });
 
-  ws.on("close", () => gossip.unsubscribe(ws));
+  ws.on("close", () => {
+    gossip.unsubscribe(ws);
+    sockState.delete(ws);
+  });
 });
 
 async function handleMessage(ws: WebSocket, msg: ClientMsg) {

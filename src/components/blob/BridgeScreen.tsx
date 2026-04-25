@@ -63,7 +63,7 @@ export default function BridgeScreen(props: any) {
             <span className="text-foreground"> ↔ Solana</span>
           </h1>
           <div className="text-sm text-muted-foreground max-w-xl leading-relaxed">
-            Move value between Blob Chain and Solana. Forward bridging is free; reverse redemption charges a small bridge fee that covers the Blob Chain credit transaction.
+            Move value between Blob Chain and Solana.
           </div>
         </div>
       </div>

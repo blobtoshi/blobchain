@@ -8,7 +8,7 @@
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Send, Wallet, Plus, Download, Lock, Settings as SettingsIcon, LogOut, ChevronDown, Eye, EyeOff, ArrowLeftRight } from "lucide-react";
+import { Send, Wallet, Plus, Download, Lock, Settings as SettingsIcon, LogOut, ChevronDown, Eye, EyeOff, ArrowLeftRight, Copy, Check, ShieldAlert, KeyRound, FileKey } from "lucide-react";
 import blobLogo from "@/assets/blob-logo.png";
 
 import { useBlockchain } from "@/hooks/useBlockchain";
@@ -52,12 +52,19 @@ export default function BlobChainApp() {
 
   const [connectOpen, setConnectOpen] = useState(false);
   const [connectMode, setConnectMode] = useState<"choose" | "create" | "import">("choose");
+  const [importMode, setImportMode] = useState<"seed" | "privkey">("seed");
   const [nameIn, setNameIn] = useState("");
   const [pass1, setPass1] = useState("");
   const [pass2, setPass2] = useState("");
   const [importJson, setImportJson] = useState("");
   const [connectErr, setConnectErr] = useState("");
   const [creating, setCreating] = useState(false);
+
+  // Seed-phrase reveal flow shown right after a successful create.
+  const [seedRevealOpen, setSeedRevealOpen] = useState(false);
+  const [seedPhrase, setSeedPhrase] = useState("");
+  const [seedConfirmed, setSeedConfirmed] = useState(false);
+  const [seedCopied, setSeedCopied] = useState(false);
 
   useEffect(() => { document.title = "BLOB CHAIN — Proof-of-Gaming"; }, []);
 

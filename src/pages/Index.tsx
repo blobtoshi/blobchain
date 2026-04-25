@@ -345,7 +345,7 @@ export default function BlobChainApp() {
     </Dialog>
   );
 
-  const LockedGate = ({ context }: { context: "wallet" | "bridge" }) => (
+  const LockedGate = () => (
     <div className="glass-hi p-10 text-center space-y-4">
       <div className="text-sm text-muted-foreground">{vaultPub ? "Wallet locked" : "No wallet connected"}</div>
       <button

@@ -66,7 +66,7 @@ export default function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent
       setResolving(false);
       const row = (data as any[])?.[0];
       if (error || !row) { setResolved(null); return; }
-      setResolved({ address: row.address, username: row.username });
+      setResolved({ address: row.address: row.username });
     })();
     return () => { cancelled = true; };
   }, [to]);
@@ -115,7 +115,7 @@ export default function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent
       }
       const tx = {
         id: txid.slice(0, 40),
-        from: wallet.address, fromUsername: wallet.username,
+        from: wallet.address,
         to: toAddress, amount, fee,
         feeRate: activeFeeRate, memo,
         signature: sig, publicKey: wallet.publicKey,

@@ -155,20 +155,20 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
         lastSeen: p.lastActive ? new Date(p.lastActive).getTime() : 0,
       });
     }
-    const touch = (addr: string, username?: string) => {
+    const touch = (addr: string) => {
       if (!addr || addr === "coinbase") return;
-      if (!m.has(addr)) m.set(addr, { address: addr, username, sent: 0, received: 0, mined: 0, txCount: 0, lastSeen: 0 });
+      if (!m.has(addr)) m.set(addr, { address: addr, sent: 0, received: 0, mined: 0, txCount: 0, lastSeen: 0 });
       const e = m.get(addr)!;
-      if (username && !e.username) e.username = username;
+      
       return e;
     };
     for (const tx of allTxs) {
       const ts = tx.timestamp;
       if (tx.kind === "reward") {
-        const e = touch(tx.to, tx.toUsername); if (e) { e.mined += tx.amount; e.lastSeen = Math.max(e.lastSeen, ts); }
+        const e = touch(tx.to, tx); if (e) { e.mined += tx.amount; e.lastSeen = Math.max(e.lastSeen, ts); }
       } else {
-        const f = touch(tx.from, tx.fromUsername);
-        const t = touch(tx.to, tx.toUsername);
+        const f = touch(tx.from, tx);
+        const t = touch(tx.to, tx);
         if (f) { f.sent += tx.amount + tx.fee; f.txCount++; f.lastSeen = Math.max(f.lastSeen, ts); }
         if (t) { t.received += tx.amount; t.txCount++; t.lastSeen = Math.max(t.lastSeen, ts); }
       }
@@ -214,7 +214,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
     const q = addrF.q.trim().toLowerCase();
     const minB = addrF.minBalance === "" ? null : Number(addrF.minBalance);
     const out = addressBook.filter(a => {
-      if (q && !a.address.toLowerCase().includes(q) && !(a.username || "").toLowerCase().includes(q)) return false;
+      if (q && !a.address.toLowerCase().includes(q) && !false) return false;
       const bal = a.received + a.mined - a.sent;
       if (minB !== null && bal < minB) return false;
       if (addrF.hasMined === "yes" && a.mined <= 0) return false;
@@ -228,7 +228,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
       case "mined-desc": out.sort((a, b) => b.mined - a.mined); break;
       case "tx-desc": out.sort((a, b) => b.txCount - a.txCount); break;
       case "recent": out.sort((a, b) => b.lastSeen - a.lastSeen); break;
-      case "username": out.sort((a, b) => (a.username || "~").localeCompare(b.username || "~")); break;
+      case "username": out.sort((a, b) => "~".localeCompare(b.username || "~")); break;
       default: out.sort((a, b) => (b.received + b.mined - b.sent) - (a.received + a.mined - a.sent));
     }
     return out;
@@ -242,7 +242,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
       b.hash?.toLowerCase().includes(q) ||
       b.previousHash?.toLowerCase().includes(q) ||
       b.winner?.toLowerCase().includes(q) ||
-      b.winnerUsername?.toLowerCase().includes(q) ||
+      b?.toLowerCase().includes(q) ||
       b.seed?.toLowerCase().includes(q)
     ).slice(0, 10);
     const txs = [...memTxs, ...allTxs].filter(t =>
@@ -250,13 +250,13 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
       t.signature?.toLowerCase().includes(q) ||
       t.from?.toLowerCase().includes(q) ||
       t.to?.toLowerCase().includes(q) ||
-      t.fromUsername?.toLowerCase().includes(q) ||
-      t.toUsername?.toLowerCase().includes(q) ||
+      t?.toLowerCase().includes(q) ||
+      t?.toLowerCase().includes(q) ||
       String(t.amount).includes(q)
     ).slice(0, 15);
     const addresses = addressBook.filter(a =>
       a.address.toLowerCase().includes(q) ||
-      a.username?.toLowerCase().includes(q) ||
+      
       (q === "blob" && a.address === "coinbase")
     ).slice(0, 10);
     return { blocks, txs, addresses };
@@ -276,7 +276,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
           <input
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Search by block #, address, tx hash, signature, username, seed…"
+            placeholder="Search by block #, address, tx hash, signature, seed…"
             className="w-full bg-background/40 border border-border rounded-none pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:border-[hsl(var(--warning))] num placeholder:font-sans placeholder:text-muted-foreground"
           />
         </div>
@@ -553,7 +553,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                   ? <HandCoins className="w-3.5 h-3.5 text-[hsl(var(--warning))]" />
                   : <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground" />}
                 <span className="text-foreground/80 truncate">{t.kind === "reward" ? "Block Reward" : (t.from === "coinbase" ? "blob" : shortHash(t.from, 6))}</span>
-                <span className="hidden sm:block text-foreground/80 truncate">{t.toUsername || shortHash(t.to, 6)}</span>
+                <span className="hidden sm:block text-foreground/80 truncate">{t || shortHash(t.to, 6)}</span>
                 <span className="num text-primary/80">{t.amount} BLOB</span>
                 <span className="num text-muted-foreground">{t.status === "pending" ? "—" : `#${t.block}`}</span>
                 <span className={`num text-right ${t.status === "pending" ? "text-[hsl(var(--warning))]" : "text-muted-foreground"}`}>
@@ -619,7 +619,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                   <div className="glass-hi p-4 space-y-2">
                     <div className="label-eyebrow">Address</div>
                     <div className="num text-sm text-foreground/90 break-all">{selAddr}</div>
-                    {a?.username && <div className="text-xs text-muted-foreground">@{a.username}</div>}
+                    
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <ExplorerStat label="Balance" value={`${balance.toFixed(4)}`} sub="BLOB" />
@@ -679,7 +679,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                         { v: "mined-desc", l: "Most mined" },
                         { v: "tx-desc", l: "Most active" },
                         { v: "recent", l: "Recently seen" },
-                        { v: "username", l: "Username A→Z" },
+                        
                       ]} />
                   </div>
                 </div>
@@ -702,7 +702,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
                     className="w-full text-left glass px-3 py-2.5 hover:bg-secondary/30 transition grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_auto_auto_60px] gap-3 items-center text-xs">
                     <div className="min-w-0">
                       <div className="num text-foreground/80 truncate">{shortHash(a.address, 8)}</div>
-                      {a.username && <div className="text-[10px] text-muted-foreground truncate">{a.username}</div>}
+                      
                     </div>
                     <div className="text-right">
                       <div className="num text-primary/80 whitespace-nowrap">{balance.toFixed(8)} BLOB</div>

@@ -539,7 +539,7 @@ export default function BlobChainApp() {
             ) : !gameLaunched ? (
               <MineHero blockInfo={blockInfo} onLaunch={() => setGameLaunched(true)} />
             ) : (
-              <BlobRunGame wallet={wallet} blockInfo={blockInfo} onEntrySubmit={onEntrySubmit} myEntry={myEntry} />
+              <BlobRunGame wallet={wallet} blockInfo={blockInfo} onEntrySubmit={onEntrySubmit} />
             )}
             <MiningPanel blockInfo={blockInfo} entries={entries} myEntry={myEntry} chain={chain} />
           </div>

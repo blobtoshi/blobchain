@@ -66,6 +66,10 @@ export function useBlockchain(walletRef: React.MutableRefObject<any>) {
         const tip = chainRef.current[chainRef.current.length - 1];
         const activeH = (tip ? Number(tip.height) : 0) + 1;
         if (en.block_height !== activeH) return;
+        // Reject entries with a stale/forked block seed — they were playing a
+        // different level than the current block and must not appear here.
+        const expectedSeed = String(getBlockInfo(chainRef.current, true).seed);
+        if (en.block_seed != null && String(en.block_seed) !== expectedSeed) return;
         setEntries(prev => {
           const i = prev.findIndex(x => x.address === en.address);
           if (i === -1) return [...prev, en];

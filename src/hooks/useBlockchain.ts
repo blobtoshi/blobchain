@@ -101,8 +101,6 @@ export function useBlockchain(walletRef: React.MutableRefObject<any>) {
   // Guarded against races with onBlock (which proactively clears entries) and
   // the initial-load effect: we skip if we've already fetched this height+seed,
   // and we drop the response if the active block has moved on while in flight.
-  const lastFetchedKeyRef = useRef<string>("");
-  const inFlightFetchRef = useRef<string>("");
   useEffect(() => {
     const key = `${blockInfo.height}:${blockInfo.seed}`;
     if (lastFetchedKeyRef.current === key) return;

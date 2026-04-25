@@ -40,14 +40,14 @@ import {
   PublicKey,
   sendAndConfirmTransaction,
   Transaction,
-} from "npm:@solana/web3.js@1.95.4";
+} from "https://esm.sh/@solana/web3.js@1.95.4";
 import {
   createAssociatedTokenAccountIdempotentInstruction,
   createMintToInstruction,
   getAssociatedTokenAddress,
   getMint,
-} from "npm:@solana/spl-token@0.4.9";
-import bs58 from "npm:bs58@5.0.0";
+} from "https://esm.sh/@solana/spl-token@0.4.9?deps=@solana/web3.js@1.95.4&bundle-deps";
+import bs58 from "https://esm.sh/bs58@5.0.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

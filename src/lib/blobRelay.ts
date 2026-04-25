@@ -140,6 +140,22 @@ function blockFromRow(r: any): Block {
 }
 
 export async function fetchChain(): Promise<Block[]> {
+  await ensureRelayMode();
+  if (activeMode === "node" && nodeClient) {
+    // Page through /blocks until we hit an empty/short page.
+    const out: Block[] = [];
+    let cursor = 1;
+    let safety = 1000;
+    while (safety-- > 0) {
+      const page = await nodeClient.fetchBlocks(cursor, 200);
+      if (page.length === 0) break;
+      out.push(...page);
+      const last = page[page.length - 1].height;
+      if (page.length < 200) break;
+      cursor = last + 1;
+    }
+    return out;
+  }
   const { data, error } = await supabase
     .from("blob_chain").select("*").order("height", { ascending: true });
   if (error) { console.error("[relay] fetchChain", error); return []; }
@@ -147,8 +163,10 @@ export async function fetchChain(): Promise<Block[]> {
 }
 
 // Block sealing happens on the server; trigger it for a closed height.
-// Idempotent: server returns { already: true } if already sealed.
+// In node mode this is a no-op — the node seals on its own timer.
 export async function sealBlock(height: number): Promise<{ ok: boolean; error?: string }> {
+  await ensureRelayMode();
+  if (activeMode === "node") return { ok: true };
   const { data, error } = await supabase.functions.invoke("seal-block", {
     body: { height },
   });
@@ -177,6 +195,10 @@ function txFromRow(r: any): Tx {
 }
 
 export async function fetchMempool(): Promise<Tx[]> {
+  await ensureRelayMode();
+  if (activeMode === "node" && nodeClient) {
+    return await nodeClient.fetchMempool();
+  }
   const { data, error } = await supabase
     .from("blob_mempool").select("*").order("timestamp", { ascending: true });
   if (error) { console.error("[relay] fetchMempool", error); return []; }
@@ -184,6 +206,10 @@ export async function fetchMempool(): Promise<Tx[]> {
 }
 
 export async function fetchFeeInfo(): Promise<FeeInfo | null> {
+  await ensureRelayMode();
+  if (activeMode === "node" && nodeClient) {
+    return await nodeClient.fetchFeeInfo();
+  }
   try {
     const url = `${(import.meta as any).env.VITE_SUPABASE_URL}/functions/v1/submit-tx`;
     const res = await fetch(url, {
@@ -198,6 +224,26 @@ export async function fetchFeeInfo(): Promise<FeeInfo | null> {
 }
 
 export async function pushTx(tx: Tx): Promise<{ ok: boolean; error?: string; fee?: number; bytes?: number }> {
+  await ensureRelayMode();
+  if (activeMode === "node" && nodeClient) {
+    try {
+      const ack = await nodeClient.submitTx({
+        id: tx.id,
+        from: tx.from,
+        to: tx.to,
+        amount: tx.amount,
+        feeRate: tx.feeRate ?? 0,
+        memo: tx.memo ?? "",
+        signature: tx.signature,
+        publicKey: tx.publicKey,
+        timestamp: tx.timestamp,
+      });
+      return { ok: true, fee: ack.fee, bytes: ack.bytes };
+    } catch (e: any) {
+      console.error("[relay] pushTx (node)", e);
+      return { ok: false, error: e?.message ?? String(e) };
+    }
+  }
   const { data, error } = await supabase.functions.invoke("submit-tx", {
     body: {
       id: tx.id,
@@ -231,6 +277,11 @@ function entryFromRow(r: any): Entry {
 }
 
 export async function fetchEntries(blockHeight: number): Promise<Entry[]> {
+  await ensureRelayMode();
+  // The node doesn't expose a per-height entries REST endpoint; live entries
+  // arrive via WS `newEntry` gossip after subscribe. Returning [] here is
+  // safe — subscribeRelay will populate state as entries come in.
+  if (activeMode === "node") return [];
   const { data, error } = await supabase
     .from("blob_entries").select("*").eq("block_height", blockHeight);
   if (error) { console.error("[relay] fetchEntries", error); return []; }
@@ -240,6 +291,27 @@ export async function fetchEntries(blockHeight: number): Promise<Entry[]> {
 export async function pushEntry(
   e: Entry & { publicKey: string }
 ): Promise<{ ok: boolean; error?: string }> {
+  await ensureRelayMode();
+  if (activeMode === "node" && nodeClient) {
+    try {
+      await nodeClient.submitEntry({
+        address: e.address,
+        score: e.score,
+        block_height: e.block_height,
+        block_seed: e.block_seed ?? "",
+        signature: e.signature,
+        publicKey: e.publicKey,
+        inputs: e.inputs ?? "",
+        inputs_hash: e.inputs_hash ?? "",
+        frame_count: e.frame_count ?? 0,
+        engine_version: e.engine_version ?? 0,
+      });
+      return { ok: true };
+    } catch (err: any) {
+      console.error("[relay] pushEntry (node)", err);
+      return { ok: false, error: err?.message ?? String(err) };
+    }
+  }
   const { data, error } = await supabase.functions.invoke("submit-entry", {
     body: {
       address: e.address,

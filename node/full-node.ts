@@ -75,17 +75,53 @@ app.get("/health", (_req, res) => {
   });
 });
 
-app.get("/chain/tip", (_req, res) => res.json(chainTip()));
+app.get("/chain/tip", (req, res) => {
+  const tip = chainTip();
+  // ETag = height:hash so clients polling can short-circuit with If-None-Match.
+  const etag = `"${tip.height}-${tip.hash.slice(0, 16)}"`;
+  res.setHeader("ETag", etag);
+  res.setHeader("Cache-Control", "no-cache");
+  if (req.headers["if-none-match"] === etag) {
+    res.status(304).end();
+    return;
+  }
+  res.json(tip);
+});
 
 app.get("/blocks", (req, res) => {
-  const from = Math.max(0, Number(req.query.from ?? 1));
-  const limit = Math.min(500, Math.max(1, Number(req.query.limit ?? 100)));
+  const fromRaw = Number(req.query.from);
+  const from = Number.isFinite(fromRaw) ? Math.max(0, fromRaw | 0) : 1;
+  const limitRaw = Number(req.query.limit);
+  const limit = Number.isFinite(limitRaw)
+    ? Math.min(500, Math.max(1, limitRaw | 0))
+    : 100;
   const rows = d.stmts.getBlocksFrom.all(from, limit);
+  res.setHeader("Cache-Control", "no-store");
   res.json(rows.map(rowToBlock));
 });
 
-app.get("/mempool", (_req, res) => {
-  res.json(d.stmts.getMempool.all().map(rowToTx));
+app.get("/blocks/:height", (req, res) => {
+  const h = Number(req.params.height);
+  if (!Number.isFinite(h) || h < 0) {
+    res.status(400).json({ error: "invalid height" });
+    return;
+  }
+  const row = d.stmts.getBlockByHeight.get(h);
+  if (!row) {
+    res.status(404).json({ error: "not found" });
+    return;
+  }
+  res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  res.json(rowToBlock(row));
+});
+
+app.get("/mempool", (req, res) => {
+  const sinceRaw = Number(req.query.since);
+  const since = Number.isFinite(sinceRaw) ? sinceRaw : 0;
+  const all = d.stmts.getMempool.all().map(rowToTx);
+  const filtered = since > 0 ? all.filter((t) => t.timestamp > since) : all;
+  res.setHeader("Cache-Control", "no-store");
+  res.json(filtered);
 });
 
 app.get("/fee-info", (_req, res) => res.json(feeInfo(d)));

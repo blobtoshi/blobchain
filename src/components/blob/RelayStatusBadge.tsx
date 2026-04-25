@@ -12,7 +12,7 @@ export function RelayStatusBadge() {
 
   useEffect(() => {
     const off = onRelayModeChange((m) => setMode(m));
-    return off;
+    return () => { off(); };
   }, []);
 
   useEffect(() => {

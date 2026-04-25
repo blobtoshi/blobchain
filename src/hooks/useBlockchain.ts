@@ -24,8 +24,10 @@ export function useBlockchain(walletRef: React.MutableRefObject<any>) {
   // Refs to avoid stale closures inside async effects.
   const entriesRef = useRef(entries);
   const chainRef = useRef(chain);
+  const blockInfoRef = useRef(blockInfo);
   useEffect(() => { entriesRef.current = entries; }, [entries]);
   useEffect(() => { chainRef.current = chain; }, [chain]);
+  useEffect(() => { blockInfoRef.current = blockInfo; }, [blockInfo]);
 
   // ── Initial load + realtime subscription ─────────────────────────────────
   useEffect(() => {
@@ -133,6 +135,13 @@ export function useBlockchain(walletRef: React.MutableRefObject<any>) {
   }, [entries.length, attemptSeal]);
 
   const onEntrySubmit = useCallback(entry => {
+    const current = blockInfoRef.current;
+    const matchesActiveBlock =
+      Number(entry.block_height) === Number(current.height) &&
+      (entry.block_seed == null || String(entry.block_seed) === String(current.seed));
+
+    if (!matchesActiveBlock) return;
+
     setMyEntry(entry);
     setEntries(e => e.find(x => x.address === entry.address) ? e.map(x => x.address === entry.address ? entry : x) : [...e, entry]);
   }, []);

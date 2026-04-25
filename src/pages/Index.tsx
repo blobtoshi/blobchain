@@ -519,7 +519,7 @@ export default function BlobChainApp() {
                     src={minerSlime}
                     alt=""
                     aria-hidden="true"
-                    className="mx-auto mb-5 w-24 h-24 sm:w-28 sm:h-28 object-contain opacity-70 drop-shadow-[0_0_30px_hsl(var(--primary)/0.4)] [image-rendering:pixelated]"
+                    className="mx-auto mb-5 w-24 h-24 sm:w-28 sm:h-28 opacity-70 drop-shadow-[0_0_30px_hsl(var(--primary)/0.4)] [image-rendering:pixelated] object-contain"
                   />
                   <h1 className="text-3xl sm:text-5xl font-semibold tracking-tight mb-3">
                     <span className="text-foreground">{vaultPub ? "Unlock to mine " : "Connect to mine "}</span>

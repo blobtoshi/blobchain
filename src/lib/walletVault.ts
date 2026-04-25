@@ -118,17 +118,15 @@ export async function unlockWallet(passphrase: string): Promise<WalletPlain> {
     throw new Error("Wrong passphrase");
   }
   const plain = dec.decode(plainBuf);
-  // Backward compatible: older vaults stored the raw private key as plaintext.
-  let privateKey = plain;
+  let privateKey = "";
   let mnemonic: string | undefined;
-  if (plain.startsWith("{")) {
-    try {
-      const obj = JSON.parse(plain);
-      if (typeof obj.privateKey === "string") privateKey = obj.privateKey;
-      if (typeof obj.mnemonic === "string" && obj.mnemonic) mnemonic = obj.mnemonic;
-    } catch {
-      /* fall back to raw */
-    }
+  try {
+    const obj = JSON.parse(plain);
+    if (typeof obj.privateKey !== "string") throw new Error("Corrupt wallet vault");
+    privateKey = obj.privateKey;
+    if (typeof obj.mnemonic === "string" && obj.mnemonic) mnemonic = obj.mnemonic;
+  } catch {
+    throw new Error("Corrupt wallet vault");
   }
   return {
     address: v.address,
@@ -140,13 +138,4 @@ export async function unlockWallet(passphrase: string): Promise<WalletPlain> {
 
 export function clearWallet() {
   localStorage.removeItem(VAULT_KEY);
-  for (const k of LEGACY_KEYS) localStorage.removeItem(k);
-}
-
-// One-time cleanup: remove legacy/older-format wallets from any browser that
-// still has them. Old (P-256/JWK) wallets can't sign for the new chain anyway.
-export function purgeLegacyPlaintextWallet() {
-  for (const k of LEGACY_KEYS) {
-    if (localStorage.getItem(k)) localStorage.removeItem(k);
-  }
 }

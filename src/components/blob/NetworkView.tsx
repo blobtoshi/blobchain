@@ -5,7 +5,7 @@ import { calcTotalSupply } from "@/lib/blob/chain";
 import { memoBytes } from "@/lib/blob/fees";
 import {
   BLOCK_TIME, MAX_SUPPLY, MAX_BLOCK_SIZE, HALVING_BLOCKS, BASE_FEE_RATE, MIN_FEE_RATE,
-  BLOB_DECIMALS, MAX_MEMO_BYTES,
+  BLOB_DECIMALS, MAX_MEMO_BYTES, BRIDGE_ADDRESS,
 } from "@/lib/blob/constants";
 import blobCoin from "@/assets/blob-coin.png";
 

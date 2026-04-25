@@ -14,6 +14,7 @@ import blobLogo from "@/assets/blob-logo.png";
 import { useBlockchain } from "@/hooks/useBlockchain";
 import { useWalletVault } from "@/hooks/useWalletVault";
 import { calcBalance } from "@/lib/blob/chain";
+import { shortAddress } from "@/lib/blob/explorer";
 
 import BlobRunGame from "@/components/blob/BlobRunGame";
 import MineHero from "@/components/blob/MineHero";
@@ -368,7 +369,7 @@ export default function BlobChainApp() {
             {newBlock.isMine ? "🏆 You mined block" : "New block"} #{newBlock.height}
           </span>
           <span className="text-xs text-muted-foreground">
-            Winner: {newBlock.winnerUsername || "—"} · Score: <span className="num">{newBlock.winnerScore?.toLocaleString()}</span> · Reward: <span className="num text-foreground/80">{newBlock.reward} BLOB</span>
+            Winner: <span className="num">{shortAddress(newBlock.winner)}</span> · Score: <span className="num">{newBlock.winnerScore?.toLocaleString()}</span> · Reward: <span className="num text-foreground/80">{newBlock.reward} BLOB</span>
           </span>
         </div>
       )}
@@ -437,7 +438,7 @@ export default function BlobChainApp() {
                 <DropdownMenuTrigger asChild>
                   <button className="flex items-center gap-2 px-3 py-2 rounded-full border border-border hover:border-primary/40 transition text-xs group">
                     <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
-                    <span className="hidden md:inline text-muted-foreground max-w-[100px] truncate">{wallet.username}</span>
+                    <span className="hidden md:inline num text-muted-foreground">{shortAddress(wallet.address)}</span>
                     <span className="num text-primary">{(Math.floor(balance * 100) / 100).toFixed(2)}</span>
                     <ChevronDown className="w-3 h-3 text-muted-foreground group-hover:text-primary transition" />
                   </button>
@@ -447,7 +448,6 @@ export default function BlobChainApp() {
                     Connected as
                   </DropdownMenuLabel>
                   <div className="px-2 pb-2">
-                    <div className="text-sm font-medium truncate">{wallet.username}</div>
                     <div className="num text-[10px] text-muted-foreground truncate">{wallet.address}</div>
                   </div>
                   <DropdownMenuSeparator />
@@ -641,7 +641,7 @@ export default function BlobChainApp() {
           </DialogHeader>
           <div className="space-y-3 pt-1">
             <div className="text-xs text-muted-foreground">
-              {vaultPub?.username ? <>Welcome back, <span className="text-foreground">{vaultPub.username}</span></> : "Enter your passphrase to decrypt your wallet"}
+              {vaultPub?.address ? <>Welcome back, <span className="num text-foreground">{shortAddress(vaultPub.address)}</span></> : "Enter your passphrase to decrypt your wallet"}
             </div>
             <input
               type="password" value={unlockPass} onChange={e => setUnlockPass(e.target.value)}

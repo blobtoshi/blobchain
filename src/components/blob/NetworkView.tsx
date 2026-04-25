@@ -7,6 +7,7 @@ import {
   BLOCK_TIME, MAX_SUPPLY, MAX_BLOCK_SIZE, HALVING_BLOCKS, BASE_FEE_RATE, MIN_FEE_RATE,
   BLOB_DECIMALS, MAX_MEMO_BYTES,
 } from "@/lib/blob/constants";
+import blobCoin from "@/assets/blob-coin.png";
 
 export default function NetworkView({ nodeCount, chain, blockInfo, mempool = [] }: any) {
   const [feeInfo, setFeeInfo] = useState<{ recommendedFeeRate: number; minFeeRate: number; baseFeeRate: number } | null>(null);
@@ -170,7 +171,7 @@ export default function NetworkView({ nodeCount, chain, blockInfo, mempool = [] 
       <div className="glass p-5 rounded-md">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-primary/15 border border-primary/30" />
+            <img src={blobCoin} alt="BLOB coin" className="w-8 h-8 object-contain" />
             <div>
               <div className="text-sm font-semibold tracking-tight">BLOB</div>
               <div className="text-[11px] text-foreground/50">Native asset · Proof-of-Gaming</div>

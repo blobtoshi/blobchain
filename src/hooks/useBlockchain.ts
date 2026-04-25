@@ -57,6 +57,12 @@ export function useBlockchain(walletRef: React.MutableRefObject<any>) {
         });
         setNewBlock({ ...b, isMine: b.winner === walletRef.current?.address });
         setTimeout(() => setNewBlock(null), 5000);
+        // Mark the new active block as already "fetched" (empty) so the
+        // height/seed effect doesn't race a redundant fetchEntries call.
+        const newChain = [...chainRef.current.filter(x => x.height !== b.height), b]
+          .sort((a, b2) => a.height - b2.height);
+        const nextInfo = getBlockInfo(newChain, false);
+        lastFetchedKeyRef.current = `${nextInfo.height}:${nextInfo.seed}`;
         setEntries([]);
         setMyEntry(null);
       },

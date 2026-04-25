@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Standalone copy of src/lib/blob/simulator.ts for the Deno edge runtime.
 // Keep BYTE-FOR-BYTE in sync with the client copy. ENGINE_VERSION must match.
 

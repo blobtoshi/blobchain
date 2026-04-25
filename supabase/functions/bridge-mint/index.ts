@@ -124,35 +124,24 @@ async function findPendingBridgeTx(
   return data;
 }
 
+// Delegate the heavy SPL mint to a dedicated function so each step gets its
+// own per-request CPU budget. Returns the Solana tx signature.
 async function mintSpl(recipient: string, amount: number): Promise<string> {
-  if (!SOLANA_RPC_URL) throw new Error("SOLANA_RPC_URL is not configured");
-  if (!SOLANA_MINT_AUTHORITY) throw new Error("SOLANA_MINT_AUTHORITY_SECRET_KEY is not configured");
-  if (!SOLANA_SPL_MINT_ADDRESS) throw new Error("SOLANA_SPL_MINT_ADDRESS is not configured");
-
-  const raw = SOLANA_MINT_AUTHORITY.trim();
-  const authority = raw.startsWith("[")
-    ? Keypair.fromSecretKey(Uint8Array.from(JSON.parse(raw)))
-    : Keypair.fromSecretKey(bs58.decode(raw));
-
-  const conn = new Connection(SOLANA_RPC_URL, "confirmed");
-  const mintPub = new PublicKey(SOLANA_SPL_MINT_ADDRESS);
-  const recipientPub = new PublicKey(recipient);
-
-  const mintInfo = await getMint(conn as any, mintPub);
-  const baseUnits = BigInt(Math.round(amount * 10 ** mintInfo.decimals));
-  if (baseUnits <= 0n) throw new Error("Amount rounds to zero base units");
-
-  const ata = await getAssociatedTokenAddress(mintPub, recipientPub, true);
-  const tx = new Transaction().add(
-    createAssociatedTokenAccountIdempotentInstruction(
-      authority.publicKey, ata, recipientPub, mintPub,
-    ),
-    createMintToInstruction(mintPub, ata, authority.publicKey, baseUnits),
-  );
-
-  return await sendAndConfirmTransaction(conn, tx, [authority], {
-    commitment: "confirmed",
+  if (!SUPABASE_URL || !SERVICE_KEY) throw new Error("supabase env missing");
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/bridge-execute-mint`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${SERVICE_KEY}`,
+      "apikey": SERVICE_KEY,
+    },
+    body: JSON.stringify({ recipient, amount }),
   });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !json?.signature) {
+    throw new Error(json?.error || `bridge-execute-mint failed (${res.status})`);
+  }
+  return json.signature as string;
 }
 
 async function backgroundMint(

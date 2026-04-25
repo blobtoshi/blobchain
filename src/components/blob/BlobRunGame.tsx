@@ -316,7 +316,7 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
         {gs.status === "dead" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/85 backdrop-blur-sm">
             <div className="text-[10px] tracking-[0.3em] text-destructive/80 mb-2">FORKED</div>
-            <div className="num text-5xl font-semibold text-primary mb-1 drop-shadow-[0_0_24px_hsl(var(--primary)/0.5)]">
+            <div className="num text-4xl sm:text-6xl font-semibold leading-none drop-shadow-[0_0_24px_hsl(var(--primary)/0.4)] text-teal-100">
               {gs.score.toLocaleString()}
             </div>
             <div className="text-xs text-muted-foreground mb-6">Block closes in {blockInfo.remaining}s · Replay sealed for verification</div>

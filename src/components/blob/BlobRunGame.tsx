@@ -8,19 +8,21 @@ import {
   encodeInputs, hashInputs, ENGINE_VERSION,
 } from "@/lib/blob/simulator";
 
+type InputEv = { f: number; t: number };
+type SimState = ReturnType<typeof initialState>;
+type Particle = { x: number; y: number; vx: number; vy: number; life: number; col: string; sz: number };
+type Trail = { x: number; y: number; action: string };
+
 export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry }) {
-  const cvs = useRef(null);
-  const raf = useRef(null);
-  const stateRef = useRef(null);
-  const inputsRef = useRef([]); // recorded events for verifiable replay
+  const cvs = useRef<HTMLCanvasElement | null>(null);
+  const raf = useRef<number | null>(null);
+  const stateRef = useRef<SimState | null>(null);
+  const inputsRef = useRef<InputEv[]>([]); // recorded events for verifiable replay
   const jRef = useRef(false);
   const dRef = useRef(false);
   const stRef = useRef("idle");
   // Render-only scratch (NOT part of deterministic simulator state).
-  const renderRef = useRef<{
-    trail: Array<{ x: number; y: number; action: string }>;
-    lastCombo: number;
-  }>({ trail: [], lastCombo: 0 });
+  const renderRef = useRef<{ trail: Trail[]; lastCombo: number }>({ trail: [], lastCombo: 0 });
   const [gs, setGs] = useState({ status: "idle", score: 0, combo: 0 });
 
   const level = useRef(generateLevelPure(blockInfo.seed));
@@ -71,7 +73,7 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
   }, [recordEvent]);
 
   const startRun = useCallback(async () => {
-    cancelAnimationFrame(raf.current);
+    if (raf.current != null) cancelAnimationFrame(raf.current);
     jRef.current = false; dRef.current = false;
     stRef.current = "playing";
     inputsRef.current = [];
@@ -81,10 +83,12 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
     stateRef.current = state;
     setGs({ status: "playing", score: 0, combo: 0 });
 
-    const ctx = cvs.current.getContext("2d");
-    const parts = []; // visual-only, NOT part of consensus
+    const canvas = cvs.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d")!;
+    const parts: Particle[] = []; // visual-only, NOT part of consensus
 
-    function spawnParts(x, y, col, n = 8) {
+    function spawnParts(x: number, y: number, col: string, n = 8) {
       for (let i = 0; i < n; i++) parts.push({
         x, y, vx: (Math.random() - .5) * 9, vy: Math.random() * -9 - 2,
         life: 1, col, sz: 2 + Math.random() * 4.5,
@@ -201,7 +205,7 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
       // Collect events queued for the upcoming tick (recordEvent appends with
       // f = state.frame + 1, so they live at the tail of inputsRef).
       const targetFrame = state.frame + 1;
-      const queuedAtFrame: any[] = [];
+      const queuedAtFrame: InputEv[] = [];
       for (let i = inputsRef.current.length - 1; i >= 0 && inputsRef.current[i].f === targetFrame; i--) {
         queuedAtFrame.unshift(inputsRef.current[i]);
       }
@@ -270,7 +274,7 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit, myEntry 
 
   useEffect(() => {
     startRun();
-    return () => cancelAnimationFrame(raf.current);
+    return () => { if (raf.current != null) cancelAnimationFrame(raf.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

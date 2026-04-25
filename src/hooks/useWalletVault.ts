@@ -50,6 +50,7 @@ export function useWalletVault() {
   async function importWallet(name: string, secret: string, pass: string): Promise<{ ok: true } | { ok: false; error: string }> {
     const raw = secret.trim();
     let priv = "";
+    let mnemonic: string | undefined;
     const looksHex = /^(0x)?[0-9a-fA-F]{64}$/.test(raw);
     if (looksHex) {
       priv = raw.toLowerCase().replace(/^0x/, "");
@@ -59,6 +60,7 @@ export function useWalletVault() {
       if (wordCount !== 12) return { ok: false, error: "Seed phrase must be exactly 12 words" };
       if (!isValidMnemonic(phrase)) return { ok: false, error: "Invalid seed phrase (checksum mismatch or unknown words)" };
       priv = mnemonicToPrivateKey(phrase);
+      mnemonic = phrase;
     }
     let publicKey: string, address: string;
     try {
@@ -69,7 +71,7 @@ export function useWalletVault() {
     }
     const nameErr = await validateUsername(name, address);
     if (nameErr) return { ok: false, error: nameErr };
-    const w: any = { address, publicKey, privateKey: priv, username: name };
+    const w: any = { address, publicKey, privateKey: priv, username: name, mnemonic };
     await Vault.saveEncryptedWallet(w, pass);
     const ts = Date.now();
     const sig = await signData(priv, `register:${address}:${name}:${ts}`);

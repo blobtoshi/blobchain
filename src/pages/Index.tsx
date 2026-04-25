@@ -49,6 +49,38 @@ export default function BlobChainApp() {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showPriv, setShowPriv] = useState(false);
+  const [privCopied, setPrivCopied] = useState(false);
+  const [showSeed, setShowSeed] = useState(false);
+  const [seedSettingsCopied, setSeedSettingsCopied] = useState(false);
+
+  // Auto-hide sensitive material (private key + seed) after 30s or on tab blur.
+  useEffect(() => {
+    if (!showPriv && !showSeed) return;
+    const t = window.setTimeout(() => { setShowPriv(false); setShowSeed(false); }, 30_000);
+    const onVis = () => { if (document.hidden) { setShowPriv(false); setShowSeed(false); } };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("blur", onVis);
+    return () => {
+      window.clearTimeout(t);
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("blur", onVis);
+    };
+  }, [showPriv, showSeed]);
+
+  async function copyPrivateKey() {
+    try {
+      await navigator.clipboard.writeText(wallet?.privateKey ?? "");
+      setPrivCopied(true);
+      setTimeout(() => setPrivCopied(false), 2000);
+    } catch {}
+  }
+  async function copySeedSettings() {
+    try {
+      await navigator.clipboard.writeText(wallet?.mnemonic ?? "");
+      setSeedSettingsCopied(true);
+      setTimeout(() => setSeedSettingsCopied(false), 2000);
+    } catch {}
+  }
 
   const [connectOpen, setConnectOpen] = useState(false);
   const [connectMode, setConnectMode] = useState<"choose" | "create" | "import">("choose");
@@ -450,7 +482,7 @@ export default function BlobChainApp() {
                   <DropdownMenuItem onClick={() => setScreen("bridge")} className="cursor-pointer">
                     <ArrowLeftRight className="w-4 h-4 mr-2" /> Bridge to Solana
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => { setShowPriv(false); setSettingsOpen(true); }} className="cursor-pointer">
+                  <DropdownMenuItem onClick={() => { setShowPriv(false); setShowSeed(false); setSettingsOpen(true); }} className="cursor-pointer">
                     <SettingsIcon className="w-4 h-4 mr-2" /> Settings
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
@@ -663,8 +695,8 @@ export default function BlobChainApp() {
       </Dialog>
 
       {/* Settings dialog — public/private keys live here */}
-      <Dialog open={settingsOpen} onOpenChange={(o) => { setSettingsOpen(o); if (!o) setShowPriv(false); }}>
-        <DialogContent className="glass-hi border-border max-w-md">
+      <Dialog open={settingsOpen} onOpenChange={(o) => { setSettingsOpen(o); if (!o) { setShowPriv(false); setShowSeed(false); } }}>
+        <DialogContent className="glass-hi border-border max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-sm font-medium tracking-wide flex items-center gap-2">
               <SettingsIcon className="w-4 h-4 text-primary" /> Wallet settings
@@ -688,19 +720,72 @@ export default function BlobChainApp() {
                   {wallet.publicKey}
                 </div>
               </div>
+
+              {/* Seed phrase — only available for wallets created or imported via mnemonic */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <div className="label-eyebrow">Private key</div>
-                  <button
-                    onClick={() => setShowPriv(v => !v)}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] border border-destructive/30 text-destructive hover:bg-destructive/10 transition"
-                  >
-                    {showPriv ? <><EyeOff className="w-3 h-3" /> Hide</> : <><Eye className="w-3 h-3" /> Reveal</>}
-                  </button>
+                  <div className="label-eyebrow flex items-center gap-1.5"><FileKey className="w-3 h-3" /> Seed phrase</div>
+                  {wallet.mnemonic && (
+                    <button
+                      onClick={() => setShowSeed(v => !v)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] border border-[hsl(var(--warning)/0.4)] text-[hsl(var(--warning))] hover:bg-[hsl(var(--warning)/0.08)] transition"
+                    >
+                      {showSeed ? <><EyeOff className="w-3 h-3" /> Hide</> : <><Eye className="w-3 h-3" /> Reveal</>}
+                    </button>
+                  )}
+                </div>
+                {!wallet.mnemonic ? (
+                  <div className="text-[11px] text-muted-foreground p-3 rounded-md bg-secondary/40 border border-border">
+                    No seed phrase available — this wallet was imported from a raw private key.
+                  </div>
+                ) : showSeed ? (
+                  <div className="p-3 rounded-md border border-[hsl(var(--warning)/0.4)] bg-[hsl(var(--warning)/0.06)] space-y-2">
+                    <div className="text-[11px] text-[hsl(var(--warning))]">⚠ Anyone with these 12 words controls your wallet — never share or screenshot</div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {wallet.mnemonic.split(" ").map((word: string, i: number) => (
+                        <div key={i} className="flex items-center gap-1.5 px-2 py-1.5 rounded bg-card/60 border border-border">
+                          <span className="text-[9px] text-muted-foreground/60 num w-4">{i + 1}</span>
+                          <span className="text-[11px] font-medium">{word}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      onClick={copySeedSettings}
+                      className="w-full inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] border border-border hover:border-primary/40 hover:text-primary transition"
+                    >
+                      {seedSettingsCopied ? <><Check className="w-3 h-3" /> Copied</> : <><Copy className="w-3 h-3" /> Copy seed phrase</>}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-[10px] text-muted-foreground/50 leading-relaxed p-3 rounded-md bg-secondary/40 border border-border select-none">
+                    •••• •••• •••• •••• •••• •••• •••• •••• •••• •••• •••• ••••
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="label-eyebrow flex items-center gap-1.5"><KeyRound className="w-3 h-3" /> Private key</div>
+                  <div className="flex items-center gap-1.5">
+                    {showPriv && (
+                      <button
+                        onClick={copyPrivateKey}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] border border-border hover:border-primary/40 hover:text-primary transition"
+                      >
+                        {privCopied ? <><Check className="w-3 h-3" /> Copied</> : <><Copy className="w-3 h-3" /> Copy</>}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setShowPriv(v => !v)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] border border-destructive/30 text-destructive hover:bg-destructive/10 transition"
+                    >
+                      {showPriv ? <><EyeOff className="w-3 h-3" /> Hide</> : <><Eye className="w-3 h-3" /> Reveal</>}
+                    </button>
+                  </div>
                 </div>
                 {showPriv ? (
-                  <div className="p-3 rounded-md border border-destructive/30 bg-destructive/5">
-                    <div className="text-[11px] text-destructive mb-2">⚠ Never share this key — anyone with it controls your wallet</div>
+                  <div className="p-3 rounded-md border border-destructive/30 bg-destructive/5 space-y-1.5">
+                    <div className="text-[11px] text-destructive">⚠ Never share this key — anyone with it controls your wallet. Auto-hides in 30s or when you switch tabs.</div>
                     <div className="num text-[10px] text-foreground/70 break-all leading-relaxed">{wallet.privateKey}</div>
                   </div>
                 ) : (

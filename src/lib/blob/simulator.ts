@@ -87,6 +87,8 @@ export function initialState() {
     duckHeld: false,
     dead: false,
     passedFirstObstacle: false,
+    // Per-frame counters consumed by the renderer (visual-only, not part of consensus hash).
+    tokensPickedThisFrame: 0,
   };
 }
 
@@ -105,6 +107,7 @@ function applyInputs(state, events) {
 // Returns true if the player is alive after the tick, false if the run ended.
 export function tick(state, level, frameInputs) {
   if (state.dead) return false;
+  state.tokensPickedThisFrame = 0;
   applyInputs(state, frameInputs);
 
   const p = state.player;
@@ -158,11 +161,33 @@ export function tick(state, level, frameInputs) {
     state.tokens.push({ x: 780 + 8, y: TYMAP[ev.height], alive: true });
   }
 
-  // Move
-  for (const o of state.obstacles) o.x -= state.speed;
-  state.obstacles = state.obstacles.filter(o => o.x > -70);
-  for (const t of state.tokens) t.x -= state.speed;
-  state.tokens = state.tokens.filter(t => t.x > -35);
+  // Move + in-place compaction (avoids per-tick array allocations).
+  {
+    const obs = state.obstacles;
+    let w = 0;
+    for (let i = 0; i < obs.length; i++) {
+      const o = obs[i];
+      o.x -= state.speed;
+      if (o.x > -70) {
+        if (w !== i) obs[w] = o;
+        w++;
+      }
+    }
+    if (w !== obs.length) obs.length = w;
+  }
+  {
+    const tks = state.tokens;
+    let w = 0;
+    for (let i = 0; i < tks.length; i++) {
+      const t = tks[i];
+      t.x -= state.speed;
+      if (t.x > -35) {
+        if (w !== i) tks[w] = t;
+        w++;
+      }
+    }
+    if (w !== tks.length) tks.length = w;
+  }
 
   // Collisions
   const dk = p.action === "duck";
@@ -180,6 +205,7 @@ export function tick(state, level, frameInputs) {
   for (const t of state.tokens) {
     if (t.alive && Math.abs(PX - t.x) < 28 && Math.abs(p.y - t.y) < 28) {
       t.alive = false;
+      state.tokensPickedThisFrame++;
       if (state.passedFirstObstacle) {
         state.combo = Math.min(state.combo + 1, 10);
         state.comboTimer = 150;

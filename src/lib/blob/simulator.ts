@@ -107,6 +107,7 @@ function applyInputs(state, events) {
 // Returns true if the player is alive after the tick, false if the run ended.
 export function tick(state, level, frameInputs) {
   if (state.dead) return false;
+  state.tokensPickedThisFrame = 0;
   applyInputs(state, frameInputs);
 
   const p = state.player;

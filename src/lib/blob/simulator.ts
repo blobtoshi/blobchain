@@ -87,6 +87,8 @@ export function initialState() {
     duckHeld: false,
     dead: false,
     passedFirstObstacle: false,
+    // Per-frame counters consumed by the renderer (visual-only, not part of consensus hash).
+    tokensPickedThisFrame: 0,
   };
 }
 

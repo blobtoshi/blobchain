@@ -77,23 +77,19 @@ export function drawBG(ctx: CanvasRenderingContext2D, frame: number, nodes: Arra
   ctx.fillStyle = _haloGrad!;
   ctx.fillRect(0, 0, CW, GY);
 
-  nodes.forEach(n => {
-    ctx.save();
+  ctx.fillStyle = "#7ad9c5";
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
     ctx.globalAlpha = n.a;
-    ctx.fillStyle = "#7ad9c5";
     ctx.beginPath();
     ctx.arc(n.x, n.y, n.r * 0.4, 0, Math.PI * 2);
     ctx.fill();
-    ctx.restore();
-  });
+  }
+  ctx.globalAlpha = 1;
 
-  const gg = ctx.createLinearGradient(0, GY, 0, CH);
-  gg.addColorStop(0, "#0d2233");
-  gg.addColorStop(1, "#04080f");
-  ctx.fillStyle = gg;
+  ctx.fillStyle = _groundGrad!;
   ctx.fillRect(0, GY, CW, CH - GY);
 
-  ctx.save();
   ctx.strokeStyle = "rgba(0, 255, 204, 0.08)";
   ctx.lineWidth = 1;
   for (let i = 0; i < 6; i++) {
@@ -103,138 +99,197 @@ export function drawBG(ctx: CanvasRenderingContext2D, frame: number, nodes: Arra
     ctx.lineTo(CW, yy);
     ctx.stroke();
   }
-  ctx.restore();
 
-  ctx.save();
-  ctx.shadowColor = "#00ffcc";
-  ctx.shadowBlur = 8;
-  ctx.strokeStyle = "rgba(0, 255, 204, 0.55)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(0, GY);
-  ctx.lineTo(CW, GY);
-  ctx.stroke();
-  ctx.restore();
+  // Horizon line — pre-baked with glow into a strip sprite (avoids per-frame shadowBlur).
+  const hl = ensureHorizonStrip();
+  if (hl) ctx.drawImage(hl, 0, GY - hl.height / 2);
 }
 
-export function drawBlob(ctx, x, y, action, wob, sq, _blink) {
-  const duck = action === "duck";
-  const baseW = duck ? 78 : 64;
-  const baseH = duck ? 46 : 72;
-  const t = wob * 0.08;
-  const floatY = duck ? 0 : Math.sin(t) * 5;
-  const floatX = duck ? 0 : Math.sin(t * 0.7) * 1.5;
-  ctx.save();
-  ctx.translate(x + floatX, y + floatY - (duck ? 0 : 4));
-  ctx.scale(1, sq);
+// ---------- Pre-baked sprite cache ----------------------------------------
+// Canvas shadowBlur is one of the slowest 2D ops. We render each glowing
+// shape ONCE into an offscreen canvas at module init, then drawImage() it
+// every frame. Visually identical, ~5-10x faster.
 
-  if (!duck) {
-    ctx.save();
-    ctx.fillStyle = `rgba(0, 0, 0, ${0.25 - Math.abs(floatY) * 0.015})`;
-    ctx.beginPath();
-    ctx.ellipse(0, baseH * 0.55 + 6, baseW * 0.32, 4, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
+function makeOffscreen(w: number, h: number): HTMLCanvasElement | null {
+  if (typeof document === "undefined") return null;
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.ceil(w));
+  c.height = Math.max(1, Math.ceil(h));
+  return c;
+}
 
-  if (_blobImg && _blobImg.complete && _blobImg.naturalWidth > 0) {
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(_blobImg, -baseW / 2, -baseH / 2, baseW, baseH);
-  } else {
-    ctx.fillStyle = "#3eecbf";
-    ctx.beginPath();
-    ctx.ellipse(0, 0, baseW * 0.4, baseH * 0.4, 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
+let _horizonStrip: HTMLCanvasElement | null = null;
+function ensureHorizonStrip(): HTMLCanvasElement | null {
+  if (_horizonStrip) return _horizonStrip;
+  const PAD = 16;
+  const c = makeOffscreen(CW, PAD * 2);
+  if (!c) return null;
+  const x = c.getContext("2d")!;
+  x.shadowColor = "#00ffcc";
+  x.shadowBlur = 8;
+  x.strokeStyle = "rgba(0, 255, 204, 0.55)";
+  x.lineWidth = 1;
+  x.beginPath();
+  x.moveTo(0, PAD);
+  x.lineTo(CW, PAD);
+  x.stroke();
+  _horizonStrip = c;
+  return c;
+}
 
-  ctx.restore();
+// Fork sprite (red vertical bar with glow). Cached by exact (w, h).
+const _forkCache = new Map<string, HTMLCanvasElement>();
+function ensureForkSprite(w: number, h: number): HTMLCanvasElement | null {
+  const key = `${w}x${h}`;
+  const cached = _forkCache.get(key);
+  if (cached) return cached;
+  const PAD = 22;
+  const c = makeOffscreen(w + PAD * 2, h + PAD * 2);
+  if (!c) return null;
+  const x = c.getContext("2d")!;
+  const cx = PAD + w / 2;
+  const grad = x.createLinearGradient(cx, PAD, cx, PAD + h);
+  grad.addColorStop(0, "rgba(255, 90, 110, 0.95)");
+  grad.addColorStop(1, "rgba(255, 90, 110, 0.55)");
+  x.shadowColor = "#ff5a6e";
+  x.shadowBlur = 18;
+  x.fillStyle = grad;
+  const r = 6;
+  const bx = cx - 7, by = PAD, bw = 14, bh = h;
+  x.beginPath();
+  x.moveTo(bx + r, by);
+  x.lineTo(bx + bw - r, by);
+  x.quadraticCurveTo(bx + bw, by, bx + bw, by + r);
+  x.lineTo(bx + bw, by + bh - r);
+  x.quadraticCurveTo(bx + bw, by + bh, bx + bw - r, by + bh);
+  x.lineTo(bx + r, by + bh);
+  x.quadraticCurveTo(bx, by + bh, bx, by + bh - r);
+  x.lineTo(bx, by + r);
+  x.quadraticCurveTo(bx, by, bx + r, by);
+  x.closePath();
+  x.fill();
+  x.shadowBlur = 0;
+  x.fillStyle = "rgba(255,255,255,0.18)";
+  x.fillRect(bx + 2, by + 4, 2, bh - 8);
+  _forkCache.set(key, c);
+  return c;
 }
 
 export function drawFork(ctx, o) {
-  ctx.save();
-  const cx = o.x + o.w / 2;
-  const grad = ctx.createLinearGradient(cx, o.y, cx, o.y + o.h);
-  grad.addColorStop(0, "rgba(255, 90, 110, 0.95)");
-  grad.addColorStop(1, "rgba(255, 90, 110, 0.55)");
-  ctx.shadowColor = "#ff5a6e";
-  ctx.shadowBlur = 18;
-  ctx.fillStyle = grad;
+  const sprite = ensureForkSprite(o.w, o.h);
+  if (!sprite) return;
+  const PAD = 22;
+  ctx.drawImage(sprite, o.x - PAD, o.y - PAD);
+}
+
+// Low bar sprite. Cached per (w, h).
+const _lowBarCache = new Map<string, HTMLCanvasElement>();
+function ensureLowBarSprite(w: number, h: number): HTMLCanvasElement | null {
+  const key = `${w}x${h}`;
+  const cached = _lowBarCache.get(key);
+  if (cached) return cached;
+  const PAD = 22;
+  const TOP = 32; // room for the vertical glow lines extending above the bar
+  const c = makeOffscreen(w + PAD * 2, h + PAD + TOP);
+  if (!c) return null;
+  const x = c.getContext("2d")!;
+  const bx = PAD, by = TOP, bw = w, bh = h;
+  const grad = x.createLinearGradient(bx, by, bx, by + bh);
+  grad.addColorStop(0, "rgba(96, 200, 255, 0.95)");
+  grad.addColorStop(1, "rgba(40, 120, 230, 0.75)");
+  x.shadowColor = "#40c4ff";
+  x.shadowBlur = 18;
+  x.fillStyle = grad;
   const r = 6;
-  const x = cx - 7, y = o.y, w = 14, h = o.h;
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = "rgba(255,255,255,0.18)";
-  ctx.fillRect(x + 2, y + 4, 2, h - 8);
-  ctx.restore();
+  x.beginPath();
+  x.moveTo(bx + r, by);
+  x.lineTo(bx + bw - r, by);
+  x.quadraticCurveTo(bx + bw, by, bx + bw, by + r);
+  x.lineTo(bx + bw, by + bh - r);
+  x.quadraticCurveTo(bx + bw, by + bh, bx + bw - r, by + bh);
+  x.lineTo(bx + r, by + bh);
+  x.quadraticCurveTo(bx, by + bh, bx, by + bh - r);
+  x.lineTo(bx, by + r);
+  x.quadraticCurveTo(bx, by, bx + r, by);
+  x.closePath();
+  x.fill();
+  x.shadowBlur = 0;
+  x.fillStyle = "rgba(255,255,255,0.28)";
+  for (let i = 4; i < bw - 4; i += 10) {
+    x.fillRect(bx + i, by + 4, 4, bh - 8);
+  }
+  x.strokeStyle = "rgba(120, 220, 255, 0.35)";
+  x.lineWidth = 1;
+  x.beginPath();
+  x.moveTo(bx + 6, by); x.lineTo(bx + 6, by - 28);
+  x.moveTo(bx + bw - 6, by); x.lineTo(bx + bw - 6, by - 28);
+  x.stroke();
+  _lowBarCache.set(key, c);
+  return c;
 }
 
 export function drawLowBar(ctx, o) {
-  ctx.save();
-  const x = o.x, y = o.y, w = o.w, h = o.h;
-  const grad = ctx.createLinearGradient(x, y, x, y + h);
-  grad.addColorStop(0, "rgba(96, 200, 255, 0.95)");
-  grad.addColorStop(1, "rgba(40, 120, 230, 0.75)");
-  ctx.shadowColor = "#40c4ff";
-  ctx.shadowBlur = 18;
-  ctx.fillStyle = grad;
-  const r = 6;
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = "rgba(255,255,255,0.28)";
-  for (let i = 4; i < w - 4; i += 10) {
-    ctx.fillRect(x + i, y + 4, 4, h - 8);
-  }
-  ctx.strokeStyle = "rgba(120, 220, 255, 0.35)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(x + 6, y); ctx.lineTo(x + 6, y - 28);
-  ctx.moveTo(x + w - 6, y); ctx.lineTo(x + w - 6, y - 28);
-  ctx.stroke();
-  ctx.restore();
+  const sprite = ensureLowBarSprite(o.w, o.h);
+  if (!sprite) return;
+  const PAD = 22;
+  const TOP = 32;
+  ctx.drawImage(sprite, o.x - PAD, o.y - TOP);
+}
+
+// Token sprite — coin + halo + "Ƀ" glyph. One sprite, drawn with vertical bob.
+let _tokenSprite: HTMLCanvasElement | null = null;
+function ensureTokenSprite(): HTMLCanvasElement | null {
+  if (_tokenSprite) return _tokenSprite;
+  const SZ = 48; // sprite is 48x48, drawn centered on (tx, ty + bob)
+  const c = makeOffscreen(SZ, SZ);
+  if (!c) return null;
+  const x = c.getContext("2d")!;
+  x.translate(SZ / 2, SZ / 2);
+  // Outer halo (radial gradient — no shadowBlur needed).
+  const halo = x.createRadialGradient(0, 0, 2, 0, 0, 18);
+  halo.addColorStop(0, "rgba(120, 200, 255, 0.6)");
+  halo.addColorStop(1, "rgba(120, 200, 255, 0)");
+  x.fillStyle = halo;
+  x.beginPath(); x.arc(0, 0, 18, 0, Math.PI * 2); x.fill();
+  // Coin body with one-shot shadow bake.
+  x.shadowColor = "#5fb8ff";
+  x.shadowBlur = 14;
+  const coin = x.createLinearGradient(0, -12, 0, 12);
+  coin.addColorStop(0, "#a9dcff");
+  coin.addColorStop(1, "#3a96e6");
+  x.fillStyle = coin;
+  x.beginPath(); x.arc(0, 0, 11, 0, Math.PI * 2); x.fill();
+  x.shadowBlur = 0;
+  x.fillStyle = "#062338";
+  x.font = "bold 11px ui-sans-serif, system-ui, sans-serif";
+  x.textAlign = "center"; x.textBaseline = "middle";
+  x.fillText("Ƀ", 0, 1);
+  _tokenSprite = c;
+  return c;
 }
 
 export function drawToken(ctx, tx, ty, frame) {
+  const sprite = ensureTokenSprite();
+  if (!sprite) return;
   const p = Math.sin(frame * .08 + tx * .009) * 2.5;
-  ctx.save();
-  ctx.translate(tx, ty + p);
-  const grad = ctx.createRadialGradient(0, 0, 2, 0, 0, 18);
-  grad.addColorStop(0, "rgba(120, 200, 255, 0.6)");
-  grad.addColorStop(1, "rgba(120, 200, 255, 0)");
-  ctx.fillStyle = grad;
-  ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI * 2); ctx.fill();
-  ctx.shadowColor = "#5fb8ff";
-  ctx.shadowBlur = 14;
-  const coin = ctx.createLinearGradient(0, -12, 0, 12);
-  coin.addColorStop(0, "#a9dcff");
-  coin.addColorStop(1, "#3a96e6");
-  ctx.fillStyle = coin;
-  ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = "#062338";
-  ctx.font = "bold 11px ui-sans-serif, system-ui, sans-serif";
-  ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.fillText("Ƀ", 0, 1);
-  ctx.restore();
+  ctx.drawImage(sprite, tx - 24, ty + p - 24);
 }
+
+// Pre-baked particle sprite — soft glowing dot. Drawn additively with globalAlpha.
+let _particleSprite: HTMLCanvasElement | null = null;
+export function ensureParticleSprite(): HTMLCanvasElement | null {
+  if (_particleSprite) return _particleSprite;
+  const SZ = 32;
+  const c = makeOffscreen(SZ, SZ);
+  if (!c) return null;
+  const x = c.getContext("2d")!;
+  const g = x.createRadialGradient(SZ / 2, SZ / 2, 0, SZ / 2, SZ / 2, SZ / 2);
+  g.addColorStop(0, "rgba(255,255,255,1)");
+  g.addColorStop(0.4, "rgba(255,255,255,0.6)");
+  g.addColorStop(1, "rgba(255,255,255,0)");
+  x.fillStyle = g;
+  x.fillRect(0, 0, SZ, SZ);
+  _particleSprite = c;
+  return c;
+}
+

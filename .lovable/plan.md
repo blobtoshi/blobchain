@@ -1,60 +1,45 @@
-## Diagnosis — what's actually causing the lag
+# Standalone GUI Wallet (Desktop App)
 
-After reading `BlobRunGame.tsx`, `level.ts`, and `simulator.ts`, the lag is from the **render path**, not the simulator. The physics tick is cheap; rendering is doing way too much per frame.
+A self-contained desktop wallet so users can manage their BLOB CHAIN wallet and send transactions even if the website is offline. It talks directly to any full node over REST + WebSocket — no website, no Supabase required.
 
-Hot spots, in order of cost:
+## What you get
 
-1. **`shadowBlur` in the inner draw loop** — `drawFork`, `drawLowBar`, `drawToken`, particles, and the combo HUD all set `shadowBlur: 8–18`. Canvas shadow blur is one of the slowest 2D ops; it forces an off-screen blur pass for *every* shape, *every* frame. With 5–15 obstacles + tokens + particles on screen, this is the #1 cost.
-2. **Gradients re-created every frame** — `drawBG` builds a new `createLinearGradient` for the ground every frame (line 90). `drawFork`, `drawLowBar`, `drawToken` each build 1–2 fresh gradients per shape per frame. Gradient construction allocates and is not free.
-3. **Trail uses `globalCompositeOperation = "lighter"` + 7 extra `drawImage` calls per frame** with `ctx.save/restore` each — composite mode changes are pipeline stalls.
-4. **`state.tokens.filter(t => t.alive).length` called twice per tick** to detect pickups (lines 213, 217) — allocates two arrays every frame just to compare counts.
-5. **`requestAnimationFrame` loop is `async`** (line 203). The `await` at end-of-run is fine, but making the *whole* loop async wraps every frame in a microtask + promise chain. Tiny but measurable input-to-render latency.
-6. **`onTap` uses a 120 ms `setTimeout` to release jump** (line 285) — this *forces* every tap into a 120ms hold instead of letting the user control jump height. Feels like input lag on touch.
-7. **Obstacle/token arrays reallocated every tick** via `.filter(...)` (simulator.ts 163, 165) — minor GC pressure.
-8. **HUD font strings rebuilt every frame** — small but adds up; also `state.score.toLocaleString()` allocates each frame.
+A small Electron app with three tabs:
 
-## Fixes
+1. **Wallet** — create / import (12-word seed or private key) / unlock / lock. Shows address, balance, copy / export controls.
+2. **Send** — recipient, amount, memo, fee preset (slow/normal/fast/custom). Same signing + canonical-bytes logic as the website, so transactions are accepted by any node.
+3. **Node** — set the node URL (defaults to `http://localhost:9090`), see live status (connecting / syncing / open / closed), tip height, mempool size. Save multiple node URLs and switch between them.
 
-### Render (biggest wins)
+The wallet vault is stored encrypted on disk (AES-GCM, PBKDF2 600k iters) — same format as the web vault, just persisted via Electron instead of `localStorage`. Works fully offline for signing; only broadcasting needs a reachable node.
 
-- **Kill `shadowBlur` from the per-frame path.** Pre-bake the glow into either:
-  - a one-time offscreen canvas per obstacle/token sprite (drawn once with shadow, then `drawImage`'d each frame), OR
-  - drop shadow entirely and replace with a cheap additive overlay rect / radial gradient sprite. Sprites are the safer choice — keeps the look.
-  - HUD glow (`combo`, score panel) → render to an offscreen canvas, redraw only when combo/score change.
-- **Cache gradients.** `drawBG` already caches sky/halo/ground; remove the re-created ground gradient at line 90. For fork/low-bar/token, store gradients on a module-level `Map` keyed by shape dimensions — they never change.
-- **Trail simplification.** Reduce trail length from 8 → 4, drop `globalCompositeOperation = "lighter"`, drop per-step `save/restore` (use a single `setTransform` matrix push). Keep `imageSmoothingEnabled = false` set once on the ctx instead of every frame.
-- **Particles** — drop `shadowBlur`; use a pre-rendered radial-gradient sprite drawn with `globalAlpha`. Cap particle count (e.g., 64) to bound worst case.
+## Technical details
 
-### Simulator / loop
+**Stack**
+- Electron + Vite + React (separate from the main app, in a new `desktop-wallet/` folder so it doesn't pollute the website build).
+- Reuses `src/lib/blob/crypto.ts`, `src/lib/blob/fees.ts`, `src/lib/blob/constants.ts`, `src/lib/blob/chain.ts`, `src/lib/blobNodeClient.ts`, and `src/lib/wsProtocol.ts` via path aliases — no duplicated consensus logic.
+- `vite.config.ts` for the desktop app sets `base: './'` (required for Electron `file://` loading).
+- Main process: `desktop-wallet/electron/main.cjs` (`.cjs` because root `package.json` has `"type": "module"`), `contextIsolation: true`, `nodeIntegration: false`.
+- Preload exposes a tiny `vaultBridge` API: `readVault()`, `writeVault(json)`, `clearVault()` — backed by an encrypted file in Electron's `app.getPath('userData')`. Same on-disk JSON shape as the existing web vault so users can paste their mnemonic to recover.
 
-- **Replace double `.filter(...).length`** with a counter: have `tick()` return (or set on state) `state.tokensPickedThisFrame: number`, then spawn that many pickup particles. Removes 2 array allocs/frame.
-- **In-place obstacle/token compaction** instead of `.filter(...)` — write-pointer pattern. Removes 2 more array allocs/tick.
-- **De-async the loop.** Make `loop()` synchronous; move the submit/sign work (the only `await` chain) into a separate function called from the dead branch — fire-and-forget, no await on the rAF path.
-- **Stable `setGs` updates.** Currently `setGs` only fires on combo change (good), but on the dead-frame it sets twice (`status` + `score`). Coalesce into one `setGs`.
+**Networking**
+- Uses `BlobNodeClient` directly against the user-supplied node URL (REST for cold reads, WS `/ws` for live tip + ack'd `submitTx`).
+- Balance is computed locally with `calcBalance(address, chain, mempool)` after fetching the chain from the node — identical to the website.
+- No Supabase calls, no website dependency.
 
-### Input latency
+**Build & packaging**
+- Dev: `cd desktop-wallet && npm run dev` (Vite dev server + Electron).
+- Package with `@electron/packager` (not electron-builder — fails in this sandbox). Outputs go to `desktop-wallet/electron-release/` and are archived to `/mnt/documents/` as:
+  - `BlobWallet-linux-x64.tar.gz`
+  - `BlobWallet-darwin-x64.zip` (macOS, cross-compiled)
+  - `BlobWallet-win32-x64.zip` (Windows, cross-compiled)
+- Note: `.dmg` / `.exe` installers / `.AppImage` are not buildable here; users unzip and run the binary inside.
 
-- **Remove the 120ms `setTimeout` in `onTap`.** Release on `onTouchEnd` (already wired on the canvas) — gives the player real variable-height jumps and removes the "sticky" feel.
-- **Use `passive: false` listeners explicitly** for keydown so `preventDefault` doesn't trigger the passive-listener warning path.
-- **Move keydown handler off `window` to the canvas (with `tabIndex={0}` and autofocus)** so the browser doesn't have to bubble through document listeners.
+**Out of scope (for this first cut)**
+- Mining (the runner game). Wallet-only.
+- Bridge to Solana (depends on Supabase edge functions). Wallet-only.
+- Auto-update. Users re-download new builds.
 
-### HUD cache
+## Open questions
 
-- Cache the static HUD chrome (rounded panel, labels "SCORE"/"BLOCK #N"/"SPEED") to an offscreen canvas at run start; per frame only draw the dynamic numbers (score, speed, combo).
-
-## Files touched
-
-- `src/components/blob/BlobRunGame.tsx` — loop, trail, particles, HUD cache, input handlers, remove tap timeout, de-async loop.
-- `src/lib/blob/level.ts` — gradient cache for fork/low-bar/token, prebaked glow sprites, kill per-frame `shadowBlur`, fix duplicate ground gradient.
-- `src/lib/blob/simulator.ts` — in-place compaction for obstacles/tokens, expose `tokensPickedThisFrame` counter.
-
-## Out of scope (won't change)
-
-- **Simulator math, constants, `ENGINE_VERSION`** — these are consensus-critical (same module runs in the verifier edge function). Any drift = invalid replays. All sim changes are non-observable refactors (compaction, counter), no math changes, no version bump.
-- **Visual style** — the goal is "looks the same, runs smooth." Glow is preserved via prebaked sprites, not removed.
-
-## Expected result
-
-- Steady 60 fps on mid-range laptops and most phones (was likely dropping to 25–40 fps when many obstacles + particles + combo glow stacked up).
-- Input → on-screen response within 1 frame (~16ms) instead of the 120ms artificial hold on taps.
-- ~80% fewer per-frame allocations → smoother frame pacing, no GC hitches.
+1. Default node URL to ship with — `http://localhost:9090`, or your public node, or blank (force user to enter)?
+2. OK to skip mining + bridge in v1, or do you want those too (bridge would still need internet to the website's edge functions)?

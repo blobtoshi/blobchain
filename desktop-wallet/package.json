@@ -1,0 +1,31 @@
+{
+  "name": "blob-wallet-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev:vite": "vite",
+    "dev:electron": "electron .",
+    "build": "vite build",
+    "package:linux": "npm run build && electron-packager . BlobWallet --platform=linux --arch=x64 --out=electron-release --overwrite --prune=true --ignore=^/src --ignore=^/electron-release --ignore=^/dist-source",
+    "package:mac": "npm run build && electron-packager . BlobWallet --platform=darwin --arch=x64 --out=electron-release --overwrite --prune=true --ignore=^/src --ignore=^/electron-release --ignore=^/dist-source",
+    "package:win": "npm run build && electron-packager . BlobWallet --platform=win32 --arch=x64 --out=electron-release --overwrite --prune=true --ignore=^/src --ignore=^/electron-release --ignore=^/dist-source"
+  },
+  "dependencies": {
+    "@noble/hashes": "1.5.0",
+    "@noble/secp256k1": "2.1.0",
+    "@scure/base": "1.1.9",
+    "@scure/bip39": "1.4.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react-swc": "^3.11.0",
+    "electron": "^33.0.0",
+    "electron-packager": "^17.1.2",
+    "typescript": "^5.8.3",
+    "vite": "^5.4.19"
+  }
+}

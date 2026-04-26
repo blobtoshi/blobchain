@@ -293,3 +293,33 @@ export function ensureParticleSprite(): HTMLCanvasElement | null {
   return c;
 }
 
+export function drawBlob(ctx, x, y, action, wob, sq, _blink) {
+  const duck = action === "duck";
+  const baseW = duck ? 78 : 64;
+  const baseH = duck ? 46 : 72;
+  const t = wob * 0.08;
+  const floatY = duck ? 0 : Math.sin(t) * 5;
+  const floatX = duck ? 0 : Math.sin(t * 0.7) * 1.5;
+  ctx.save();
+  ctx.translate(x + floatX, y + floatY - (duck ? 0 : 4));
+  ctx.scale(1, sq);
+
+  if (!duck) {
+    ctx.fillStyle = `rgba(0, 0, 0, ${0.25 - Math.abs(floatY) * 0.015})`;
+    ctx.beginPath();
+    ctx.ellipse(0, baseH * 0.55 + 6, baseW * 0.32, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  if (_blobImg && _blobImg.complete && _blobImg.naturalWidth > 0) {
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(_blobImg, -baseW / 2, -baseH / 2, baseW, baseH);
+  } else {
+    ctx.fillStyle = "#3eecbf";
+    ctx.beginPath();
+    ctx.ellipse(0, 0, baseW * 0.4, baseH * 0.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}

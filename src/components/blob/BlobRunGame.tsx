@@ -28,7 +28,7 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit }) {
   const dRef = useRef(false);
   const stRef = useRef("idle");
   // Render-only scratch (NOT part of deterministic simulator state).
-  const renderRef = useRef<{ trail: Trail[]; lastCombo: number }>({ trail: [], lastCombo: 0 });
+  const renderRef = useRef<{ lastCombo: number }>({ lastCombo: 0 });
   const [gs, setGs] = useState({ status: "idle", score: 0, combo: 0 });
 
   const level = useRef(generateLevelPure(blockInfo.seed));
@@ -109,7 +109,7 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit }) {
     jRef.current = false; dRef.current = false;
     stRef.current = "playing";
     inputsRef.current = [];
-    renderRef.current = { trail: [], lastCombo: 0 };
+    renderRef.current = { lastCombo: 0 };
     const lev = level.current;
     const state = initialState();
     stateRef.current = state;
@@ -120,16 +120,29 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit }) {
     const ctx = canvas.getContext("2d", { alpha: false })!;
     // Set once per run instead of every frame.
     ctx.imageSmoothingEnabled = false;
-    const parts: Particle[] = []; // visual-only, NOT part of consensus
+
+    // ---- Particle pool ----
+    // Pre-allocate fixed-size pool; never splice, never push at runtime.
+    // life <= 0 means slot is free for reuse.
+    const parts: Particle[] = new Array(MAX_PARTICLES);
+    for (let i = 0; i < MAX_PARTICLES; i++) {
+      parts[i] = { x: 0, y: 0, vx: 0, vy: 0, life: 0, col: "", sz: 0 };
+    }
     const particleSprite = ensureParticleSprite();
 
     function spawnParts(x: number, y: number, col: string, n = 8) {
-      const room = MAX_PARTICLES - parts.length;
-      const k = Math.min(n, Math.max(0, room));
-      for (let i = 0; i < k; i++) parts.push({
-        x, y, vx: (Math.random() - .5) * 9, vy: Math.random() * -9 - 2,
-        life: 1, col, sz: 2 + Math.random() * 4.5,
-      });
+      let placed = 0;
+      for (let i = 0; i < MAX_PARTICLES && placed < n; i++) {
+        const pt = parts[i];
+        if (pt.life > 0) continue;
+        pt.x = x; pt.y = y;
+        pt.vx = (Math.random() - .5) * 9;
+        pt.vy = Math.random() * -9 - 2;
+        pt.life = 1;
+        pt.col = col;
+        pt.sz = 2 + Math.random() * 4.5;
+        placed++;
+      }
     }
 
     function roundedRect(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -211,22 +224,32 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit }) {
       }
     }
 
+    // Pre-allocated trail ring buffer — reused, never re-created.
+    const trailBuf: Trail[] = new Array(TRAIL_LEN);
+    for (let i = 0; i < TRAIL_LEN; i++) trailBuf[i] = { x: 0, y: 0, action: "" };
+    let trailHead = 0;     // index of newest entry
+    let trailCount = 0;    // 0..TRAIL_LEN
+
     function drawTrailAndBlob() {
       const p = state.player;
       if (!state.locked && p.action !== "dead" && _blobImg && _blobImg.complete && _blobImg.naturalWidth > 0) {
-        const trail = renderRef.current.trail;
         const tT = p.wob * 0.08;
         const trailFloatY = p.action === "duck" ? 0 : Math.sin(tT) * 5;
-        trail.unshift({ x: PX, y: p.y + trailFloatY - (p.action === "duck" ? 0 : 4), action: p.action });
-        if (trail.length > TRAIL_LEN) trail.length = TRAIL_LEN;
+        // Advance head, mutate slot in place.
+        trailHead = (trailHead + TRAIL_LEN - 1) % TRAIL_LEN;
+        const slot = trailBuf[trailHead];
+        slot.x = PX;
+        slot.y = p.y + trailFloatY - (p.action === "duck" ? 0 : 4);
+        slot.action = p.action;
+        if (trailCount < TRAIL_LEN) trailCount++;
         const duck = p.action === "duck";
         const baseW = duck ? 78 : 64;
         const baseH = duck ? 46 : 72;
         // Single save/restore around the whole trail; no per-step composite changes.
         ctx.save();
-        for (let i = trail.length - 1; i >= 1; i--) {
-          const tr = trail[i];
-          ctx.globalAlpha = (1 - i / trail.length) * 0.28;
+        for (let i = trailCount - 1; i >= 1; i--) {
+          const tr = trailBuf[(trailHead + i) % TRAIL_LEN];
+          ctx.globalAlpha = (1 - i / trailCount) * 0.28;
           ctx.setTransform(1, 0, 0, p.sq, tr.x - i * 6, tr.y);
           ctx.drawImage(_blobImg, -baseW / 2, -baseH / 2, baseW, baseH);
         }
@@ -234,7 +257,7 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit }) {
         ctx.globalAlpha = 1;
         ctx.restore();
       } else {
-        renderRef.current.trail.length = 0;
+        trailCount = 0;
       }
     }
 
@@ -262,16 +285,14 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit }) {
       }
 
       // Particles — pre-baked sprite, no per-particle shadowBlur.
-      if (parts.length > 0 && particleSprite) {
+      // Pool: iterate full fixed-size array, skip dead slots (life <= 0).
+      if (particleSprite) {
         ctx.save();
         ctx.globalCompositeOperation = "lighter";
-        for (let i = 0; i < parts.length; i++) {
+        for (let i = 0; i < MAX_PARTICLES; i++) {
           const pt = parts[i];
-          const a = Math.max(0, pt.life);
-          if (a <= 0) continue;
-          ctx.globalAlpha = a;
-          // Tint via a colored rect would need extra cost; instead use the
-          // white sprite — additive blend gives a glowy result on dark BG.
+          if (pt.life <= 0) continue;
+          ctx.globalAlpha = pt.life;
           const s = pt.sz * 2;
           ctx.drawImage(particleSprite, pt.x - s, pt.y - s, s * 2, s * 2);
         }
@@ -296,8 +317,9 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit }) {
 
       // Visual-only: pickup particles based on the simulator's per-frame counter
       // (no array .filter() allocations).
-      if (state.tokensPickedThisFrame > 0) {
-        spawnParts(PX, state.player.y, "#00aaff", 8 * state.tokensPickedThisFrame);
+      const pickedThisFrame = state.tokensPickedThisFrame;
+      if (pickedThisFrame > 0) {
+        spawnParts(PX, state.player.y, "#00aaff", 8 * pickedThisFrame);
       }
 
       if (!alive) {
@@ -307,26 +329,39 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit }) {
         const finalScore = state.score;
         // Coalesced state update.
         setGs({ status: "dead", score: finalScore, combo: 0 });
-        // Update particles one last time for the fade-out frame
-        for (let i = 0; i < parts.length; i++) {
+        renderRef.current.lastCombo = 0;
+        // Update particles one last time for the fade-out frame (pool, no splice).
+        for (let i = 0; i < MAX_PARTICLES; i++) {
           const pt = parts[i];
+          if (pt.life <= 0) continue;
           pt.x += pt.vx; pt.y += pt.vy; pt.vy += .18; pt.life -= .028;
         }
-        for (let i = parts.length - 1; i >= 0; i--) if (parts[i].life <= 0) parts.splice(i, 1);
         draw();
         // Fire-and-forget submission — keeps loop sync.
         void submitRun(state);
         return;
       }
 
-      for (let i = 0; i < parts.length; i++) {
+      // Particle physics — pool, never splice. Dead slots are reusable.
+      for (let i = 0; i < MAX_PARTICLES; i++) {
         const pt = parts[i];
+        if (pt.life <= 0) continue;
         pt.x += pt.vx; pt.y += pt.vy; pt.vy += .18; pt.life -= .028;
       }
-      for (let i = parts.length - 1; i >= 0; i--) if (parts[i].life <= 0) parts.splice(i, 1);
 
       draw();
-      if (state.combo !== renderRef.current.lastCombo) {
+      // Combo only changes on token pickup (up) or simulator-side reset (which
+      // happens at obstacle hit = death, handled above). Skip the per-frame
+      // compare; only check when a pickup just occurred.
+      // Combo only changes meaningfully in two cases:
+      //   1) token pickup (increment) → pickedThisFrame > 0
+      //   2) timer expiry resets to 0  → cheap zero-check vs cached lastCombo
+      // Both are O(1) and avoid the per-frame compare-on-every-tick we had.
+      const lastCombo = renderRef.current.lastCombo;
+      if (
+        (pickedThisFrame > 0 && state.combo !== lastCombo) ||
+        (lastCombo > 0 && state.combo === 0)
+      ) {
         renderRef.current.lastCombo = state.combo;
         setGs(prev => ({ ...prev, score: state.score, combo: state.combo }));
       }

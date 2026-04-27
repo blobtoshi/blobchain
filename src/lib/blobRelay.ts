@@ -75,6 +75,20 @@ const RELAY_MODE_RAW: string = String(env.VITE_BLOB_RELAY_MODE ?? "auto").toLowe
 let activeMode: RelayMode = "supabase";
 let nodeClient: BlobNodeClient | null = null;
 let modeReady: Promise<RelayMode> | null = null;
+// Runtime override (used by the desktop app to pin a user-chosen node).
+// When set, takes priority over env-derived NODE_URL/RELAY_MODE_RAW.
+let overrideMode: RelayMode | null = null;
+let overrideNodeUrl: string | null = null;
+
+export function setRelayOverride(opts: { mode: RelayMode; nodeUrl?: string }) {
+  overrideMode = opts.mode;
+  overrideNodeUrl = opts.nodeUrl ?? null;
+  // Tear down any existing node client so the new URL takes effect.
+  try { nodeClient?.close?.(); } catch { /* ignore */ }
+  nodeClient = null;
+  modeReady = null; // force re-init on next ensureRelayMode()
+  ensureRelayMode().then(emitMode);
+}
 const modeListeners = new Set<(m: RelayMode) => void>();
 
 function emitMode() {
@@ -91,6 +105,16 @@ export function getRelayMode(): RelayMode { return activeMode; }
 export function getNodeClient(): BlobNodeClient | null { return nodeClient; }
 
 async function initRelayMode(): Promise<RelayMode> {
+  // Runtime override wins.
+  if (overrideMode === "node" && overrideNodeUrl) {
+    nodeClient = new BlobNodeClient(overrideNodeUrl);
+    activeMode = "node";
+    return activeMode;
+  }
+  if (overrideMode === "supabase") {
+    activeMode = "supabase";
+    return activeMode;
+  }
   if (RELAY_MODE_RAW === "supabase" || !NODE_URL) {
     activeMode = "supabase";
     return activeMode;

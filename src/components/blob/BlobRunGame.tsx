@@ -285,16 +285,14 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit }) {
       }
 
       // Particles — pre-baked sprite, no per-particle shadowBlur.
-      if (parts.length > 0 && particleSprite) {
+      // Pool: iterate full fixed-size array, skip dead slots (life <= 0).
+      if (particleSprite) {
         ctx.save();
         ctx.globalCompositeOperation = "lighter";
-        for (let i = 0; i < parts.length; i++) {
+        for (let i = 0; i < MAX_PARTICLES; i++) {
           const pt = parts[i];
-          const a = Math.max(0, pt.life);
-          if (a <= 0) continue;
-          ctx.globalAlpha = a;
-          // Tint via a colored rect would need extra cost; instead use the
-          // white sprite — additive blend gives a glowy result on dark BG.
+          if (pt.life <= 0) continue;
+          ctx.globalAlpha = pt.life;
           const s = pt.sz * 2;
           ctx.drawImage(particleSprite, pt.x - s, pt.y - s, s * 2, s * 2);
         }

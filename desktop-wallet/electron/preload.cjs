@@ -10,3 +10,13 @@ contextBridge.exposeInMainWorld("nodeConfigBridge", {
   read: () => ipcRenderer.invoke("nodes:read"),
   write: (json) => ipcRenderer.invoke("nodes:write", json),
 });
+
+contextBridge.exposeInMainWorld("menuBridge", {
+  // Subscribe to menu/shortcut events from the main process. Returns an
+  // unsubscribe function.
+  onMenuEvent: (cb) => {
+    const handler = (_e, evt) => { try { cb(evt); } catch { /* ignore */ } };
+    ipcRenderer.on("menu-event", handler);
+    return () => ipcRenderer.removeListener("menu-event", handler);
+  },
+});

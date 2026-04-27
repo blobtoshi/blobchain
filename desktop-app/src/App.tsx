@@ -1,15 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
-import { calcBalance } from "@web/lib/blob/chain";
-import { useWallet } from "./hooks/useWallet";
-import { useNodeClient } from "./hooks/useNodeClient";
+import { useEffect, useState } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Toaster as Sonner } from "@web/components/ui/sonner";
+import { Toaster } from "@web/components/ui/toaster";
+import { TooltipProvider } from "@web/components/ui/tooltip";
+import BlobChainApp from "@web/pages/BlobChainApp";
+import { setRelayOverride } from "@web/lib/blobRelay";
+
 import { useNodeConfig } from "./hooks/useNodeConfig";
-import { SetupScreen } from "./screens/SetupScreen";
-import { UnlockScreen } from "./screens/UnlockScreen";
-import { WalletTab } from "./screens/WalletTab";
-import { SendTab } from "./screens/SendTab";
-import { NodeTab } from "./screens/NodeTab";
 import { NodeSetupScreen } from "./screens/NodeSetupScreen";
-import { HistoryTab } from "./screens/HistoryTab";
 
 declare global {
   interface Window {
@@ -17,108 +15,57 @@ declare global {
   }
 }
 
-type Tab = "wallet" | "history" | "send" | "node";
+const queryClient = new QueryClient();
 
 export default function App() {
-  const wallet = useWallet({ idleLockMs: 5 * 60 * 1000, lockOnBlur: false });
-  const { nodeUrl, setNodeUrl, savedUrls, setSavedUrls, configured, loaded } = useNodeConfig();
-  // Don't spin up the node client until the user has chosen a node.
-  const node = useNodeClient(configured ? nodeUrl : "");
-  const [tab, setTab] = useState<Tab>("wallet");
+  const { nodeUrl, setNodeUrl, configured, loaded } = useNodeConfig();
+  const [relayReady, setRelayReady] = useState(false);
 
-  // Reset to wallet tab whenever a fresh unlock happens.
-  useEffect(() => { if (wallet.plain) setTab("wallet"); }, [wallet.plain]);
-
-  // Native menu + global keyboard shortcuts.
+  // As soon as the user picks a node, pin the relay to it.
   useEffect(() => {
-    const offMenu = window.menuBridge?.onMenuEvent((evt) => {
-      if (evt === "lock") wallet.lock();
-      else if (evt === "tab:wallet") setTab("wallet");
-      else if (evt === "tab:send") setTab("send");
-      else if (evt === "tab:node") setTab("node");
-    });
-    const onKey = (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey;
-      if (!mod) return;
-      if (e.key === "l" || e.key === "L") { e.preventDefault(); wallet.lock(); }
-      else if (e.key === "1") { e.preventDefault(); setTab("wallet"); }
-      else if (e.key === "2") { e.preventDefault(); setTab("history"); }
-      else if (e.key === "3") { e.preventDefault(); setTab("send"); }
-      else if (e.key === "4") { e.preventDefault(); setTab("node"); }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => { offMenu?.(); window.removeEventListener("keydown", onKey); };
-  }, [wallet.lock]);
+    if (!configured || !nodeUrl) return;
+    setRelayOverride({ mode: "node", nodeUrl });
+    setRelayReady(true);
+  }, [configured, nodeUrl]);
 
-  const balance = useMemo(() => {
-    if (!wallet.pub) return 0;
-    return calcBalance(wallet.pub.address, node.chain, node.mempool);
-  }, [wallet.pub, node.chain, node.mempool]);
-
-  if (wallet.loading || !loaded) {
-    return <div className="app"><div className="content"><div className="muted">Loading…</div></div></div>;
-  }
-
-  // First-run gate: pick a node before anything else.
-  if (!configured) {
+  if (!loaded) {
     return (
-      <div className="app">
-        <header className="header">
-          <h1>BLOB Wallet</h1>
-          <span className="badge warn">setup</span>
-        </header>
-        <NodeSetupScreen onChosen={setNodeUrl} />
+      <div className="min-h-screen flex items-center justify-center bg-background text-muted-foreground text-sm">
+        Loading…
       </div>
     );
   }
 
-  const statusClass = node.status === "open" ? "ok"
-    : node.status === "syncing" || node.status === "connecting" ? "warn"
-    : "err";
+  // Node-first gate: nothing else loads until a node is chosen.
+  if (!configured || !relayReady) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <div className="min-h-screen bg-background flex items-center justify-center p-6">
+            <div className="w-full max-w-md glass-hi p-8 space-y-4">
+              <div className="text-center space-y-1">
+                <h1 className="text-xl font-semibold tracking-tight">BLOB Chain Desktop</h1>
+                <p className="text-xs text-muted-foreground">
+                  Pick a full node to connect to. You can change it anytime later.
+                </p>
+              </div>
+              <NodeSetupScreen onChosen={setNodeUrl} />
+            </div>
+          </div>
+        </TooltipProvider>
+      </QueryClientProvider>
+    );
+  }
 
   return (
-    <div className="app">
-      <header className="header">
-        <h1>BLOB Wallet</h1>
-        <span className={`badge ${statusClass}`}>
-          {!node.online ? "offline" : node.status} · h{node.tipHeight}
-        </span>
-      </header>
-
-      {!wallet.pub ? (
-        <SetupScreen onCreated={wallet.setPub} />
-      ) : !wallet.plain ? (
-        <UnlockScreen pub={wallet.pub} onUnlock={wallet.unlock} onForget={wallet.forget} />
-      ) : (
-        <>
-          <nav className="tabs">
-            <button className={tab === "wallet" ? "active" : ""} onClick={() => setTab("wallet")}>Wallet</button>
-            <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>History</button>
-            <button className={tab === "send" ? "active" : ""} onClick={() => setTab("send")}>Send</button>
-            <button className={tab === "node" ? "active" : ""} onClick={() => setTab("node")}>Node</button>
-          </nav>
-          <div className="content">
-            {tab === "wallet" && (
-              <WalletTab wallet={wallet.plain} balance={balance} onLock={wallet.lock} />
-            )}
-            {tab === "history" && (
-              <HistoryTab address={wallet.plain.address} chain={node.chain} mempool={node.mempool} />
-            )}
-            {tab === "send" && (
-              <SendTab wallet={wallet.plain} balance={balance} client={node.client} status={node.status} />
-            )}
-            {tab === "node" && (
-              <NodeTab
-                nodeUrl={nodeUrl} setNodeUrl={setNodeUrl}
-                savedUrls={savedUrls} setSavedUrls={setSavedUrls}
-                status={node.status} tipHeight={node.tipHeight}
-                mempoolSize={node.mempool.length} chainSize={node.chain.length}
-                online={node.online}
-              />
-            )}
-          </div>
-        </>
-      )}
-    </div>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BlobChainApp />
+      </TooltipProvider>
+    </QueryClientProvider>
   );
 }

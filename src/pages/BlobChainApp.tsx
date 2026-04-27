@@ -68,6 +68,26 @@ export default function BlobChainApp() {
     };
   }, [showPriv, showSeed]);
 
+  // Desktop (Electron) menu/shortcut bridge. Web ignores these — they only
+  // fire when the host shell dispatches them.
+  useEffect(() => {
+    const validScreens = new Set(["mine", "wallet", "bridge", "chain", "network"]);
+    const onNav = (e: Event) => {
+      const target = (e as CustomEvent<string>).detail;
+      if (validScreens.has(target)) setScreen(target);
+    };
+    const onSettings = () => setSettingsOpen(true);
+    const onLock = () => { try { disconnectWallet(); } catch {} };
+    window.addEventListener("blob:nav", onNav as EventListener);
+    window.addEventListener("blob:settings", onSettings);
+    window.addEventListener("blob:lock", onLock);
+    return () => {
+      window.removeEventListener("blob:nav", onNav as EventListener);
+      window.removeEventListener("blob:settings", onSettings);
+      window.removeEventListener("blob:lock", onLock);
+    };
+  }, [disconnectWallet]);
+
   async function copyPrivateKey() {
     try {
       await navigator.clipboard.writeText(wallet?.privateKey ?? "");

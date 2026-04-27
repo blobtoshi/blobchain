@@ -109,7 +109,7 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit }) {
     jRef.current = false; dRef.current = false;
     stRef.current = "playing";
     inputsRef.current = [];
-    renderRef.current = { trail: [], lastCombo: 0 };
+    renderRef.current = { lastCombo: 0 };
     const lev = level.current;
     const state = initialState();
     stateRef.current = state;

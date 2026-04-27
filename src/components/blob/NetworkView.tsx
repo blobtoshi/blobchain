@@ -90,12 +90,21 @@ export default function NetworkView({ nodeCount, chain, blockInfo, mempool = [] 
           <div className="label-eyebrow text-primary">BLOB Network</div>
           <div className="text-2xl font-semibold tracking-tight mt-1">Live network state</div>
         </div>
-        <div className="flex items-center gap-2 text-[11px] text-foreground/60">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+        <div className="flex items-center gap-3 text-[11px] text-foreground/60">
+          <a
+            href="/run-a-node"
+            className="hidden sm:inline text-foreground/70 hover:text-foreground transition-colors"
+            title="Run your own full node"
+          >
+            Run a node →
+          </a>
+          <span className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+            </span>
+            ONLINE · {nodeCount} {nodeCount === 1 ? "node" : "nodes"}
           </span>
-          ONLINE · {nodeCount} {nodeCount === 1 ? "node" : "nodes"}
         </div>
       </div>
 

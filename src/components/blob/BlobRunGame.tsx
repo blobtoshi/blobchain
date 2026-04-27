@@ -120,16 +120,29 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit }) {
     const ctx = canvas.getContext("2d", { alpha: false })!;
     // Set once per run instead of every frame.
     ctx.imageSmoothingEnabled = false;
-    const parts: Particle[] = []; // visual-only, NOT part of consensus
+
+    // ---- Particle pool ----
+    // Pre-allocate fixed-size pool; never splice, never push at runtime.
+    // life <= 0 means slot is free for reuse.
+    const parts: Particle[] = new Array(MAX_PARTICLES);
+    for (let i = 0; i < MAX_PARTICLES; i++) {
+      parts[i] = { x: 0, y: 0, vx: 0, vy: 0, life: 0, col: "", sz: 0 };
+    }
     const particleSprite = ensureParticleSprite();
 
     function spawnParts(x: number, y: number, col: string, n = 8) {
-      const room = MAX_PARTICLES - parts.length;
-      const k = Math.min(n, Math.max(0, room));
-      for (let i = 0; i < k; i++) parts.push({
-        x, y, vx: (Math.random() - .5) * 9, vy: Math.random() * -9 - 2,
-        life: 1, col, sz: 2 + Math.random() * 4.5,
-      });
+      let placed = 0;
+      for (let i = 0; i < MAX_PARTICLES && placed < n; i++) {
+        const pt = parts[i];
+        if (pt.life > 0) continue;
+        pt.x = x; pt.y = y;
+        pt.vx = (Math.random() - .5) * 9;
+        pt.vy = Math.random() * -9 - 2;
+        pt.life = 1;
+        pt.col = col;
+        pt.sz = 2 + Math.random() * 4.5;
+        placed++;
+      }
     }
 
     function roundedRect(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {

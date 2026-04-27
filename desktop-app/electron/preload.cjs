@@ -20,3 +20,7 @@ contextBridge.exposeInMainWorld("menuBridge", {
     return () => ipcRenderer.removeListener("menu-event", handler);
   },
 });
+
+contextBridge.exposeInMainWorld("shellBridge", {
+  openExternal: (url) => ipcRenderer.invoke("shell:openExternal", url),
+});

@@ -19,7 +19,7 @@ declare global {
 const queryClient = new QueryClient();
 
 export default function App() {
-  const { nodeUrl, setNodeUrl, configured, loaded } = useNodeConfig();
+  const { nodeUrl, setNodeUrl, savedUrls, rememberCustom, configured, loaded } = useNodeConfig();
   const [relayReady, setRelayReady] = useState(false);
 
   // As soon as the user picks a node, pin the relay to it.
@@ -68,7 +68,7 @@ export default function App() {
                   Pick a full node to connect to. You can change it anytime later.
                 </p>
               </div>
-              <NodeSetupScreen onChosen={setNodeUrl} />
+              <NodeSetupScreen onChosen={setNodeUrl} savedUrls={savedUrls} rememberCustom={rememberCustom} />
             </div>
           </div>
         </TooltipProvider>

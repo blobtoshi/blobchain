@@ -6,9 +6,12 @@ const DEFAULT_NODE = "http://localhost:9090";
 // Returns sane defaults instantly so the UI never shows a flash of empty
 // state, then upgrades once disk read completes.
 export function useNodeConfig() {
-  const [nodeUrl, setNodeUrlState] = useState<string>(DEFAULT_NODE);
-  const [savedUrls, setSavedUrlsState] = useState<string[]>([DEFAULT_NODE]);
+  // Start empty so we can detect "first run" → force the user through node setup.
+  const [nodeUrl, setNodeUrlState] = useState<string>("");
+  const [savedUrls, setSavedUrlsState] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
+  // True once the user has explicitly chosen a node (or we read one from disk).
+  const [configured, setConfigured] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -17,7 +20,10 @@ export function useNodeConfig() {
         const raw = await window.nodeConfigBridge?.read();
         if (!alive || !raw) { setLoaded(true); return; }
         const cfg = JSON.parse(raw);
-        if (cfg.current && typeof cfg.current === "string") setNodeUrlState(cfg.current);
+        if (cfg.current && typeof cfg.current === "string") {
+          setNodeUrlState(cfg.current);
+          setConfigured(true);
+        }
         if (Array.isArray(cfg.saved)) setSavedUrlsState(cfg.saved);
       } catch { /* defaults */ }
       finally { if (alive) setLoaded(true); }
@@ -27,16 +33,19 @@ export function useNodeConfig() {
 
   // Persist after load completes (avoid clobbering disk on first render).
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || !configured) return;
     window.nodeConfigBridge?.write(
       JSON.stringify({ current: nodeUrl, saved: savedUrls }),
     );
-  }, [loaded, nodeUrl, savedUrls]);
+  }, [loaded, configured, nodeUrl, savedUrls]);
 
-  const setNodeUrl = useCallback((u: string) => setNodeUrlState(u), []);
+  const setNodeUrl = useCallback((u: string) => {
+    setNodeUrlState(u);
+    setConfigured(true);
+  }, []);
   const setSavedUrls = useCallback((u: string[]) => setSavedUrlsState(u), []);
 
-  return { nodeUrl, setNodeUrl, savedUrls, setSavedUrls };
+  return { nodeUrl, setNodeUrl, savedUrls, setSavedUrls, configured, loaded };
 }
 
 export { DEFAULT_NODE };

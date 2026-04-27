@@ -125,6 +125,16 @@ ipcMain.handle("nodes:write", (_e, json) => {
   catch { return false; }
 });
 
+// Open a URL in the user's default browser. Restricted to http(s) for safety.
+ipcMain.handle("shell:openExternal", (_e, url) => {
+  try {
+    const u = String(url || "");
+    if (!/^https?:\/\//i.test(u)) return false;
+    shell.openExternal(u);
+    return true;
+  } catch { return false; }
+});
+
 app.whenReady().then(() => {
   buildMenu();
   createWindow();

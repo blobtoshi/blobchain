@@ -28,7 +28,7 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit }) {
   const dRef = useRef(false);
   const stRef = useRef("idle");
   // Render-only scratch (NOT part of deterministic simulator state).
-  const renderRef = useRef<{ trail: Trail[]; lastCombo: number }>({ trail: [], lastCombo: 0 });
+  const renderRef = useRef<{ lastCombo: number }>({ lastCombo: 0 });
   const [gs, setGs] = useState({ status: "idle", score: 0, combo: 0 });
 
   const level = useRef(generateLevelPure(blockInfo.seed));

@@ -317,8 +317,9 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit }) {
 
       // Visual-only: pickup particles based on the simulator's per-frame counter
       // (no array .filter() allocations).
-      if (state.tokensPickedThisFrame > 0) {
-        spawnParts(PX, state.player.y, "#00aaff", 8 * state.tokensPickedThisFrame);
+      const pickedThisFrame = state.tokensPickedThisFrame;
+      if (pickedThisFrame > 0) {
+        spawnParts(PX, state.player.y, "#00aaff", 8 * pickedThisFrame);
       }
 
       if (!alive) {
@@ -328,26 +329,31 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit }) {
         const finalScore = state.score;
         // Coalesced state update.
         setGs({ status: "dead", score: finalScore, combo: 0 });
-        // Update particles one last time for the fade-out frame
-        for (let i = 0; i < parts.length; i++) {
+        renderRef.current.lastCombo = 0;
+        // Update particles one last time for the fade-out frame (pool, no splice).
+        for (let i = 0; i < MAX_PARTICLES; i++) {
           const pt = parts[i];
+          if (pt.life <= 0) continue;
           pt.x += pt.vx; pt.y += pt.vy; pt.vy += .18; pt.life -= .028;
         }
-        for (let i = parts.length - 1; i >= 0; i--) if (parts[i].life <= 0) parts.splice(i, 1);
         draw();
         // Fire-and-forget submission — keeps loop sync.
         void submitRun(state);
         return;
       }
 
-      for (let i = 0; i < parts.length; i++) {
+      // Particle physics — pool, never splice. Dead slots are reusable.
+      for (let i = 0; i < MAX_PARTICLES; i++) {
         const pt = parts[i];
+        if (pt.life <= 0) continue;
         pt.x += pt.vx; pt.y += pt.vy; pt.vy += .18; pt.life -= .028;
       }
-      for (let i = parts.length - 1; i >= 0; i--) if (parts[i].life <= 0) parts.splice(i, 1);
 
       draw();
-      if (state.combo !== renderRef.current.lastCombo) {
+      // Combo only changes on token pickup (up) or simulator-side reset (which
+      // happens at obstacle hit = death, handled above). Skip the per-frame
+      // compare; only check when a pickup just occurred.
+      if (pickedThisFrame > 0 && state.combo !== renderRef.current.lastCombo) {
         renderRef.current.lastCombo = state.combo;
         setGs(prev => ({ ...prev, score: state.score, combo: state.combo }));
       }

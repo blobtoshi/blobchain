@@ -801,8 +801,10 @@ export default function BlobChainApp() {
         </DialogContent>
       </Dialog>
 
-      <footer className="mt-12 py-6 text-center text-[11px] text-muted-foreground/60 num">
-        Blob Chain © 2026
+      <footer className="mt-12 py-6 text-center text-[11px] text-muted-foreground/60 num space-x-3">
+        <span>Blob Chain © 2026</span>
+        <span aria-hidden>·</span>
+        <a href="/run-a-node" className="hover:text-foreground transition-colors">Run your own node</a>
       </footer>
     </div>
   );

@@ -353,7 +353,15 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit }) {
       // Combo only changes on token pickup (up) or simulator-side reset (which
       // happens at obstacle hit = death, handled above). Skip the per-frame
       // compare; only check when a pickup just occurred.
-      if (pickedThisFrame > 0 && state.combo !== renderRef.current.lastCombo) {
+      // Combo only changes meaningfully in two cases:
+      //   1) token pickup (increment) → pickedThisFrame > 0
+      //   2) timer expiry resets to 0  → cheap zero-check vs cached lastCombo
+      // Both are O(1) and avoid the per-frame compare-on-every-tick we had.
+      const lastCombo = renderRef.current.lastCombo;
+      if (
+        (pickedThisFrame > 0 && state.combo !== lastCombo) ||
+        (lastCombo > 0 && state.combo === 0)
+      ) {
         renderRef.current.lastCombo = state.combo;
         setGs(prev => ({ ...prev, score: state.score, combo: state.combo }));
       }

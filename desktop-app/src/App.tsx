@@ -65,7 +65,9 @@ export default function App() {
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <BlobChainApp />
+        <HashRouter>
+          <BlobChainApp />
+        </HashRouter>
       </TooltipProvider>
     </QueryClientProvider>
   );

@@ -8,6 +8,8 @@ import { UnlockScreen } from "./screens/UnlockScreen";
 import { WalletTab } from "./screens/WalletTab";
 import { SendTab } from "./screens/SendTab";
 import { NodeTab } from "./screens/NodeTab";
+import { NodeSetupScreen } from "./screens/NodeSetupScreen";
+import { HistoryTab } from "./screens/HistoryTab";
 
 declare global {
   interface Window {
@@ -15,12 +17,13 @@ declare global {
   }
 }
 
-type Tab = "wallet" | "send" | "node";
+type Tab = "wallet" | "history" | "send" | "node";
 
 export default function App() {
   const wallet = useWallet({ idleLockMs: 5 * 60 * 1000, lockOnBlur: false });
-  const { nodeUrl, setNodeUrl, savedUrls, setSavedUrls } = useNodeConfig();
-  const node = useNodeClient(nodeUrl);
+  const { nodeUrl, setNodeUrl, savedUrls, setSavedUrls, configured, loaded } = useNodeConfig();
+  // Don't spin up the node client until the user has chosen a node.
+  const node = useNodeClient(configured ? nodeUrl : "");
   const [tab, setTab] = useState<Tab>("wallet");
 
   // Reset to wallet tab whenever a fresh unlock happens.
@@ -39,8 +42,9 @@ export default function App() {
       if (!mod) return;
       if (e.key === "l" || e.key === "L") { e.preventDefault(); wallet.lock(); }
       else if (e.key === "1") { e.preventDefault(); setTab("wallet"); }
-      else if (e.key === "2") { e.preventDefault(); setTab("send"); }
-      else if (e.key === "3") { e.preventDefault(); setTab("node"); }
+      else if (e.key === "2") { e.preventDefault(); setTab("history"); }
+      else if (e.key === "3") { e.preventDefault(); setTab("send"); }
+      else if (e.key === "4") { e.preventDefault(); setTab("node"); }
     };
     window.addEventListener("keydown", onKey);
     return () => { offMenu?.(); window.removeEventListener("keydown", onKey); };
@@ -51,8 +55,21 @@ export default function App() {
     return calcBalance(wallet.pub.address, node.chain, node.mempool);
   }, [wallet.pub, node.chain, node.mempool]);
 
-  if (wallet.loading) {
+  if (wallet.loading || !loaded) {
     return <div className="app"><div className="content"><div className="muted">Loading…</div></div></div>;
+  }
+
+  // First-run gate: pick a node before anything else.
+  if (!configured) {
+    return (
+      <div className="app">
+        <header className="header">
+          <h1>BLOB Wallet</h1>
+          <span className="badge warn">setup</span>
+        </header>
+        <NodeSetupScreen onChosen={setNodeUrl} />
+      </div>
+    );
   }
 
   const statusClass = node.status === "open" ? "ok"
@@ -76,12 +93,16 @@ export default function App() {
         <>
           <nav className="tabs">
             <button className={tab === "wallet" ? "active" : ""} onClick={() => setTab("wallet")}>Wallet</button>
+            <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>History</button>
             <button className={tab === "send" ? "active" : ""} onClick={() => setTab("send")}>Send</button>
             <button className={tab === "node" ? "active" : ""} onClick={() => setTab("node")}>Node</button>
           </nav>
           <div className="content">
             {tab === "wallet" && (
               <WalletTab wallet={wallet.plain} balance={balance} onLock={wallet.lock} />
+            )}
+            {tab === "history" && (
+              <HistoryTab address={wallet.plain.address} chain={node.chain} mempool={node.mempool} />
             )}
             {tab === "send" && (
               <SendTab wallet={wallet.plain} balance={balance} client={node.client} status={node.status} />

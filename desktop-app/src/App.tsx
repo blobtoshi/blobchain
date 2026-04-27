@@ -29,6 +29,22 @@ export default function App() {
     setRelayReady(true);
   }, [configured, nodeUrl]);
 
+  // Bridge native menu/shortcut events into DOM CustomEvents that
+  // BlobChainApp (and any inner component) can listen for.
+  useEffect(() => {
+    const off = window.menuBridge?.onMenuEvent((evt) => {
+      if (evt.startsWith("nav:")) {
+        const screen = evt.slice(4); // mine | wallet | bridge | chain | network
+        window.dispatchEvent(new CustomEvent("blob:nav", { detail: screen }));
+      } else if (evt === "settings:open") {
+        window.dispatchEvent(new CustomEvent("blob:settings"));
+      } else if (evt === "lock") {
+        window.dispatchEvent(new CustomEvent("blob:lock"));
+      }
+    });
+    return () => { off?.(); };
+  }, []);
+
   if (!loaded) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background text-muted-foreground text-sm">

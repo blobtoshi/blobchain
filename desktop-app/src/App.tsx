@@ -68,7 +68,7 @@ export default function App() {
                   Pick a full node to connect to. You can change it anytime later.
                 </p>
               </div>
-              <NodeSetupScreen onChosen={setNodeUrl} />
+              <NodeSetupScreen onChosen={setNodeUrl} savedUrls={savedUrls} rememberCustom={rememberCustom} />
             </div>
           </div>
         </TooltipProvider>

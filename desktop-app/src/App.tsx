@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { HashRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster as Sonner } from "@web/components/ui/sonner";
 import { Toaster } from "@web/components/ui/toaster";

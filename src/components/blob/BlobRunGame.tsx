@@ -224,22 +224,32 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit }) {
       }
     }
 
+    // Pre-allocated trail ring buffer — reused, never re-created.
+    const trailBuf: Trail[] = new Array(TRAIL_LEN);
+    for (let i = 0; i < TRAIL_LEN; i++) trailBuf[i] = { x: 0, y: 0, action: "" };
+    let trailHead = 0;     // index of newest entry
+    let trailCount = 0;    // 0..TRAIL_LEN
+
     function drawTrailAndBlob() {
       const p = state.player;
       if (!state.locked && p.action !== "dead" && _blobImg && _blobImg.complete && _blobImg.naturalWidth > 0) {
-        const trail = renderRef.current.trail;
         const tT = p.wob * 0.08;
         const trailFloatY = p.action === "duck" ? 0 : Math.sin(tT) * 5;
-        trail.unshift({ x: PX, y: p.y + trailFloatY - (p.action === "duck" ? 0 : 4), action: p.action });
-        if (trail.length > TRAIL_LEN) trail.length = TRAIL_LEN;
+        // Advance head, mutate slot in place.
+        trailHead = (trailHead + TRAIL_LEN - 1) % TRAIL_LEN;
+        const slot = trailBuf[trailHead];
+        slot.x = PX;
+        slot.y = p.y + trailFloatY - (p.action === "duck" ? 0 : 4);
+        slot.action = p.action;
+        if (trailCount < TRAIL_LEN) trailCount++;
         const duck = p.action === "duck";
         const baseW = duck ? 78 : 64;
         const baseH = duck ? 46 : 72;
         // Single save/restore around the whole trail; no per-step composite changes.
         ctx.save();
-        for (let i = trail.length - 1; i >= 1; i--) {
-          const tr = trail[i];
-          ctx.globalAlpha = (1 - i / trail.length) * 0.28;
+        for (let i = trailCount - 1; i >= 1; i--) {
+          const tr = trailBuf[(trailHead + i) % TRAIL_LEN];
+          ctx.globalAlpha = (1 - i / trailCount) * 0.28;
           ctx.setTransform(1, 0, 0, p.sq, tr.x - i * 6, tr.y);
           ctx.drawImage(_blobImg, -baseW / 2, -baseH / 2, baseW, baseH);
         }
@@ -247,7 +257,7 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit }) {
         ctx.globalAlpha = 1;
         ctx.restore();
       } else {
-        renderRef.current.trail.length = 0;
+        trailCount = 0;
       }
     }
 

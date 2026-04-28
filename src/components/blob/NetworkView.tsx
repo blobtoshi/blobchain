@@ -92,7 +92,9 @@ export default function NetworkView({ nodeCount, chain, blockInfo, mempool = [] 
         </div>
         <div className="flex items-center gap-3 text-[11px] text-foreground/60">
           <a
-            href="/run-a-node"
+            href="https://github.com/blobchain/blobchain/blob/main/node/README.md"
+            target="_blank"
+            rel="noopener noreferrer"
             className="hidden sm:inline text-foreground/70 hover:text-foreground transition-colors"
             title="Run your own full node"
           >

@@ -111,6 +111,8 @@ export default function NetworkView({ nodeCount, chain, blockInfo, mempool = [] 
         </div>
       </div>
 
+      <NodeConnectionCard />
+
       <div className="grid grid-cols-2 gap-2">
         <Stat label="Chain height" value={height.toLocaleString()} sub={`${totalTxs} confirmed txs`} tone="text-primary" />
         <Stat label="Block reward" value={`${blockInfo.reward} BLOB`} sub={`Halving #${halvingsDone + 1} → ${nextReward} BLOB`} tone="text-[hsl(var(--warning))]" />

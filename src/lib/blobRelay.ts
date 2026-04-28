@@ -302,10 +302,16 @@ function entryFromRow(r: any): Entry {
 
 export async function fetchEntries(blockHeight: number): Promise<Entry[]> {
   await ensureRelayMode();
-  // The node doesn't expose a per-height entries REST endpoint; live entries
-  // arrive via WS `newEntry` gossip after subscribe. Returning [] here is
-  // safe — subscribeRelay will populate state as entries come in.
-  if (activeMode === "node") return [];
+  if (activeMode === "node" && nodeClient) {
+    const rows = await nodeClient.fetchEntries(blockHeight);
+    return rows.map((r: any) => ({
+      address: r.address,
+      score: Number(r.score ?? 0),
+      block_height: Number(r.block_height ?? blockHeight),
+      block_seed: r.block_seed,
+      signature: r.signature,
+    }));
+  }
   const { data, error } = await supabase
     .from("blob_entries").select("*").eq("block_height", blockHeight);
   if (error) { console.error("[relay] fetchEntries", error); return []; }
@@ -366,6 +372,10 @@ export async function registerAddress(p: {
   signature: string;
   timestamp: number;
 }): Promise<{ ok: boolean; error?: string }> {
+  await ensureRelayMode();
+  if (activeMode === "node" && nodeClient) {
+    return await nodeClient.registerAddress(p);
+  }
   const { data, error } = await supabase.functions.invoke("register-address", { body: p });
   if (error) {
     console.error("[relay] registerAddress", error);
@@ -388,6 +398,20 @@ export type AddressRecord = {
 };
 
 export async function fetchAddresses(): Promise<AddressRecord[]> {
+  await ensureRelayMode();
+  if (activeMode === "node" && nodeClient) {
+    const rows = await nodeClient.fetchAddresses(500, 0);
+    return rows.map((r: any) => ({
+      address: r.address,
+      publicKey: r.publicKey ?? undefined,
+      blocksWon: Number(r.blocksWon ?? 0),
+      totalMined: Number(r.totalMined ?? 0),
+      bestScore: Number(r.bestScore ?? 0),
+      gamesPlayed: Number(r.gamesPlayed ?? 0),
+      firstSeen: r.firstSeen ?? null,
+      lastActive: r.lastActive ?? null,
+    }));
+  }
   const { data, error } = await (supabase as any)
     .from("blob_addresses_public")
     .select("address,blocks_won,total_mined,best_score,games_played,first_seen,last_active")

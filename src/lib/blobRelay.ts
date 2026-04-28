@@ -1,17 +1,16 @@
-// Blob Chain P2P relay.
+// Blob Chain relay — node-only, with multi-node failover via nodePool.
 //
-// Two backends, selected by VITE_BLOB_RELAY_MODE ∈ {"node","supabase","auto"}:
-//   • supabase — original path: direct table reads + edge functions for writes.
-//   • node     — connect to a BLOB CHAIN full node (REST + WebSocket /ws).
-//   • auto     — probe VITE_BLOB_NODE_URL/health at boot; node if healthy, else supabase.
+// All chain reads/writes go through a BlobNodeClient pointed at the currently
+// active full node (lowest-latency healthy, or user-pinned). When the active
+// node changes we tear down + rebuild the client so the new URL takes effect.
 //
-// All public exports keep the same signatures so callers (useBlockchain,
-// SendTxForm, MiningPanel, etc.) don't need to change. Bridge + address
-// registry + redeem flows remain on Supabase regardless of mode — they're
-// orthogonal to chain consensus.
+// The bridge (BLOB ↔ Solana) is the ONE exception: it stays on Supabase edge
+// functions because it requires custodial Solana key material that can't live
+// on a public node. Bridge calls in this file go directly to edge functions.
 
 import { supabase } from "@/integrations/supabase/client";
 import { BlobNodeClient } from "@/lib/blobNodeClient";
+import { getNodePool, type NodeHealth } from "@/lib/nodePool";
 
 export type Block = {
   height: number;
@@ -53,257 +52,167 @@ export type Entry = {
   block_height: number;
   block_seed?: string;
   signature: string;
-  // Anti-cheat replay fields (optional for backward-compat reads)
   inputs?: string;
   inputs_hash?: string;
   frame_count?: number;
   engine_version?: number;
 };
 
-const safeParse = (s: any, fallback: any) => {
-  try { return typeof s === "string" ? JSON.parse(s) : (s ?? fallback); }
-  catch { return fallback; }
+// ── Active-node management ──────────────────────────────────────────────
+let nodeClient: BlobNodeClient | null = null;
+let activeUrl: string | null = null;
+
+const pool = getNodePool();
+
+// Whenever the pool picks a different active node, swap the client.
+pool.on((e) => {
+  if (e.type !== "active-changed") return;
+  const next = e.url;
+  if (next === activeUrl) return;
+  try { nodeClient?.close?.(); } catch { /* ignore */ }
+  nodeClient = next ? new BlobNodeClient(next) : null;
+  activeUrl = next;
+  emitStatus();
+});
+
+// Initialize from current pool state (may already be set if probes finished).
+activeUrl = pool.getActive();
+if (activeUrl) nodeClient = new BlobNodeClient(activeUrl);
+
+export function getActiveNodeUrl(): string | null { return activeUrl; }
+export function getNodeClient(): BlobNodeClient | null { return nodeClient; }
+export function getNodeHealth(): NodeHealth[] { return pool.getHealth(); }
+
+export type RelayStatus = {
+  activeUrl: string | null;
+  health: NodeHealth[];
+  pinned: string | null;
+  custom: string[];
 };
 
-// ── Mode + node singleton ───────────────────────────────────────────────
-export type RelayMode = "node" | "supabase";
-
-const env = (import.meta as any).env ?? {};
-const NODE_URL: string | undefined = env.VITE_BLOB_NODE_URL || undefined;
-const RELAY_MODE_RAW: string = String(env.VITE_BLOB_RELAY_MODE ?? "auto").toLowerCase();
-
-let activeMode: RelayMode = "supabase";
-let nodeClient: BlobNodeClient | null = null;
-let modeReady: Promise<RelayMode> | null = null;
-// Runtime override (used by the desktop app to pin a user-chosen node).
-// When set, takes priority over env-derived NODE_URL/RELAY_MODE_RAW.
-let overrideMode: RelayMode | null = null;
-let overrideNodeUrl: string | null = null;
-
-export function setRelayOverride(opts: { mode: RelayMode; nodeUrl?: string }) {
-  overrideMode = opts.mode;
-  overrideNodeUrl = opts.nodeUrl ?? null;
-  // Tear down any existing node client so the new URL takes effect.
-  try { nodeClient?.close?.(); } catch { /* ignore */ }
-  nodeClient = null;
-  modeReady = null; // force re-init on next ensureRelayMode()
-  ensureRelayMode().then(emitMode);
+const statusListeners = new Set<(s: RelayStatus) => void>();
+function emitStatus() {
+  const s: RelayStatus = {
+    activeUrl,
+    health: pool.getHealth(),
+    pinned: pool.getPinned(),
+    custom: pool.getCustom(),
+  };
+  for (const l of statusListeners) { try { l(s); } catch { /* ignore */ } }
 }
-const modeListeners = new Set<(m: RelayMode) => void>();
+pool.on(() => emitStatus());
 
-function emitMode() {
-  for (const l of modeListeners) { try { l(activeMode); } catch { /* ignore */ } }
+export function onRelayStatus(fn: (s: RelayStatus) => void): () => void {
+  statusListeners.add(fn);
+  // Fire once with current state.
+  try {
+    fn({
+      activeUrl,
+      health: pool.getHealth(),
+      pinned: pool.getPinned(),
+      custom: pool.getCustom(),
+    });
+  } catch { /* ignore */ }
+  return () => statusListeners.delete(fn);
 }
 
-export function onRelayModeChange(fn: (m: RelayMode) => void) {
-  modeListeners.add(fn);
-  try { fn(activeMode); } catch { /* ignore */ }
-  return () => modeListeners.delete(fn);
+export function setPinnedNode(url: string | null) { pool.setPinned(url); }
+export function addCustomNode(url: string): string | null { return pool.addCustom(url); }
+export function removeCustomNode(url: string) { pool.removeCustom(url); }
+export async function refreshNodeHealth(): Promise<NodeHealth[]> { return pool.refresh(); }
+
+// Wait until at least one node is reachable (or timeout). Used by callers
+// that want to surface a clear "all nodes unreachable" error.
+async function waitForNode(timeoutMs = 4000): Promise<BlobNodeClient | null> {
+  if (nodeClient) return nodeClient;
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (nodeClient) return nodeClient;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  return null;
 }
 
-export function getRelayMode(): RelayMode { return activeMode; }
-export function getNodeClient(): BlobNodeClient | null { return nodeClient; }
-
-async function initRelayMode(): Promise<RelayMode> {
-  // Runtime override wins.
-  if (overrideMode === "node" && overrideNodeUrl) {
-    nodeClient = new BlobNodeClient(overrideNodeUrl);
-    activeMode = "node";
-    return activeMode;
+// Wrap a node operation with failure reporting → triggers failover when the
+// active node misbehaves repeatedly.
+async function withNode<T>(op: (c: BlobNodeClient) => Promise<T>, fallback: T): Promise<T> {
+  const c = await waitForNode();
+  if (!c) return fallback;
+  const url = activeUrl;
+  try {
+    const out = await op(c);
+    if (url) pool.reportSuccess(url);
+    return out;
+  } catch (e) {
+    if (url) pool.reportFailure(url);
+    throw e;
   }
-  if (overrideMode === "supabase") {
-    activeMode = "supabase";
-    return activeMode;
-  }
-  if (RELAY_MODE_RAW === "supabase" || !NODE_URL) {
-    activeMode = "supabase";
-    return activeMode;
-  }
-  if (RELAY_MODE_RAW === "node") {
-    nodeClient = new BlobNodeClient(NODE_URL);
-    activeMode = "node";
-    return activeMode;
-  }
-  // auto: probe /health.
-  const healthy = await BlobNodeClient.healthcheck(NODE_URL);
-  if (healthy) {
-    nodeClient = new BlobNodeClient(NODE_URL);
-    activeMode = "node";
-  } else {
-    activeMode = "supabase";
-  }
-  emitMode();
-  return activeMode;
 }
-
-export function ensureRelayMode(): Promise<RelayMode> {
-  if (!modeReady) modeReady = initRelayMode();
-  return modeReady;
-}
-
-// Kick off the probe immediately so the first call to fetchChain isn't
-// slowed down by it (the promise is cached).
-ensureRelayMode();
 
 // ── BLOCKS ──────────────────────────────────────────────────────────────
-function blockFromRow(r: any): Block {
-  return {
-    height: Number(r.height),
-    previousHash: r.previous_hash,
-    timestamp: Number(r.timestamp),
-    transactions: safeParse(r.transactions, []),
-    miningEntries: safeParse(r.mining_entries, []),
-    winner: r.winner,
-    winnerScore: r.winner_score ?? 0,
-    reward: Number(r.reward ?? 0),
-    seed: String(r.seed ?? ""),
-    hash: r.hash,
-    totalSupply: Number(r.total_supply ?? 0),
-    nodeCount: r.node_count ?? 1,
-  };
-}
-
 export async function fetchChain(): Promise<Block[]> {
-  await ensureRelayMode();
-  if (activeMode === "node" && nodeClient) {
-    // Page through /blocks until we hit an empty/short page.
+  return withNode(async (c) => {
     const out: Block[] = [];
     let cursor = 1;
     let safety = 1000;
     while (safety-- > 0) {
-      const page = await nodeClient.fetchBlocks(cursor, 200);
+      const page = await c.fetchBlocks(cursor, 200);
       if (page.length === 0) break;
-      out.push(...page);
+      out.push(...(page as unknown as Block[]));
       const last = page[page.length - 1].height;
       if (page.length < 200) break;
       cursor = last + 1;
     }
     return out;
-  }
-  const { data, error } = await supabase
-    .from("blob_chain").select("*").order("height", { ascending: true });
-  if (error) { console.error("[relay] fetchChain", error); return []; }
-  return (data ?? []).map(blockFromRow);
+  }, []);
 }
 
-// Block sealing happens on the server; trigger it for a closed height.
-// In node mode this is a no-op — the node seals on its own timer.
-export async function sealBlock(height: number): Promise<{ ok: boolean; error?: string }> {
-  await ensureRelayMode();
-  if (activeMode === "node") return { ok: true };
-  const { data, error } = await supabase.functions.invoke("seal-block", {
-    body: { height },
-  });
-  if (error) {
-    console.error("[relay] sealBlock", error);
-    return { ok: false, error: error.message };
-  }
-  if ((data as any)?.error) return { ok: false, error: (data as any).error };
+// Block sealing is done by the node on its own timer. No-op for compatibility.
+export async function sealBlock(_height: number): Promise<{ ok: boolean; error?: string }> {
   return { ok: true };
 }
 
 // ── MEMPOOL ─────────────────────────────────────────────────────────────
-function txFromRow(r: any): Tx {
-  return {
-    id: r.id,
-    from: r.from_address,
-    to: r.to_address,
-    amount: Number(r.amount),
-    fee: Number(r.fee ?? 0),
-    feeRate: r.fee_rate != null ? Number(r.fee_rate) : undefined,
-    memo: r.memo ?? "",
-    signature: r.signature,
-    publicKey: r.public_key,
-    timestamp: Number(r.timestamp),
-  };
-}
-
 export async function fetchMempool(): Promise<Tx[]> {
-  await ensureRelayMode();
-  if (activeMode === "node" && nodeClient) {
-    return await nodeClient.fetchMempool();
-  }
-  const { data, error } = await supabase
-    .from("blob_mempool").select("*").order("timestamp", { ascending: true });
-  if (error) { console.error("[relay] fetchMempool", error); return []; }
-  return (data ?? []).map(txFromRow);
+  return withNode(async (c) => {
+    const txs = await c.fetchMempool();
+    return txs as unknown as Tx[];
+  }, []);
 }
 
 export async function fetchFeeInfo(): Promise<FeeInfo | null> {
-  await ensureRelayMode();
-  if (activeMode === "node" && nodeClient) {
-    return await nodeClient.fetchFeeInfo();
-  }
-  try {
-    const url = `${(import.meta as any).env.VITE_SUPABASE_URL}/functions/v1/submit-tx`;
-    const res = await fetch(url, {
-      headers: { apikey: (import.meta as any).env.VITE_SUPABASE_PUBLISHABLE_KEY },
-    });
-    if (!res.ok) return null;
-    return (await res.json()) as FeeInfo;
-  } catch (e) {
-    console.error("[relay] fetchFeeInfo", e);
-    return null;
-  }
+  return withNode(async (c) => c.fetchFeeInfo(), null);
 }
 
-export async function pushTx(tx: Tx): Promise<{ ok: boolean; error?: string; fee?: number; bytes?: number }> {
-  await ensureRelayMode();
-  if (activeMode === "node" && nodeClient) {
-    try {
-      const ack = await nodeClient.submitTx({
-        id: tx.id,
-        from: tx.from,
-        to: tx.to,
-        amount: tx.amount,
-        feeRate: tx.feeRate ?? 0,
-        memo: tx.memo ?? "",
-        signature: tx.signature,
-        publicKey: tx.publicKey,
-        timestamp: tx.timestamp,
-      });
-      return { ok: true, fee: ack.fee, bytes: ack.bytes };
-    } catch (e: any) {
-      console.error("[relay] pushTx (node)", e);
-      return { ok: false, error: e?.message ?? String(e) };
-    }
-  }
-  const { data, error } = await supabase.functions.invoke("submit-tx", {
-    body: {
+export async function pushTx(
+  tx: Tx,
+): Promise<{ ok: boolean; error?: string; fee?: number; bytes?: number }> {
+  const c = await waitForNode();
+  if (!c) return { ok: false, error: "All nodes unreachable" };
+  try {
+    const ack = await c.submitTx({
       id: tx.id,
       from: tx.from,
       to: tx.to,
       amount: tx.amount,
-      feeRate: tx.feeRate,
+      feeRate: tx.feeRate ?? 0,
       memo: tx.memo ?? "",
       signature: tx.signature,
       publicKey: tx.publicKey,
       timestamp: tx.timestamp,
-    },
-  });
-  if (error) {
-    console.error("[relay] pushTx", error);
-    return { ok: false, error: error.message };
+    });
+    if (activeUrl) pool.reportSuccess(activeUrl);
+    return { ok: true, fee: ack.fee, bytes: ack.bytes };
+  } catch (e: any) {
+    if (activeUrl) pool.reportFailure(activeUrl);
+    return { ok: false, error: e?.message ?? String(e) };
   }
-  if ((data as any)?.error) return { ok: false, error: (data as any).error };
-  return { ok: true, fee: (data as any)?.fee, bytes: (data as any)?.bytes };
 }
 
 // ── ENTRIES ─────────────────────────────────────────────────────────────
-function entryFromRow(r: any): Entry {
-  return {
-    address: r.address,
-    score: Number(r.score ?? 0),
-    block_height: Number(r.block_height),
-    block_seed: r.block_seed,
-    signature: r.signature,
-  };
-}
-
 export async function fetchEntries(blockHeight: number): Promise<Entry[]> {
-  await ensureRelayMode();
-  if (activeMode === "node" && nodeClient) {
-    const rows = await nodeClient.fetchEntries(blockHeight);
+  return withNode(async (c) => {
+    const rows = await c.fetchEntries(blockHeight);
     return rows.map((r: any) => ({
       address: r.address,
       score: Number(r.score ?? 0),
@@ -311,78 +220,44 @@ export async function fetchEntries(blockHeight: number): Promise<Entry[]> {
       block_seed: r.block_seed,
       signature: r.signature,
     }));
-  }
-  const { data, error } = await supabase
-    .from("blob_entries").select("*").eq("block_height", blockHeight);
-  if (error) { console.error("[relay] fetchEntries", error); return []; }
-  return (data ?? []).map(entryFromRow);
+  }, []);
 }
 
 export async function pushEntry(
-  e: Entry & { publicKey: string }
+  e: Entry & { publicKey: string },
 ): Promise<{ ok: boolean; error?: string }> {
-  await ensureRelayMode();
-  if (activeMode === "node" && nodeClient) {
-    try {
-      await nodeClient.submitEntry({
-        address: e.address,
-        score: e.score,
-        block_height: e.block_height,
-        block_seed: e.block_seed ?? "",
-        signature: e.signature,
-        publicKey: e.publicKey,
-        inputs: e.inputs ?? "",
-        inputs_hash: e.inputs_hash ?? "",
-        frame_count: e.frame_count ?? 0,
-        engine_version: e.engine_version ?? 0,
-      });
-      return { ok: true };
-    } catch (err: any) {
-      console.error("[relay] pushEntry (node)", err);
-      return { ok: false, error: err?.message ?? String(err) };
-    }
-  }
-  const { data, error } = await supabase.functions.invoke("submit-entry", {
-    body: {
+  const c = await waitForNode();
+  if (!c) return { ok: false, error: "All nodes unreachable" };
+  try {
+    await c.submitEntry({
       address: e.address,
       score: e.score,
       block_height: e.block_height,
-      block_seed: e.block_seed,
+      block_seed: e.block_seed ?? "",
       signature: e.signature,
       publicKey: e.publicKey,
       inputs: e.inputs ?? "",
-      inputs_hash: e.inputs_hash,
-      frame_count: e.frame_count,
-      engine_version: e.engine_version,
-    },
-  });
-  if (error) {
-    console.error("[relay] pushEntry", error);
-    return { ok: false, error: error.message };
+      inputs_hash: e.inputs_hash ?? "",
+      frame_count: e.frame_count ?? 0,
+      engine_version: e.engine_version ?? 0,
+    });
+    if (activeUrl) pool.reportSuccess(activeUrl);
+    return { ok: true };
+  } catch (err: any) {
+    if (activeUrl) pool.reportFailure(activeUrl);
+    return { ok: false, error: err?.message ?? String(err) };
   }
-  if ((data as any)?.error) return { ok: false, error: (data as any).error };
-  return { ok: true };
 }
 
-// Register a wallet in the address registry so it shows up in the
-// explorer immediately, even before the user mines or transacts.
 export async function registerAddress(p: {
   address: string;
   publicKey: string;
   signature: string;
   timestamp: number;
 }): Promise<{ ok: boolean; error?: string }> {
-  await ensureRelayMode();
-  if (activeMode === "node" && nodeClient) {
-    return await nodeClient.registerAddress(p);
-  }
-  const { data, error } = await supabase.functions.invoke("register-address", { body: p });
-  if (error) {
-    console.error("[relay] registerAddress", error);
-    return { ok: false, error: error.message };
-  }
-  if ((data as any)?.error) return { ok: false, error: (data as any).error };
-  return { ok: true };
+  const c = await waitForNode();
+  if (!c) return { ok: false, error: "All nodes unreachable" };
+  return c.registerAddress(p);
 }
 
 // ── ADDRESSES ──────────────────────────────────────────────────────────
@@ -398,9 +273,8 @@ export type AddressRecord = {
 };
 
 export async function fetchAddresses(): Promise<AddressRecord[]> {
-  await ensureRelayMode();
-  if (activeMode === "node" && nodeClient) {
-    const rows = await nodeClient.fetchAddresses(500, 0);
+  return withNode(async (c) => {
+    const rows = await c.fetchAddresses(500, 0);
     return rows.map((r: any) => ({
       address: r.address,
       publicKey: r.publicKey ?? undefined,
@@ -411,25 +285,13 @@ export async function fetchAddresses(): Promise<AddressRecord[]> {
       firstSeen: r.firstSeen ?? null,
       lastActive: r.lastActive ?? null,
     }));
-  }
-  const { data, error } = await (supabase as any)
-    .from("blob_addresses_public")
-    .select("address,blocks_won,total_mined,best_score,games_played,first_seen,last_active")
-    .order("first_seen", { ascending: true });
-  if (error) { console.error("[relay] fetchAddresses", error); return []; }
-  return (data ?? []).map((r: any) => ({
-    address: r.address,
-    publicKey: undefined,
-    blocksWon: Number(r.blocks_won ?? 0),
-    totalMined: Number(r.total_mined ?? 0),
-    bestScore: Number(r.best_score ?? 0),
-    gamesPlayed: Number(r.games_played ?? 0),
-    firstSeen: r.first_seen ?? null,
-    lastActive: r.last_active ?? null,
-  }));
+  }, []);
 }
 
-// ── BRIDGE (Solana) ────────────────────────────────────────────────────
+// ── BRIDGE (Solana) — Supabase only ────────────────────────────────────
+//
+// The bridge is custodial (it holds Solana mint authority) so it can't be
+// decentralised — it stays on Supabase edge functions regardless of node.
 export type BridgeRequest = {
   blob_tx_id: string;
   from_address: string;
@@ -450,14 +312,6 @@ export type BridgeConfig = {
 };
 
 export async function fetchBridgeConfig(): Promise<BridgeConfig | null> {
-  await ensureRelayMode();
-  if (activeMode === "node" && nodeClient) {
-    const c = await nodeClient.fetchBridgeConfig();
-    if (c && c.enabled) {
-      return { bridgeAddress: c.bridgeAddress, splMintAddress: c.splMintAddress, solanaRpcUrl: c.solanaRpcUrl };
-    }
-    // Node has no bridge configured — fall back to the Supabase bridge config.
-  }
   try {
     const url = `${(import.meta as any).env.VITE_SUPABASE_URL}/functions/v1/bridge-config`;
     const res = await fetch(url, {
@@ -477,12 +331,6 @@ export async function registerBridgeRequest(p: {
   amount: number;
   from_address: string;
 }): Promise<{ ok: boolean; error?: string; data?: BridgeRequest }> {
-  await ensureRelayMode();
-  if (activeMode === "node" && nodeClient) {
-    const r = await nodeClient.registerBridgeMint(p);
-    if (!r.ok) return { ok: false, error: r.error };
-    return { ok: true, data: r.data as BridgeRequest };
-  }
   const { data, error } = await supabase.functions.invoke("bridge-mint", { body: p });
   if (error) return { ok: false, error: error.message };
   if ((data as any)?.error) return { ok: false, error: (data as any).error };
@@ -490,10 +338,6 @@ export async function registerBridgeRequest(p: {
 }
 
 export async function pollBridgeRequest(blob_tx_id: string): Promise<BridgeRequest | null> {
-  await ensureRelayMode();
-  if (activeMode === "node" && nodeClient) {
-    return (await nodeClient.pollBridgeMint(blob_tx_id)) as BridgeRequest | null;
-  }
   try {
     const url = `${(import.meta as any).env.VITE_SUPABASE_URL}/functions/v1/bridge-mint?blob_tx_id=${encodeURIComponent(blob_tx_id)}`;
     const res = await fetch(url, {
@@ -532,12 +376,6 @@ export async function registerRedeem(p: {
   blob_address: string;
   amount: number;
 }): Promise<{ ok: boolean; error?: string; data?: RedeemRequest }> {
-  await ensureRelayMode();
-  if (activeMode === "node" && nodeClient) {
-    const r = await nodeClient.registerBridgeRedeem(p);
-    if (!r.ok) return { ok: false, error: r.error };
-    return { ok: true, data: r.data as RedeemRequest };
-  }
   const { data, error } = await supabase.functions.invoke("bridge-redeem", { body: p });
   if (error) return { ok: false, error: error.message };
   if ((data as any)?.error) return { ok: false, error: (data as any).error };
@@ -545,10 +383,6 @@ export async function registerRedeem(p: {
 }
 
 export async function pollRedeem(sol_signature: string): Promise<RedeemRequest | null> {
-  await ensureRelayMode();
-  if (activeMode === "node" && nodeClient) {
-    return (await nodeClient.pollBridgeRedeem(sol_signature)) as RedeemRequest | null;
-  }
   try {
     const url = `${(import.meta as any).env.VITE_SUPABASE_URL}/functions/v1/bridge-redeem?sol_signature=${encodeURIComponent(sol_signature)}`;
     const res = await fetch(url, {
@@ -575,78 +409,62 @@ export type RelayHandlers = {
   onEntry?: (e: Entry) => void;
 };
 
-export function subscribeRelay(h: RelayHandlers) {
+// Subscribes to live updates from whichever full node is currently active.
+// On node failover the underlying client is swapped automatically — we
+// re-attach handlers each time `nodeClient` changes.
+export function subscribeRelay(h: RelayHandlers): () => void {
   let cancelled = false;
-  let supabaseUnsub: (() => void) | null = null;
-  let nodeWired = false;
+  let attachedClient: BlobNodeClient | null = null;
+  const liveMempool = new Set<string>();
 
-  // Two backends: pick after the mode probe resolves. Returned unsubscribe
-  // tears down whichever path actually wired up.
-  ensureRelayMode().then((mode) => {
+  function attach(c: BlobNodeClient) {
+    attachedClient = c;
+    c.setHandlers({
+      onBlock: (b) => {
+        for (const t of b.transactions ?? []) {
+          const id = (t as any)?.id;
+          if (id && liveMempool.delete(id)) h.onTxRemoved?.(id);
+        }
+        h.onBlock?.(b as unknown as Block);
+      },
+      onTx: (t) => {
+        if (t.id) liveMempool.add(t.id);
+        h.onTx?.(t as unknown as Tx);
+      },
+      onEntry: (e) => h.onEntry?.({
+        address: e.address,
+        score: e.score,
+        block_height: e.block_height,
+        block_seed: e.block_seed,
+        signature: e.signature,
+        inputs: e.inputs ?? undefined,
+        inputs_hash: e.inputs_hash ?? undefined,
+        frame_count: e.frame_count ?? undefined,
+        engine_version: e.engine_version,
+      }),
+    });
+    c.connect();
+  }
+
+  if (nodeClient) attach(nodeClient);
+
+  // Re-attach if the active node changes mid-session.
+  const off = pool.on((e) => {
     if (cancelled) return;
-
-    if (mode === "node" && nodeClient) {
-      nodeWired = true;
-      // The node has no DELETE-tx event; we synthesize onTxRemoved by tracking
-      // mempool ids and diffing on every newBlock (its txs are the ones that
-      // just left the mempool).
-      const liveMempool = new Set<string>();
-      nodeClient.setHandlers({
-        onBlock: (b) => {
-          for (const t of b.transactions ?? []) {
-            const id = (t as any)?.id;
-            if (id && liveMempool.delete(id)) h.onTxRemoved?.(id);
-          }
-          h.onBlock?.(b);
-        },
-        onTx: (t) => {
-          if (t.id) liveMempool.add(t.id);
-          h.onTx?.(t);
-        },
-        onEntry: (e) => h.onEntry?.({
-          address: e.address,
-          score: e.score,
-          block_height: e.block_height,
-          block_seed: e.block_seed,
-          signature: e.signature,
-          inputs: e.inputs ?? undefined,
-          inputs_hash: e.inputs_hash ?? undefined,
-          frame_count: e.frame_count ?? undefined,
-          engine_version: e.engine_version,
-        }),
-      });
-      nodeClient.connect();
-      return;
+    if (e.type !== "active-changed") return;
+    if (attachedClient) {
+      try { attachedClient.setHandlers({}); } catch { /* ignore */ }
+      attachedClient = null;
     }
-
-    // Supabase realtime fallback (original behavior).
-    const ch = supabase
-      .channel("blob-chain-relay")
-      .on("postgres_changes",
-        { event: "INSERT", schema: "public", table: "blob_chain" },
-        (p) => h.onBlock?.(blockFromRow(p.new)))
-      .on("postgres_changes",
-        { event: "INSERT", schema: "public", table: "blob_mempool" },
-        (p) => h.onTx?.(txFromRow(p.new)))
-      .on("postgres_changes",
-        { event: "DELETE", schema: "public", table: "blob_mempool" },
-        (p) => { const id = (p.old as any)?.id; if (id) h.onTxRemoved?.(id); })
-      .on("postgres_changes",
-        { event: "INSERT", schema: "public", table: "blob_entries" },
-        (p) => h.onEntry?.(entryFromRow(p.new)))
-      .on("postgres_changes",
-        { event: "UPDATE", schema: "public", table: "blob_entries" },
-        (p) => h.onEntry?.(entryFromRow(p.new)))
-      .subscribe();
-    supabaseUnsub = () => { supabase.removeChannel(ch); };
+    if (nodeClient) attach(nodeClient);
   });
 
   return () => {
     cancelled = true;
-    if (supabaseUnsub) supabaseUnsub();
-    if (nodeWired && nodeClient) {
-      // Detach handlers but keep socket alive for other subscribers / next mount.
-      nodeClient.setHandlers({});
+    off();
+    if (attachedClient) {
+      try { attachedClient.setHandlers({}); } catch { /* ignore */ }
+      attachedClient = null;
     }
   };
 }

@@ -804,7 +804,7 @@ export default function BlobChainApp() {
       <footer className="mt-12 py-6 text-center text-[11px] text-muted-foreground/60 num space-x-3">
         <span>Blob Chain © 2026</span>
         <span aria-hidden>·</span>
-        <a href="/run-a-node" className="hover:text-foreground transition-colors">Run your own node</a>
+        <a href="https://github.com/blobchain/blobchain/blob/main/node/README.md" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">Run your own node</a>
       </footer>
     </div>
   );

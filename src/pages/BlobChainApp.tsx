@@ -25,7 +25,7 @@ import BridgeScreen from "@/components/blob/BridgeScreen";
 import BlockExplorer from "@/components/blob/BlockExplorer";
 import NetworkView from "@/components/blob/NetworkView";
 
-export default function BlobChainApp() {
+export default function BlobChainApp({ disableBridge = false }: { disableBridge?: boolean } = {}) {
   // ── Wallet (vault + lifecycle) ────────────────────────────────────────────
   const {
     wallet, vaultPub, walletRef,

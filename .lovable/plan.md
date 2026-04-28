@@ -1,105 +1,51 @@
-# Cleanup + Smart Node Picker + Self-Host Option
+# Phase 3 — Decentralize for real (IN PROGRESS)
 
-Three small, focused changes.
+## Status snapshot
 
-## 1. Delete the dead `useNodeClient` hook
+**Done this loop:**
+- `node/lib/ingest.ts` — `ingestTx`, `ingestEntry`, `ingestBlock` (with full consensus re-validation + depth-1 reorg via lexicographically-smaller-hash tie-break, returning losing-block txs to mempool atomically).
+- `node/lib/peers.ts` — `PeerManager` outbound WS dialer: bootstrap from `PEERS=` env, sync-on-(re)connect with 5-block back-window, heartbeat + stall detection, `broadcast()` for forwarding local events to peers, `count()/list()` for `/peers` endpoint.
+- `node/lib/bridge.ts` — full BLOB↔Solana bridge ported off Lovable Cloud:
+  - SQLite tables `bridge_requests` + `bridge_redeems` (created via `ensureBridgeSchema`).
+  - `registerMint` / `processForwardOnce` (BLOB→wBLOB).
+  - `registerRedeem` / `processReverseOnce` with raw SPL burn verification + `signAndIngestCredit` that signs a credit tx with `BRIDGE_BLOB_PRIVATE_KEY` and shoves it straight into the local mempool (no HTTP round-trip).
+  - Raw SPL mint via `@noble/ed25519` + `bs58` (no `@solana/web3.js`).
+- `node/package.json` — added `bs58@^5.0.0` and `@noble/ed25519@2.1.0`.
 
-- Remove `desktop-app/src/hooks/useNodeClient.ts`. It has zero importers — `BlobChainApp` owns all node/relay state via `setRelayOverride` + the website's own hooks. Nothing else changes.
+**NOT yet done (next loop):**
 
-## 2. Smarter desktop Node Setup screen
+1. **`node/full-node.ts` rewrite** — call `ensureBridgeSchema(d)`; refactor WS handler to call `ingestTx/ingestEntry`; refactor sealer to call `ingestBlock` for self-sealed blocks (so the reorg path gets exercised uniformly); construct `PeerManager({ bootstrapUrls: process.env.PEERS?.split(",") ?? [], db: d, onAppliedBlock: b => gossip.broadcast({type:"newBlock", block: b}), … })`; on every successful local seal also call `peers.broadcast({type:"newBlock", block})`; add HTTP routes:
+   - `GET /peers` → `peers.list()`
+   - `GET /blocks/:height/entries` → parse `mining_entries` from the block row
+   - `GET /entries?height=N` → query `entries` table
+   - `POST /addresses/register` → verify sig + upsert
+   - `GET /addresses` → paginated computed view (blocks_won, total_mined, best_score, games_played, first_seen, last_active)
+   - `GET /bridge/config` → `bridgeConfig()`
+   - `POST /bridge/mint` + `GET /bridge/mint?blob_tx_id=…` → `registerMint` / `getMintRow`
+   - `POST /bridge/redeem` + `GET /bridge/redeem?sol_signature=…` → `registerRedeem` / `getRedeemRow`
+   - Add a 5s interval calling `processForwardOnce(d, log)` and `processReverseOnce(d, log)`.
+   - Update `/health` to include `peers: peers.count()`.
 
-Rewrite `desktop-app/src/screens/NodeSetupScreen.tsx` so first-run users don't need to know anything about node URLs, but power users keep full control.
+2. **Browser wiring** in `src/lib/blobNodeClient.ts` + `src/lib/blobRelay.ts`:
+   - Add `fetchEntries(height)`, `fetchPeers()`, `fetchAddresses()`, `registerAddress()`, `fetchBridgeConfig()`, `registerBridgeMint()`, `pollBridgeMint()`, `registerBridgeRedeem()`, `pollBridgeRedeem()` REST helpers.
+   - In `blobRelay.ts`, when `activeMode === "node"`, route bridge + addresses + entries to the node helpers. Keep Supabase as fallback for history endpoints.
 
-**Built-in fallback list** (defined as a constant in `desktop-app/src/hooks/useNodeConfig.ts`, exported as `BUNDLED_NODES`):
+3. **Deployment** — `node/Dockerfile`, `node/docker-compose.yml`, `node/PEERS.md`, update `src/pages/RunANode.tsx` with Docker quickstart + `PEERS=` example.
 
-```ts
-[
-  { label: "Official (blobchain.network)", url: "https://node.blobchain.network" },
-  { label: "Community node — EU",          url: "https://node-eu.blobchain.network" },
-  { label: "Community node — US",          url: "https://node-us.blobchain.network" },
-  { label: "Local node",                   url: "http://localhost:9090" },
-]
-```
+4. **UX polish** — `NetworkView` shows real `/peers` data; `RelayStatusBadge` visible in production when mode = node; desktop `NodeSetupScreen` post-connect health watchdog.
 
-(These URLs are placeholders to be filled in later — the structure is what matters now.)
+5. **Verification** — typecheck the node (`cd node && npx tsc --noEmit`) and run two-node compose smoke test per §Acceptance criteria below.
 
-**Behavior on screen load:**
+## Acceptance criteria (unchanged)
 
-1. Ping every bundled node in parallel using `BlobNodeClient.healthcheck(url, 2500)` — measure round-trip ms with `performance.now()`.
-2. Auto-select the reachable node with the lowest latency.
-3. Show a status line: `"Auto-selected Official node — 87 ms"` (or `"No bundled nodes reachable — pick one or enter a custom URL"`).
+1. `docker compose up` two nodes with `PEERS` cross-pointed → mining on A appears on B within ~1s, both report `peers: 1` on `/health`.
+2. Browser `VITE_BLOB_NODE_URL` to either node → wallet works identically.
+3. Node `/bridge/mint` → SPL tokens land in destination Solana wallet without any Lovable Cloud edge function being invoked.
+4. Kill node A → wallet pointed at A reconnects to B (or shows "switch node" banner) and stays in sync.
 
-**UI layout (using existing shadcn primitives):**
+## Out of scope (Phase 4)
 
-```text
-┌─────────────────────────────────────────────┐
-│ Choose a node                               │
-│                                             │
-│ [ Select dropdown ▾ ]                       │
-│   • Official      — 87 ms   ✓ best         │
-│   • Community EU  — 142 ms                 │
-│   • Community US  — 198 ms                 │
-│   • Local node    — unreachable            │
-│   • Custom URL…                            │
-│                                             │
-│ (if Custom selected:)                       │
-│ [ http://… input ]   [ Test ]               │
-│                                             │
-│ [ Re-scan ]              [ Connect → ]      │
-│                                             │
-│ ─────────  or  ─────────                    │
-│                                             │
-│ Want full sovereignty?                      │
-│ [ Run your own node ]  →  opens guide      │
-└─────────────────────────────────────────────┘
-```
-
-- Dropdown uses shadcn `Select`. Each item shows label + ping (color-coded: green <150ms, amber <400ms, red/strikethrough if unreachable). The fastest reachable one gets a "best" badge.
-- "Custom URL…" reveals an `Input` + "Test" button. Validates `^https?://`. Test result shown inline.
-- "Re-scan" re-runs all pings.
-- "Connect →" is disabled until a reachable URL is selected (custom URLs allowed even if untested — same forgiving behavior as today).
-- "Run your own node" button opens the self-host guide (see section 3 — same page, in-app via Electron `shell.openExternal` so it opens in their browser).
-
-**Persistence:** keep the current `useNodeConfig` storage (`{ current, saved }`). When the user picks a custom URL, append it to `saved` so it appears in the dropdown next launch under a "Recent" group.
-
-## 3. "Run your own node" on the website
-
-Add a new lightweight page at `/run-a-node` (route added in `src/App.tsx`) with a clean glass-card layout matching the rest of the site. Content:
-
-- One-paragraph "why run your own node" pitch (sovereignty, no third-party trust, contribute to the network).
-- Quickstart code blocks (copy-buttons) using the existing `node/` package:
-  ```bash
-  git clone https://github.com/<org>/blobchain
-  cd blobchain/node
-  npm install
-  npm start                  # listens on :9090
-  ```
-- "Then in the desktop app: Settings → Node → Custom URL → `http://localhost:9090`".
-- Link to the GitHub repo and the `node/README.md`.
-
-**Entry points to the page:**
-
-- Footer of `BlobChainApp` (currently just shows `Blob Chain © 2026`) — add a small `Run your own node` link next to the copyright.
-- Network tab: small inline link/banner near the node list saying "Don't see your node? Run one →".
-- Desktop NodeSetupScreen "Run your own node" button (section 2) links to the same URL.
-
-## Files changed
-
-**Deleted**
-- `desktop-app/src/hooks/useNodeClient.ts`
-
-**Edited**
-- `desktop-app/src/hooks/useNodeConfig.ts` — export `BUNDLED_NODES` constant; keep `saved` list as recent customs.
-- `desktop-app/src/screens/NodeSetupScreen.tsx` — full rewrite per section 2 (parallel ping, auto-select, dropdown, custom input, self-host CTA).
-- `src/App.tsx` — add `/run-a-node` route.
-- `src/pages/BlobChainApp.tsx` — add footer link to `/run-a-node`.
-- `src/components/blob/NetworkView.tsx` — small "Run one →" link.
-
-**New**
-- `src/pages/RunANode.tsx` — the guide page.
-
-## Out of scope (saved for later)
-
-- Bridge graceful-degradation when edge functions are unreachable.
-- Bundling the node binary inside the desktop app for one-click local-node start.
-- Filling in the real public node URLs (placeholders for now — you'll provide once the official ones are live).
+- Deep reorgs (>1 block).
+- DHT/peer discovery (bootstrap list only).
+- Pruning / state snapshots for fast-sync.
+- Bundling node binary in desktop app.

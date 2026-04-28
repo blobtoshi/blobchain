@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import { Maximize2, Minimize2 } from "lucide-react";
 import * as Relay from "@/lib/blobRelay";
 import { signData } from "@/lib/blob/crypto";
 import { CW, CH, GY, PX } from "@/lib/blob/constants";
@@ -30,6 +31,24 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit }) {
   // Render-only scratch (NOT part of deterministic simulator state).
   const renderRef = useRef<{ lastCombo: number }>({ lastCombo: 0 });
   const [gs, setGs] = useState({ status: "idle", score: 0, combo: 0 });
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await wrapRef.current?.requestFullscreen?.();
+      } else {
+        await document.exitFullscreen?.();
+      }
+    } catch { /* ignore */ }
+  }, []);
 
   const level = useRef(generateLevelPure(blockInfo.seed));
   const bgNodes = useRef(Array.from({ length: 12 }, () => ({
@@ -389,13 +408,32 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit }) {
 
   return (
     <div className="space-y-2">
-      <div className="relative rounded-2xl overflow-hidden border border-border/50" style={{ lineHeight: 0, boxShadow: "0 20px 60px hsl(220 50% 2% / 0.6)" }}>
+      <div
+        ref={wrapRef}
+        className={`relative overflow-hidden border border-border/50 ${isFullscreen ? "rounded-none w-screen h-screen flex items-center justify-center bg-background" : "rounded-2xl"}`}
+        style={{ lineHeight: 0, boxShadow: isFullscreen ? "none" : "0 20px 60px hsl(220 50% 2% / 0.6)" }}
+      >
         <canvas ref={cvs} width={CW} height={CH}
-          style={{ display: "block", width: "100%", height: "auto", touchAction: "none" }}
+          style={{
+            display: "block",
+            width: isFullscreen ? "auto" : "100%",
+            height: isFullscreen ? "100%" : "auto",
+            maxWidth: "100%",
+            maxHeight: "100%",
+            touchAction: "none",
+          }}
           onTouchStart={onTapStart}
           onTouchEnd={onTapEnd}
           onTouchCancel={onTapEnd}
         />
+        <button
+          type="button"
+          aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+          onClick={toggleFullscreen}
+          className="absolute top-3 right-3 z-10 p-2 rounded-full bg-background/60 backdrop-blur-sm border border-accent/40 text-accent hover:bg-accent/20 active:scale-95 transition shadow-[0_0_18px_hsl(var(--accent)/0.25)]"
+        >
+          {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+        </button>
         {gs.status === "playing" && (
           <button
             type="button"

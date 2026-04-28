@@ -3,7 +3,7 @@
 // This node:
 //   • Serves HTTP REST + WebSocket /ws to wallets/desktop clients.
 //   • Peers with other full nodes (outbound WS dialer) for block/tx/entry gossip.
-//   • Runs the Solana bridge in-process (no edge functions).
+//   • Does NOT run a Solana bridge — that lives on the website (custodial).
 //   • Seals blocks every 120s through the unified `ingest` chokepoint so the
 //     reorg + validation logic is shared with peer-supplied blocks.
 
@@ -36,7 +36,6 @@ const PEERS_RAW = process.env.PEERS ?? "";
 
 // ── Bootstrap ───────────────────────────────────────────────────────────
 const d: DB = openDb(DB_PATH);
-ensureBridgeSchema(d);
 const gossip = new Gossip();
 
 function chainTip(): ChainTip {
@@ -92,7 +91,7 @@ app.get("/health", (_req, res) => {
     height: tip.height,
     tipHash: tip.hash,
     peers: peers.count(),
-    bridge: bridgeEnabled(),
+    bridge: false,
     wallHeight: currentHeight(),
   });
 });
@@ -424,21 +423,12 @@ const sealerHandle = setInterval(() => {
   }
 }, SEAL_TICK_MS);
 
-// ── Bridge worker ───────────────────────────────────────────────────────
-const BRIDGE_TICK_MS = 5_000;
-const bridgeHandle = setInterval(() => {
-  if (!bridgeEnabled()) return;
-  Promise.allSettled([
-    processForwardOnce(d, log),
-    processReverseOnce(d, log),
-  ]).catch((e) => log("error", "bridge worker crashed", { err: String(e) }));
-}, BRIDGE_TICK_MS);
+// Bridge worker removed — bridge no longer runs on full nodes.
 
 // ── Graceful shutdown ───────────────────────────────────────────────────
 function shutdown(signal: string) {
   log("info", `${signal} received — shutting down`);
   clearInterval(sealerHandle);
-  clearInterval(bridgeHandle);
   peers.shutdown();
   for (const ws of wss.clients) {
     try { ws.close(1001, "server shutdown"); } catch { /* ignore */ }

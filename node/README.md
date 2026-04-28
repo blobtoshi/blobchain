@@ -1,14 +1,8 @@
 # BLOB CHAIN — Full Node
 
-A standalone Node.js implementation of the BLOB CHAIN consensus rules.
-Runs the same 120-second weighted-lottery block sealer as the Supabase
-edge function, persists state in SQLite, and gossips new blocks /
-transactions / mining entries over WebSocket.
+The authoritative implementation of the BLOB CHAIN consensus rules. Standalone Node.js process: 120-second weighted-lottery block sealer, SQLite persistence, WebSocket gossip with other nodes, REST + WebSocket API for clients (website, desktop wallet, anything else).
 
-**Status: Phases 1 & 2 complete.** The node runs standalone *and* the
-browser app can connect to it as a light client via the
-`VITE_BLOB_RELAY_MODE` switch. Phase 3 = node↔node peering + porting the
-Solana bridge off Supabase.
+Every browser, desktop, or third-party client talks to a node like this one — there is no centralized chain backend any more.
 
 ---
 
@@ -27,61 +21,85 @@ curl http://localhost:8080/health
 # → { "ok": true, "height": 0, "tipHash": "412c…", "peers": 0, ... }
 ```
 
-### Environment variables
+---
 
-| Var       | Default               | Purpose                           |
-|-----------|-----------------------|-----------------------------------|
-| `PORT`    | `8080`                | HTTP / WS port                    |
-| `DB_PATH` | `./data/blobchain.db` | SQLite file (auto-created)        |
-| `NODE_ID` | random UUID           | Stable identifier across restarts |
+## Run with Docker
+
+```bash
+cd node
+docker compose up --build
+```
+
+Brings up two peered nodes on `localhost:8081` and `localhost:8082`. Each one mounts a named volume so the SQLite chain data survives `docker compose down`. Use this as a template for production deployments.
+
+For a single container:
+
+```bash
+docker build -t blobchain-node .
+docker run -p 8080:8080 -v blobchain-data:/data \
+  -e DB_PATH=/data/blobchain.db \
+  -e PEERS=wss://node-a.example.com/ws,wss://node-b.example.com/ws \
+  blobchain-node
+```
 
 ---
 
-## Browser integration (Phase 2)
+## Environment variables
 
-The React app ships with a mode-switching relay (`src/lib/blobRelay.ts`)
-backed by `src/lib/blobNodeClient.ts`. Point it at your local node by
-adding to `.env.local`:
+| Var       | Default               | Purpose                                                       |
+|-----------|-----------------------|---------------------------------------------------------------|
+| `PORT`    | `8080`                | HTTP / WebSocket port                                         |
+| `DB_PATH` | `./data/blobchain.db` | SQLite file (auto-created)                                    |
+| `NODE_ID` | random UUID           | Stable identifier across restarts                             |
+| `PEERS`   | *(empty)*             | Comma-separated WebSocket URLs of other nodes (see PEERS.md)  |
+
+---
+
+## Connecting clients
+
+### Website
+The React app at `src/` ships with a multi-node pool (`src/lib/nodePool.ts`). It probes a list of bundled URLs + any user-added URLs in parallel, picks the lowest-latency healthy one, and fails over automatically when a node dies. To make it default to your node at build time:
 
 ```bash
+# .env.local in the website project
 VITE_BLOB_NODE_URL=http://localhost:8080
-VITE_BLOB_RELAY_MODE=auto   # auto | node | supabase
 ```
 
-- `auto` — probe the node first, fall back to Supabase if unreachable
-- `node` — force the local full node (errors if down)
-- `supabase` — bypass the node entirely (legacy path)
+End users don't need to set anything — they can add and pin nodes from the **Network** tab in the app.
 
-In dev builds a `RelayStatusBadge` overlay shows the active mode, WS
-state, and current tip height so you can verify which backend the
-browser is talking to.
+### Desktop wallet
+`desktop-app/` ships with the same pool. Manage URLs from the in-app Node settings. The desktop wallet is node-only — it has no Supabase code path at all.
+
+### Other clients
+The HTTP and WebSocket protocols below are stable. Anything that can speak HTTP + JSON over WS can be a client.
 
 ---
 
 ## HTTP endpoints
 
-| Method | Path                       | Description                                  |
-|--------|----------------------------|----------------------------------------------|
-| GET    | `/health`                  | Liveness + tip summary + peer count          |
-| GET    | `/chain/tip`               | `{ height, hash, totalSupply, timestamp }` — supports `If-None-Match` / `ETag` |
-| GET    | `/blocks?from=N&limit=M`   | Range of blocks (max 500)                    |
-| GET    | `/blocks/:height`          | Single immutable block by height             |
-| GET    | `/mempool`                 | All pending transactions                     |
-| GET    | `/mempool?since=<ts>`      | Delta sync — only txs newer than `<ts>` (ms) |
-| GET    | `/fee-info`                | Recommended / minimum fee rate               |
+| Method | Path                       | Description                                                  |
+|--------|----------------------------|--------------------------------------------------------------|
+| GET    | `/health`                  | Liveness + tip summary + peer count                          |
+| GET    | `/chain/tip`               | `{ height, hash, totalSupply, timestamp }` — `If-None-Match` aware |
+| GET    | `/blocks?from=N&limit=M`   | Range of blocks (max 500)                                    |
+| GET    | `/blocks/:height`          | Single immutable block                                       |
+| GET    | `/mempool`                 | All pending transactions                                     |
+| GET    | `/mempool?since=<ts>`      | Delta sync — only txs newer than `<ts>` (ms)                 |
+| GET    | `/fee-info`                | Recommended / minimum fee rate                               |
+| GET    | `/peers`                   | Peer list with state, latency, remote height                 |
+
+---
 
 ## WebSocket protocol
 
-Connect: `ws://localhost:8080/ws`
+Connect: `ws://localhost:8080/ws` (use `wss://` in production).
 
-On connect the server immediately sends:
-
+Server immediately sends:
 ```json
 { "type": "hello", "nodeId": "...", "version": "1.0.0", "chainTip": { ... } }
 ```
 
-Client → Server messages (see `wsProtocol.ts`):
-
+Client → Server (see `wsProtocol.ts`):
 - `{ "type": "subscribe" }` — receive future blocks/txs/entries
 - `{ "type": "submitTx", "tx": { ... } }`
 - `{ "type": "submitEntry", "entry": { ... } }`
@@ -90,22 +108,12 @@ Client → Server messages (see `wsProtocol.ts`):
 - `{ "type": "getMempool" }`
 - `{ "type": "ping", "t": 12345 }`
 
-Server → Client messages:
+Server → Client:
+- `hello`, `ack`, `error`
+- `newBlock`, `newTx`, `newEntry`, `chainTip`
+- `blocksRange`, `mempool`, `pong`
 
-- `{ "type": "hello", ... }`
-- `{ "type": "ack", "ref": "...", "data": { ... } }`
-- `{ "type": "error", "ref": "...", "message": "..." }`
-- `{ "type": "newBlock", "block": { ... } }`
-- `{ "type": "newTx", "tx": { ... } }`
-- `{ "type": "newEntry", "entry": { ... } }`
-- `{ "type": "chainTip", "tip": { ... } }`
-- `{ "type": "blocksRange", "blocks": [ ... ] }`
-- `{ "type": "mempool", "txs": [ ... ] }`
-- `{ "type": "pong", "t": 12345 }`
-
-**Abuse guard:** the server tracks malformed/invalid messages per
-socket. **5 strikes → the connection is terminated.** Keep your client
-honest.
+**Abuse guard:** 5 malformed/invalid messages on a single socket → connection terminated.
 
 ---
 
@@ -119,16 +127,11 @@ npx wscat -c ws://localhost:8080/ws
 < {"type":"chainTip","tip":{"height":0,"hash":"412c…",…}}
 ```
 
-Submitting a real signed tx or entry uses the same payload format the
-edge functions accept (`submit-tx`, `submit-entry`). The browser
-already produces these payloads and (in Phase 2) routes them here over
-WS when `VITE_BLOB_RELAY_MODE` selects the node.
-
 ---
 
 ## Consensus invariants
 
-The full node enforces the **same** rules as `supabase/functions/seal-block`:
+The node is the only place the chain rules live now. They are:
 
 - 120-second block window
 - Weighted lottery winner selection (entries sorted by address for determinism, `Mulberry32` PRNG seeded from height)
@@ -136,33 +139,46 @@ The full node enforces the **same** rules as `supabase/functions/seal-block`:
 - Block hash = `sha256("height|prev|ts|winner|score|reward|seed|txCount")`
 - Proof-of-gaming: a block with **zero verified mining entries cannot be sealed** — it stays open until a player submits a score
 - Transaction validation: secp256k1 sig over `from→to:amount@ts|fr=feeRate|m=memo`, P2PKH address derivation from compressed pubkey, congestion-adjusted minimum fee rate, balance check
-- Mining entry validation: deterministic re-simulation of the submitted input trace (`_simulator.ts`) — replay must terminate at the same frame and score
+- Mining entry validation: deterministic re-simulation of the submitted input trace (`lib/simulator.ts`) — replay must terminate at the same frame and score
 
-If any of these drift from the edge function, the two will produce
-different chains. Keep `node/lib/consensus.ts` and the simulator copy
-byte-for-byte synced with the edge versions.
+If you fork the node, keep these rules byte-for-byte identical or your chain will diverge from the rest of the network.
 
 ---
 
-## Deploying multiple peered nodes
+## Peering
 
-The node is fully peer-to-peer in Phase 3. Two-node smoke test:
+Each node is also a WebSocket *client* of every URL in `PEERS`. New blocks, transactions, and best-score entries gossip across the mesh in ~1 second. Depth-1 reorgs are resolved by lexicographically smaller hash. Anything deeper triggers a fresh range-pull.
+
+Two-node smoke test:
 
 ```bash
-cd node
 docker compose up --build
-curl -s localhost:8081/health  # peers: 1
-curl -s localhost:8082/health  # peers: 1
+curl -s localhost:8081/health   # peers: 1
+curl -s localhost:8082/health   # peers: 1
+curl -s localhost:8081/peers
 ```
 
-For a real deployment, set `PEERS=` to a comma-separated list of other
-nodes' WebSocket URLs (use `wss://` in production). See
-[`PEERS.md`](./PEERS.md) for the full peering protocol, reorg policy,
-and operational notes.
+Full protocol, reorg policy, and operational notes: [`PEERS.md`](./PEERS.md).
 
-Bridge endpoints (`/bridge/mint`, `/bridge/redeem`) are active when all
-of `SOLANA_RPC_URL`, `SOLANA_SPL_MINT_ADDRESS`,
-`SOLANA_MINT_AUTHORITY_SECRET_KEY`, and `BRIDGE_BLOB_PRIVATE_KEY` are
-set. When unset, the node still serves chain traffic and the wallet
-falls back to the cloud-hosted bridge.
+---
 
+## Deployment options
+
+Anything that can run a long-lived Node.js process with a persistent volume works:
+
+- **Docker** anywhere — see `Dockerfile` and `docker-compose.yml`
+- **Fly.io** — `fly launch` from `node/`, mount a volume at `/data`
+- **Railway** — set `DB_PATH=/data/blobchain.db` with a persistent volume
+- **Render** — Web Service + persistent disk
+- **Plain VPS** — `pm2 start "npm start"` behind nginx with a TLS cert
+
+Always serve `/ws` over `wss://` in production.
+
+---
+
+## What this node does *not* do
+
+- **Solana bridge.** Mint / redeem requires custodial keys and lives in Supabase Edge Functions on the website side. The node never touches Solana. (`lib/bridge.ts` is a stub.)
+- **Alpha access gate.** Temporary, lives on Supabase, will be removed at launch.
+
+Everything else — chain reads, mempool, mining, address registry, real-time updates — happens here.

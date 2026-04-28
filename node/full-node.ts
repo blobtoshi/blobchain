@@ -21,12 +21,7 @@ import {
 import { Gossip, send } from "./lib/gossip.js";
 import { ingestTx, ingestEntry, ingestBlock } from "./lib/ingest.js";
 import { PeerManager } from "./lib/peers.js";
-import {
-  ensureBridgeSchema, bridgeConfig, bridgeEnabled,
-  registerMint, getMintRow,
-  registerRedeem, getRedeemRow,
-  processForwardOnce, processReverseOnce,
-} from "./lib/bridge.js";
+// Bridge intentionally not imported — runs on the website's edge functions.
 import { verifySig, pubKeyToAddress } from "./lib/crypto.js";
 import type {
   ChainTip, ClientMsg, ServerMsg, Block, Tx,
@@ -233,38 +228,10 @@ app.get("/addresses", (req, res) => {
   res.json(out);
 });
 
-// ── Bridge ──────────────────────────────────────────────────────────────
-app.get("/bridge/config", (_req, res) => res.json(bridgeConfig()));
-
-app.post("/bridge/mint", (req, res) => {
-  if (!bridgeEnabled()) return res.status(503).json({ error: "bridge not configured on this node" });
-  const r = registerMint(d, req.body ?? {});
-  if (!r.ok) return res.status(400).json({ error: r.error });
-  res.json(r.row);
-});
-
-app.get("/bridge/mint", (req, res) => {
-  const id = String(req.query.blob_tx_id ?? "");
-  if (!id) return res.status(400).json({ error: "missing blob_tx_id" });
-  const row = getMintRow(d, id);
-  if (!row) return res.status(404).json({ error: "not found" });
-  res.json(row);
-});
-
-app.post("/bridge/redeem", (req, res) => {
-  if (!bridgeEnabled()) return res.status(503).json({ error: "bridge not configured on this node" });
-  const r = registerRedeem(d, req.body ?? {});
-  if (!r.ok) return res.status(400).json({ error: r.error });
-  res.json(r.row);
-});
-
-app.get("/bridge/redeem", (req, res) => {
-  const sig = String(req.query.sol_signature ?? "");
-  if (!sig) return res.status(400).json({ error: "missing sol_signature" });
-  const row = getRedeemRow(d, sig);
-  if (!row) return res.status(404).json({ error: "not found" });
-  res.json(row);
-});
+// ── Bridge endpoints removed ────────────────────────────────────────────
+// The Solana bridge is custodial and lives on the website (Supabase edge
+// functions), not on full nodes. Wallets should hit the website directly
+// for /bridge/* operations.
 
 // ── WebSocket API ───────────────────────────────────────────────────────
 const httpServer = app.listen(PORT, () => {

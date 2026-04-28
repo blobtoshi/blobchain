@@ -125,6 +125,98 @@ export class BlobNodeClient {
     } catch { return null; }
   }
 
+  // ── Node-only REST endpoints (Phase 3) ───────────────────────────────
+  async fetchPeers(): Promise<{ count: number; peers: Array<Record<string, unknown>> } | null> {
+    try {
+      const r = await fetch(`${this.httpUrl}/peers`);
+      if (!r.ok) return null;
+      return await r.json();
+    } catch { return null; }
+  }
+
+  async fetchEntries(blockHeight: number): Promise<Entry[]> {
+    try {
+      // First try the immutable per-block endpoint (works for sealed heights).
+      const sealed = await fetch(`${this.httpUrl}/blocks/${blockHeight}/entries`);
+      if (sealed.ok) return (await sealed.json()) as Entry[];
+      // Fall back to the live entries table for the open height.
+      const live = await fetch(`${this.httpUrl}/entries?height=${blockHeight}`);
+      if (!live.ok) return [];
+      return (await live.json()) as Entry[];
+    } catch { return []; }
+  }
+
+  async fetchAddresses(limit = 200, offset = 0): Promise<Array<Record<string, unknown>>> {
+    try {
+      const r = await fetch(`${this.httpUrl}/addresses?limit=${limit}&offset=${offset}`);
+      if (!r.ok) return [];
+      return await r.json();
+    } catch { return []; }
+  }
+
+  async registerAddress(p: { address: string; publicKey: string; signature: string; timestamp: number }): Promise<{ ok: boolean; error?: string }> {
+    try {
+      const r = await fetch(`${this.httpUrl}/addresses/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(p),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) return { ok: false, error: j?.error ?? `http ${r.status}` };
+      return { ok: true };
+    } catch (e: any) { return { ok: false, error: e?.message ?? String(e) }; }
+  }
+
+  async fetchBridgeConfig(): Promise<{ bridgeAddress: string; splMintAddress: string | null; solanaRpcUrl: string | null; enabled: boolean } | null> {
+    try {
+      const r = await fetch(`${this.httpUrl}/bridge/config`);
+      if (!r.ok) return null;
+      return await r.json();
+    } catch { return null; }
+  }
+
+  async registerBridgeMint(p: { blob_tx_id: string; sol_address: string; amount: number; from_address: string }): Promise<{ ok: boolean; data?: any; error?: string }> {
+    try {
+      const r = await fetch(`${this.httpUrl}/bridge/mint`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(p),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) return { ok: false, error: j?.error ?? `http ${r.status}` };
+      return { ok: true, data: j };
+    } catch (e: any) { return { ok: false, error: e?.message ?? String(e) }; }
+  }
+
+  async pollBridgeMint(blob_tx_id: string): Promise<any | null> {
+    try {
+      const r = await fetch(`${this.httpUrl}/bridge/mint?blob_tx_id=${encodeURIComponent(blob_tx_id)}`);
+      if (!r.ok) return null;
+      return await r.json();
+    } catch { return null; }
+  }
+
+  async registerBridgeRedeem(p: { sol_signature: string; blob_address: string; amount: number }): Promise<{ ok: boolean; data?: any; error?: string }> {
+    try {
+      const r = await fetch(`${this.httpUrl}/bridge/redeem`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(p),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) return { ok: false, error: j?.error ?? `http ${r.status}` };
+      return { ok: true, data: j };
+    } catch (e: any) { return { ok: false, error: e?.message ?? String(e) }; }
+  }
+
+  async pollBridgeRedeem(sol_signature: string): Promise<any | null> {
+    try {
+      const r = await fetch(`${this.httpUrl}/bridge/redeem?sol_signature=${encodeURIComponent(sol_signature)}`);
+      if (!r.ok) return null;
+      return await r.json();
+    } catch { return null; }
+  }
+
   static async healthcheck(baseUrl: string, timeoutMs = 1500): Promise<boolean> {
     try {
       const ctl = new AbortController();

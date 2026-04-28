@@ -27,7 +27,7 @@ import {
   registerRedeem, getRedeemRow,
   processForwardOnce, processReverseOnce,
 } from "./lib/bridge.js";
-import { verifyMessage, pubKeyToAddress } from "./lib/crypto.js";
+import { verifySig, pubKeyToAddress } from "./lib/crypto.js";
 import type {
   ChainTip, ClientMsg, ServerMsg, Block, Tx,
 } from "./wsProtocol.js";
@@ -189,7 +189,7 @@ app.post("/addresses/register", (req, res) => {
   }
   // Signature is over `register:<address>:<timestamp>`.
   const msg = `register:${address}:${ts}`;
-  if (!verifyMessage(msg, String(signature), String(publicKey))) {
+  if (!verifySig(String(publicKey), String(signature), msg)) {
     return res.status(400).json({ error: "bad signature" });
   }
   d.stmts.upsertAddress.run({ address, public_key: publicKey, last_active: Date.now() });

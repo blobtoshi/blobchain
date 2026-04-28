@@ -7,6 +7,7 @@ import {
   BLOB_DECIMALS, MAX_MEMO_BYTES, BRIDGE_ADDRESS,
 } from "@/lib/blob/constants";
 import blobCoin from "@/assets/blob-coin.png";
+import NodeConnectionCard from "@/components/blob/NodeConnectionCard";
 
 export default function NetworkView({ nodeCount, chain, blockInfo, mempool = [] }: any) {
   const [feeInfo, setFeeInfo] = useState<{ recommendedFeeRate: number; minFeeRate: number; baseFeeRate: number } | null>(null);
@@ -109,6 +110,8 @@ export default function NetworkView({ nodeCount, chain, blockInfo, mempool = [] 
           </span>
         </div>
       </div>
+
+      <NodeConnectionCard />
 
       <div className="grid grid-cols-2 gap-2">
         <Stat label="Chain height" value={height.toLocaleString()} sub={`${totalTxs} confirmed txs`} tone="text-primary" />

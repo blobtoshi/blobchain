@@ -25,7 +25,7 @@ import BridgeScreen from "@/components/blob/BridgeScreen";
 import BlockExplorer from "@/components/blob/BlockExplorer";
 import NetworkView from "@/components/blob/NetworkView";
 
-export default function BlobChainApp() {
+export default function BlobChainApp({ disableBridge = false }: { disableBridge?: boolean } = {}) {
   // ── Wallet (vault + lifecycle) ────────────────────────────────────────────
   const {
     wallet, vaultPub, walletRef,
@@ -71,7 +71,11 @@ export default function BlobChainApp() {
   // Desktop (Electron) menu/shortcut bridge. Web ignores these — they only
   // fire when the host shell dispatches them.
   useEffect(() => {
-    const validScreens = new Set(["mine", "wallet", "bridge", "chain", "network"]);
+    const validScreens = new Set(
+      disableBridge
+        ? ["mine", "wallet", "chain", "network"]
+        : ["mine", "wallet", "bridge", "chain", "network"],
+    );
     const onNav = (e: Event) => {
       const target = (e as CustomEvent<string>).detail;
       if (validScreens.has(target)) setScreen(target);
@@ -86,7 +90,7 @@ export default function BlobChainApp() {
       window.removeEventListener("blob:settings", onSettings);
       window.removeEventListener("blob:lock", onLock);
     };
-  }, [disconnectWallet]);
+  }, [disconnectWallet, disableBridge]);
 
   async function copyPrivateKey() {
     try {
@@ -187,7 +191,7 @@ export default function BlobChainApp() {
   const nav = [
     { id: "mine", text: "Mine" },
     { id: "wallet", text: "Wallet" },
-    { id: "bridge", text: "Bridge" },
+    ...(disableBridge ? [] : [{ id: "bridge", text: "Bridge" }]),
     { id: "chain", text: "Explorer" },
     { id: "network", text: "Network" },
   ];
@@ -474,9 +478,11 @@ export default function BlobChainApp() {
                   <DropdownMenuItem onClick={() => setScreen("wallet")} className="cursor-pointer">
                     <Wallet className="w-4 h-4 mr-2" /> Open wallet
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setScreen("bridge")} className="cursor-pointer">
-                    <ArrowLeftRight className="w-4 h-4 mr-2" /> Bridge to Solana
-                  </DropdownMenuItem>
+                  {!disableBridge && (
+                    <DropdownMenuItem onClick={() => setScreen("bridge")} className="cursor-pointer">
+                      <ArrowLeftRight className="w-4 h-4 mr-2" /> Bridge to Solana
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onClick={() => { setShowPriv(false); setShowSeed(false); setSettingsOpen(true); }} className="cursor-pointer">
                     <SettingsIcon className="w-4 h-4 mr-2" /> Settings
                   </DropdownMenuItem>
@@ -569,7 +575,7 @@ export default function BlobChainApp() {
             ? <WalletScreen wallet={wallet} chain={chain} mempool={mempool} onBroadcast={onTxBroadcast} />
             : <LockedGate />
         )}
-        {screen === "bridge" && (
+        {screen === "bridge" && !disableBridge && (
           wallet
             ? <BridgeScreen wallet={wallet} chain={chain} mempool={mempool} onBroadcast={onTxBroadcast} />
             : <LockedGate />

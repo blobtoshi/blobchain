@@ -3,7 +3,7 @@
 // This node:
 //   • Serves HTTP REST + WebSocket /ws to wallets/desktop clients.
 //   • Peers with other full nodes (outbound WS dialer) for block/tx/entry gossip.
-//   • Runs the Solana bridge in-process (no edge functions).
+//   • Does NOT run a Solana bridge — that lives on the website (custodial).
 //   • Seals blocks every 120s through the unified `ingest` chokepoint so the
 //     reorg + validation logic is shared with peer-supplied blocks.
 
@@ -21,12 +21,7 @@ import {
 import { Gossip, send } from "./lib/gossip.js";
 import { ingestTx, ingestEntry, ingestBlock } from "./lib/ingest.js";
 import { PeerManager } from "./lib/peers.js";
-import {
-  ensureBridgeSchema, bridgeConfig, bridgeEnabled,
-  registerMint, getMintRow,
-  registerRedeem, getRedeemRow,
-  processForwardOnce, processReverseOnce,
-} from "./lib/bridge.js";
+// Bridge intentionally not imported — runs on the website's edge functions.
 import { verifySig, pubKeyToAddress } from "./lib/crypto.js";
 import type {
   ChainTip, ClientMsg, ServerMsg, Block, Tx,
@@ -41,7 +36,6 @@ const PEERS_RAW = process.env.PEERS ?? "";
 
 // ── Bootstrap ───────────────────────────────────────────────────────────
 const d: DB = openDb(DB_PATH);
-ensureBridgeSchema(d);
 const gossip = new Gossip();
 
 function chainTip(): ChainTip {
@@ -97,7 +91,7 @@ app.get("/health", (_req, res) => {
     height: tip.height,
     tipHash: tip.hash,
     peers: peers.count(),
-    bridge: bridgeEnabled(),
+    bridge: false,
     wallHeight: currentHeight(),
   });
 });
@@ -233,38 +227,10 @@ app.get("/addresses", (req, res) => {
   res.json(out);
 });
 
-// ── Bridge ──────────────────────────────────────────────────────────────
-app.get("/bridge/config", (_req, res) => res.json(bridgeConfig()));
-
-app.post("/bridge/mint", (req, res) => {
-  if (!bridgeEnabled()) return res.status(503).json({ error: "bridge not configured on this node" });
-  const r = registerMint(d, req.body ?? {});
-  if (!r.ok) return res.status(400).json({ error: r.error });
-  res.json(r.row);
-});
-
-app.get("/bridge/mint", (req, res) => {
-  const id = String(req.query.blob_tx_id ?? "");
-  if (!id) return res.status(400).json({ error: "missing blob_tx_id" });
-  const row = getMintRow(d, id);
-  if (!row) return res.status(404).json({ error: "not found" });
-  res.json(row);
-});
-
-app.post("/bridge/redeem", (req, res) => {
-  if (!bridgeEnabled()) return res.status(503).json({ error: "bridge not configured on this node" });
-  const r = registerRedeem(d, req.body ?? {});
-  if (!r.ok) return res.status(400).json({ error: r.error });
-  res.json(r.row);
-});
-
-app.get("/bridge/redeem", (req, res) => {
-  const sig = String(req.query.sol_signature ?? "");
-  if (!sig) return res.status(400).json({ error: "missing sol_signature" });
-  const row = getRedeemRow(d, sig);
-  if (!row) return res.status(404).json({ error: "not found" });
-  res.json(row);
-});
+// ── Bridge endpoints removed ────────────────────────────────────────────
+// The Solana bridge is custodial and lives on the website (Supabase edge
+// functions), not on full nodes. Wallets should hit the website directly
+// for /bridge/* operations.
 
 // ── WebSocket API ───────────────────────────────────────────────────────
 const httpServer = app.listen(PORT, () => {
@@ -457,21 +423,12 @@ const sealerHandle = setInterval(() => {
   }
 }, SEAL_TICK_MS);
 
-// ── Bridge worker ───────────────────────────────────────────────────────
-const BRIDGE_TICK_MS = 5_000;
-const bridgeHandle = setInterval(() => {
-  if (!bridgeEnabled()) return;
-  Promise.allSettled([
-    processForwardOnce(d, log),
-    processReverseOnce(d, log),
-  ]).catch((e) => log("error", "bridge worker crashed", { err: String(e) }));
-}, BRIDGE_TICK_MS);
+// Bridge worker removed — bridge no longer runs on full nodes.
 
 // ── Graceful shutdown ───────────────────────────────────────────────────
 function shutdown(signal: string) {
   log("info", `${signal} received — shutting down`);
   clearInterval(sealerHandle);
-  clearInterval(bridgeHandle);
   peers.shutdown();
   for (const ws of wss.clients) {
     try { ws.close(1001, "server shutdown"); } catch { /* ignore */ }

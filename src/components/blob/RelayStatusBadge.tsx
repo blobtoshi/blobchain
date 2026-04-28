@@ -1,56 +1,57 @@
-// Tiny dev-only indicator: shows current relay mode + WS status + tip height.
+// Tiny dev-only indicator: shows the active node URL + WS status + tip height.
 // Rendered only in DEV builds. Hidden in production.
 
 import { useEffect, useState } from "react";
-import { onRelayModeChange, getNodeClient, type RelayMode } from "@/lib/blobRelay";
+import { onRelayStatus, getNodeClient, type RelayStatus } from "@/lib/blobRelay";
 import type { NodeStatus } from "@/lib/blobNodeClient";
 
 export function RelayStatusBadge() {
-  const [mode, setMode] = useState<RelayMode>("supabase");
+  const [status, setStatus] = useState<RelayStatus>({
+    activeUrl: null, health: [], pinned: null, custom: [],
+  });
   const [wsStatus, setWsStatus] = useState<NodeStatus>("idle");
   const [tip, setTip] = useState<number>(0);
 
   useEffect(() => {
-    const off = onRelayModeChange((m) => setMode(m));
+    const off = onRelayStatus((s) => setStatus(s));
     return () => { off(); };
   }, []);
 
   useEffect(() => {
-    if (mode !== "node") return;
     const client = getNodeClient();
-    if (!client) return;
+    if (!client) { setWsStatus("idle"); setTip(0); return; }
     setWsStatus(client.getStatus());
     setTip(client.getTipHeight());
-    // The client only emits status via setHandlers; we don't want to clobber
-    // blobRelay's handlers, so we poll the client's getters every second.
     const iv = window.setInterval(() => {
-      setWsStatus(client.getStatus());
-      setTip(client.getTipHeight());
+      const c = getNodeClient();
+      if (!c) return;
+      setWsStatus(c.getStatus());
+      setTip(c.getTipHeight());
     }, 1000);
     return () => window.clearInterval(iv);
-  }, [mode]);
+  }, [status.activeUrl]);
 
   const dot =
-    mode === "supabase" ? "bg-muted-foreground"
+    !status.activeUrl ? "bg-destructive"
       : wsStatus === "open" ? "bg-emerald-500"
       : wsStatus === "syncing" || wsStatus === "connecting" ? "bg-amber-500"
       : "bg-destructive";
 
+  const label = status.activeUrl
+    ? status.activeUrl.replace(/^https?:\/\//, "")
+    : "no node";
+
   return (
     <div
       className="fixed bottom-2 right-2 z-50 flex items-center gap-2 rounded-md border border-border bg-background/90 px-2 py-1 text-[10px] font-mono text-muted-foreground shadow-sm backdrop-blur"
-      title={`Relay: ${mode} · WS: ${wsStatus} · tip #${tip}`}
+      title={`Node: ${status.activeUrl ?? "(none)"} · WS: ${wsStatus} · tip #${tip}`}
     >
       <span className={`inline-block h-2 w-2 rounded-full ${dot}`} />
-      <span className="uppercase tracking-wider">{mode}</span>
-      {mode === "node" && (
-        <>
-          <span className="opacity-50">·</span>
-          <span>{wsStatus}</span>
-          <span className="opacity-50">·</span>
-          <span>#{tip}</span>
-        </>
-      )}
+      <span className="uppercase tracking-wider truncate max-w-[160px]">{label}</span>
+      <span className="opacity-50">·</span>
+      <span>{wsStatus}</span>
+      <span className="opacity-50">·</span>
+      <span>#{tip}</span>
     </div>
   );
 }

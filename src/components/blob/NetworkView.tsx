@@ -7,6 +7,7 @@ import {
   BLOB_DECIMALS, MAX_MEMO_BYTES, BRIDGE_ADDRESS,
 } from "@/lib/blob/constants";
 import blobCoin from "@/assets/blob-coin.png";
+import NodeConnectionCard from "@/components/blob/NodeConnectionCard";
 
 export default function NetworkView({ nodeCount, chain, blockInfo, mempool = [] }: any) {
   const [feeInfo, setFeeInfo] = useState<{ recommendedFeeRate: number; minFeeRate: number; baseFeeRate: number } | null>(null);

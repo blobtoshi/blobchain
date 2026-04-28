@@ -1,25 +1,33 @@
-// BLOB CHAIN full node — single-process server providing:
-//   • HTTP REST endpoints for debugging (`/health`, `/chain/tip`, `/blocks`, `/mempool`, `/fee-info`)
-//   • WebSocket relay (subscribe + submit tx/entry, gossip new blocks)
-//   • Deterministic 120s block sealer (re-implements the seal-block edge function)
+// BLOB CHAIN full node — Phase 3.
 //
-// Designed to be byte-for-byte consensus-compatible with the existing
-// Supabase-backed chain so a future migration can replay history and merge.
+// This node:
+//   • Serves HTTP REST + WebSocket /ws to wallets/desktop clients.
+//   • Peers with other full nodes (outbound WS dialer) for block/tx/entry gossip.
+//   • Runs the Solana bridge in-process (no edge functions).
+//   • Seals blocks every 120s through the unified `ingest` chokepoint so the
+//     reorg + validation logic is shared with peer-supplied blocks.
 
 import express from "express";
 import { WebSocketServer, type WebSocket } from "ws";
 import { randomUUID } from "node:crypto";
 
-import { openDb, rowToBlock, rowToTx, rowToEntry, type DB } from "./lib/db.js";
-import {
-  validateTx, validateEntry, feeInfo,
-} from "./lib/validate.js";
+import { openDb, rowToBlock, rowToTx, type DB } from "./lib/db.js";
+import { feeInfo } from "./lib/validate.js";
 import {
   BLOCK_TIME_SECONDS, GENESIS_HASH, GENESIS_TIME_MS, MAX_BLOCK_SIZE, MAX_TX_SIZE,
   MAX_SUPPLY, computeBlockHash, getRewardForHeight, pickWinner,
   seedForHeight, to8, currentHeight,
 } from "./lib/consensus.js";
 import { Gossip, send } from "./lib/gossip.js";
+import { ingestTx, ingestEntry, ingestBlock } from "./lib/ingest.js";
+import { PeerManager } from "./lib/peers.js";
+import {
+  ensureBridgeSchema, bridgeConfig, bridgeEnabled,
+  registerMint, getMintRow,
+  registerRedeem, getRedeemRow,
+  processForwardOnce, processReverseOnce,
+} from "./lib/bridge.js";
+import { verifySig, pubKeyToAddress } from "./lib/crypto.js";
 import type {
   ChainTip, ClientMsg, ServerMsg, Block, Tx,
 } from "./wsProtocol.js";
@@ -29,9 +37,11 @@ import { PROTOCOL_VERSION } from "./wsProtocol.js";
 const PORT = Number(process.env.PORT ?? 8080);
 const DB_PATH = process.env.DB_PATH ?? "./data/blobchain.db";
 const NODE_ID = process.env.NODE_ID ?? randomUUID();
+const PEERS_RAW = process.env.PEERS ?? "";
 
 // ── Bootstrap ───────────────────────────────────────────────────────────
 const d: DB = openDb(DB_PATH);
+ensureBridgeSchema(d);
 const gossip = new Gossip();
 
 function chainTip(): ChainTip {
@@ -53,14 +63,30 @@ function log(level: "info" | "warn" | "error", msg: string, extra?: unknown) {
   console.log(JSON.stringify(line));
 }
 
+// ── Peer manager ────────────────────────────────────────────────────────
+const peers = new PeerManager({
+  bootstrapUrls: PEERS_RAW.split(",").map((s) => s.trim()).filter(Boolean),
+  db: d,
+  log,
+  onAppliedBlock: (b) => {
+    // Re-broadcast peer-applied block to local subscribers.
+    gossip.broadcast({ type: "newBlock", block: b });
+    gossip.broadcast({ type: "chainTip", tip: chainTip() });
+  },
+  onAppliedTx: (msg) => gossip.broadcast(msg),
+  onAppliedEntry: (msg) => gossip.broadcast(msg),
+});
+
 // ── HTTP API ────────────────────────────────────────────────────────────
 const app = express();
 app.use(express.json({ limit: "200kb" }));
 app.use((_, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "content-type");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   next();
 });
+app.options("*", (_req, res) => res.sendStatus(204));
 
 app.get("/health", (_req, res) => {
   const tip = chainTip();
@@ -70,21 +96,23 @@ app.get("/health", (_req, res) => {
     version: PROTOCOL_VERSION,
     height: tip.height,
     tipHash: tip.hash,
-    peers: gossip.count(),
+    peers: peers.count(),
+    bridge: bridgeEnabled(),
     wallHeight: currentHeight(),
   });
 });
 
+app.get("/peers", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.json({ count: peers.count(), peers: peers.list() });
+});
+
 app.get("/chain/tip", (req, res) => {
   const tip = chainTip();
-  // ETag = height:hash so clients polling can short-circuit with If-None-Match.
   const etag = `"${tip.height}-${tip.hash.slice(0, 16)}"`;
   res.setHeader("ETag", etag);
   res.setHeader("Cache-Control", "no-cache");
-  if (req.headers["if-none-match"] === etag) {
-    res.status(304).end();
-    return;
-  }
+  if (req.headers["if-none-match"] === etag) { res.status(304).end(); return; }
   res.json(tip);
 });
 
@@ -92,9 +120,7 @@ app.get("/blocks", (req, res) => {
   const fromRaw = Number(req.query.from);
   const from = Number.isFinite(fromRaw) ? Math.max(0, fromRaw | 0) : 1;
   const limitRaw = Number(req.query.limit);
-  const limit = Number.isFinite(limitRaw)
-    ? Math.min(500, Math.max(1, limitRaw | 0))
-    : 100;
+  const limit = Number.isFinite(limitRaw) ? Math.min(500, Math.max(1, limitRaw | 0)) : 100;
   const rows = d.stmts.getBlocksFrom.all(from, limit);
   res.setHeader("Cache-Control", "no-store");
   res.json(rows.map(rowToBlock));
@@ -102,17 +128,36 @@ app.get("/blocks", (req, res) => {
 
 app.get("/blocks/:height", (req, res) => {
   const h = Number(req.params.height);
-  if (!Number.isFinite(h) || h < 0) {
-    res.status(400).json({ error: "invalid height" });
-    return;
-  }
+  if (!Number.isFinite(h) || h < 0) { res.status(400).json({ error: "invalid height" }); return; }
   const row = d.stmts.getBlockByHeight.get(h);
-  if (!row) {
-    res.status(404).json({ error: "not found" });
-    return;
-  }
+  if (!row) { res.status(404).json({ error: "not found" }); return; }
   res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
   res.json(rowToBlock(row));
+});
+
+app.get("/blocks/:height/entries", (req, res) => {
+  const h = Number(req.params.height);
+  if (!Number.isFinite(h) || h < 0) { res.status(400).json({ error: "invalid height" }); return; }
+  const row = d.stmts.getBlockByHeight.get(h);
+  if (!row) { res.status(404).json({ error: "not found" }); return; }
+  let entries: unknown = [];
+  try { entries = JSON.parse(row.mining_entries); } catch { /* keep [] */ }
+  res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  res.json(entries);
+});
+
+app.get("/entries", (req, res) => {
+  const h = Number(req.query.height);
+  if (!Number.isFinite(h) || h < 0) { res.status(400).json({ error: "invalid height" }); return; }
+  const rows = d.stmts.getEntriesForHeight.all(h);
+  res.setHeader("Cache-Control", "no-store");
+  res.json(rows.map((r) => ({
+    address: r.address,
+    score: r.score,
+    block_height: r.block_height,
+    block_seed: r.block_seed,
+    signature: r.signature,
+  })));
 });
 
 app.get("/mempool", (req, res) => {
@@ -126,22 +171,115 @@ app.get("/mempool", (req, res) => {
 
 app.get("/fee-info", (_req, res) => res.json(feeInfo(d)));
 
+// ── Address registry ────────────────────────────────────────────────────
+const ADDR_RE = /^[1][1-9A-HJ-NP-Za-km-z]{25,34}$/;
+const HEX_RE = /^[0-9a-fA-F]+$/;
+
+app.post("/addresses/register", (req, res) => {
+  const { address, publicKey, signature, timestamp } = req.body ?? {};
+  if (!ADDR_RE.test(String(address))) return res.status(400).json({ error: "invalid address" });
+  if (!HEX_RE.test(String(publicKey))) return res.status(400).json({ error: "invalid publicKey" });
+  if (!HEX_RE.test(String(signature))) return res.status(400).json({ error: "invalid signature" });
+  const ts = Number(timestamp);
+  if (!Number.isFinite(ts)) return res.status(400).json({ error: "invalid timestamp" });
+  if (Math.abs(Date.now() - ts) > 5 * 60_000) return res.status(400).json({ error: "stale timestamp" });
+  // Address must derive from publicKey.
+  if (pubKeyToAddress(String(publicKey)) !== String(address)) {
+    return res.status(400).json({ error: "address does not match publicKey" });
+  }
+  // Signature is over `register:<address>:<timestamp>`.
+  const msg = `register:${address}:${ts}`;
+  if (!verifySig(String(publicKey), String(signature), msg)) {
+    return res.status(400).json({ error: "bad signature" });
+  }
+  d.stmts.upsertAddress.run({ address, public_key: publicKey, last_active: Date.now() });
+  res.json({ ok: true });
+});
+
+app.get("/addresses", (req, res) => {
+  const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 100));
+  const offset = Math.max(0, Number(req.query.offset) || 0);
+  // Compute aggregates on the fly. For tens of thousands of addresses this is
+  // still cheap; if it ever becomes a hotspot, materialize a view.
+  const rows = d.db.prepare<[number, number], {
+    address: string; public_key: string | null; first_seen: number; last_active: number;
+  }>(`SELECT address, public_key, first_seen, last_active FROM addresses
+       ORDER BY first_seen ASC LIMIT ? OFFSET ?`).all(limit, offset);
+
+  const winStmt = d.db.prepare<[string], { blocks_won: number; total_mined: number; best_score: number }>(`
+    SELECT COUNT(*) AS blocks_won, COALESCE(SUM(reward), 0) AS total_mined,
+           COALESCE(MAX(winner_score), 0) AS best_score
+    FROM blocks WHERE winner = ?`);
+  const gameStmt = d.db.prepare<[string], { games_played: number; best_entry: number }>(`
+    SELECT COUNT(DISTINCT block_height) AS games_played,
+           COALESCE(MAX(score), 0) AS best_entry
+    FROM entries WHERE address = ?`);
+
+  const out = rows.map((r) => {
+    const w = winStmt.get(r.address);
+    const g = gameStmt.get(r.address);
+    return {
+      address: r.address,
+      publicKey: r.public_key,
+      blocksWon: Number(w?.blocks_won ?? 0),
+      totalMined: Number(w?.total_mined ?? 0),
+      bestScore: Math.max(Number(w?.best_score ?? 0), Number(g?.best_entry ?? 0)),
+      gamesPlayed: Number(g?.games_played ?? 0),
+      firstSeen: new Date(r.first_seen).toISOString(),
+      lastActive: new Date(r.last_active).toISOString(),
+    };
+  });
+  res.setHeader("Cache-Control", "no-store");
+  res.json(out);
+});
+
+// ── Bridge ──────────────────────────────────────────────────────────────
+app.get("/bridge/config", (_req, res) => res.json(bridgeConfig()));
+
+app.post("/bridge/mint", (req, res) => {
+  if (!bridgeEnabled()) return res.status(503).json({ error: "bridge not configured on this node" });
+  const r = registerMint(d, req.body ?? {});
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json(r.row);
+});
+
+app.get("/bridge/mint", (req, res) => {
+  const id = String(req.query.blob_tx_id ?? "");
+  if (!id) return res.status(400).json({ error: "missing blob_tx_id" });
+  const row = getMintRow(d, id);
+  if (!row) return res.status(404).json({ error: "not found" });
+  res.json(row);
+});
+
+app.post("/bridge/redeem", (req, res) => {
+  if (!bridgeEnabled()) return res.status(503).json({ error: "bridge not configured on this node" });
+  const r = registerRedeem(d, req.body ?? {});
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json(r.row);
+});
+
+app.get("/bridge/redeem", (req, res) => {
+  const sig = String(req.query.sol_signature ?? "");
+  if (!sig) return res.status(400).json({ error: "missing sol_signature" });
+  const row = getRedeemRow(d, sig);
+  if (!row) return res.status(404).json({ error: "not found" });
+  res.json(row);
+});
+
 // ── WebSocket API ───────────────────────────────────────────────────────
 const httpServer = app.listen(PORT, () => {
-  log("info", `full node listening on :${PORT}`, { dbPath: DB_PATH, nodeId: NODE_ID });
+  log("info", `full node listening on :${PORT}`, {
+    dbPath: DB_PATH, nodeId: NODE_ID, peers: PEERS_RAW || "(none)",
+  });
 });
 
 const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
 
-// Per-socket state: tracks malformed-message strikes for backpressure, and the
-// last block height we've delivered so a reconnecting client can resync.
 const MAX_MALFORMED = 5;
 const sockState = new WeakMap<WebSocket, { strikes: number }>();
 
 wss.on("connection", (ws) => {
   sockState.set(ws, { strikes: 0 });
-  // Greet immediately with our identity + tip so the client can decide
-  // whether to request a sync.
   send(ws, { type: "hello", nodeId: NODE_ID, version: PROTOCOL_VERSION, chainTip: chainTip() });
 
   ws.on("message", (raw) => {
@@ -172,10 +310,10 @@ wss.on("connection", (ws) => {
 
 async function handleMessage(ws: WebSocket, msg: ClientMsg) {
   switch (msg.type) {
-    case "subscribe": {
+    case "subscribe":
       gossip.subscribe(ws);
       return send(ws, { type: "ack", ref: "subscribe" });
-    }
+
     case "ping":
       return send(ws, { type: "pong", t: msg.t });
 
@@ -193,66 +331,34 @@ async function handleMessage(ws: WebSocket, msg: ClientMsg) {
       return send(ws, { type: "mempool", txs: d.stmts.getMempool.all().map(rowToTx) });
 
     case "submitTx": {
-      const r = validateTx(d, msg.tx);
+      const r = ingestTx(d, msg.tx);
       if (!r.ok) return send(ws, { type: "error", ref: "submitTx", message: r.error });
-      const t = r.value;
-      d.stmts.insertTx.run({
-        id: t.id, from_address: t.from, to_address: t.to,
-        amount: t.amount, fee: t.fee, fee_rate: t.feeRate,
-        memo: t.memo || null, signature: t.signature, public_key: t.publicKey,
-        timestamp: t.timestamp,
-      });
-      const wireTx: Tx = {
-        id: t.id, from: t.from, to: t.to, amount: t.amount, fee: t.fee,
-        feeRate: t.feeRate, memo: t.memo, signature: t.signature,
-        publicKey: t.publicKey, timestamp: t.timestamp,
-      };
-      gossip.broadcast({ type: "newTx", tx: wireTx });
-      return send(ws, { type: "ack", ref: "submitTx", data: { id: t.id, fee: t.fee, bytes: t.bytes } });
+      if (r.isNew) {
+        gossip.broadcast({ type: "newTx", tx: r.tx });
+        peers.broadcast({ type: "newTx", tx: r.tx });
+      }
+      return send(ws, { type: "ack", ref: "submitTx", data: { id: r.tx.id, fee: r.tx.fee, bytes: r.bytes } });
     }
 
     case "submitEntry": {
-      const r = validateEntry(d, msg.entry);
+      const r = ingestEntry(d, msg.entry);
       if (!r.ok) return send(ws, { type: "error", ref: "submitEntry", message: r.error });
-      const e = r.value;
-      const existing = d.stmts.getExistingEntry.get(e.address, e.block_height);
-      const finalScore = Math.max(e.score, existing?.score ?? 0);
-      const isNewBest = finalScore === e.score;
-      d.stmts.upsertEntry.run({
-        address: e.address,
-        block_height: e.block_height,
-        score: finalScore,
-        block_seed: e.block_seed,
-        signature: e.signature,
-        inputs: isNewBest ? e.inputs : null,
-        inputs_hash: isNewBest ? e.inputs_hash : null,
-        frame_count: isNewBest ? e.frame_count : null,
-      });
-      d.stmts.upsertAddress.run({
-        address: e.address,
-        public_key: e.publicKey,
-        last_active: Date.now(),
-      });
-      gossip.broadcast({
+      const entryMsg: ServerMsg = {
         type: "newEntry",
         entry: {
-          address: e.address,
-          score: finalScore,
-          block_height: e.block_height,
-          block_seed: e.block_seed,
-          signature: e.signature,
+          address: r.address, score: r.score,
+          block_height: r.block_height, block_seed: r.block_seed,
+          signature: r.signature,
         },
-      });
-      return send(ws, { type: "ack", ref: "submitEntry", data: { score: finalScore, verified: true } });
+      };
+      gossip.broadcast(entryMsg);
+      if (r.isNewBest) peers.broadcast(entryMsg);
+      return send(ws, { type: "ack", ref: "submitEntry", data: { score: r.score, verified: true } });
     }
   }
 }
 
 // ── Block sealer ────────────────────────────────────────────────────────
-// Runs every few seconds and tries to seal the next block when:
-//   1. The 120s window since the previous block has elapsed.
-//   2. There is at least one verified mining entry for the active height.
-// This mirrors the proof-of-gaming rule: no players → no settlement.
 const SEAL_TICK_MS = 5_000;
 
 function trySealNextBlock(): boolean {
@@ -272,10 +378,10 @@ function trySealNextBlock(): boolean {
   }));
   if (entries.length === 0) return false;
 
-  const seed = seedForHeight(target);
-  const winner = pickWinner(entries, seed);
+  const seedNum = seedForHeight(target);
+  const winner = pickWinner(entries, seedNum);
 
-  // Pack mempool by fee priority, capped at MAX_BLOCK_SIZE.
+  // Pack mempool by fee priority.
   const HEADER_OVERHEAD = 10_000;
   const txs: Tx[] = [];
   if (winner) {
@@ -322,39 +428,28 @@ function trySealNextBlock(): boolean {
     nodeCount: 1,
   };
 
-  // Single SQLite transaction: insert block + clear mempool atomically.
-  const tx = d.db.transaction(() => {
-    d.stmts.insertBlock.run({
-      height: block.height,
-      previous_hash: block.previousHash,
-      timestamp: block.timestamp,
-      transactions: JSON.stringify(block.transactions),
-      mining_entries: JSON.stringify(block.miningEntries),
-      winner: block.winner,
-      winner_score: block.winnerScore,
-      reward: block.reward,
-      seed: block.seed,
-      hash: block.hash,
-      total_supply: block.totalSupply,
-      node_count: block.nodeCount,
-    });
-    for (const t of txs) d.stmts.deleteTxs.run(t.id);
-  });
-  tx();
+  // Apply through ingest so the reorg/replace path is exercised uniformly
+  // even on self-sealed blocks. (For a fresh appended block ingest is just
+  // a validate-then-insert.)
+  const r = ingestBlock(d, block);
+  if (!r.ok) {
+    log("warn", `self-seal rejected by ingest: ${r.error}`, { height: target });
+    return false;
+  }
+  if (r.applied === "duplicate") return false;
 
   log("info", `sealed block #${target}`, {
     winner: block.winner, reward, txs: txs.length, hash: hash.slice(0, 12),
   });
   const newBlockMsg: ServerMsg = { type: "newBlock", block };
   gossip.broadcast(newBlockMsg);
-  // Also push the new tip so non-subscribers polling getChainTip stay fresh.
   gossip.broadcast({ type: "chainTip", tip: chainTip() });
+  peers.broadcast(newBlockMsg);
   return true;
 }
 
 const sealerHandle = setInterval(() => {
   try {
-    // Loop in case we're catching up multiple windows after downtime.
     let safety = 10;
     while (safety-- > 0 && trySealNextBlock()) { /* keep sealing */ }
   } catch (e) {
@@ -362,10 +457,22 @@ const sealerHandle = setInterval(() => {
   }
 }, SEAL_TICK_MS);
 
+// ── Bridge worker ───────────────────────────────────────────────────────
+const BRIDGE_TICK_MS = 5_000;
+const bridgeHandle = setInterval(() => {
+  if (!bridgeEnabled()) return;
+  Promise.allSettled([
+    processForwardOnce(d, log),
+    processReverseOnce(d, log),
+  ]).catch((e) => log("error", "bridge worker crashed", { err: String(e) }));
+}, BRIDGE_TICK_MS);
+
 // ── Graceful shutdown ───────────────────────────────────────────────────
 function shutdown(signal: string) {
   log("info", `${signal} received — shutting down`);
   clearInterval(sealerHandle);
+  clearInterval(bridgeHandle);
+  peers.shutdown();
   for (const ws of wss.clients) {
     try { ws.close(1001, "server shutdown"); } catch { /* ignore */ }
   }

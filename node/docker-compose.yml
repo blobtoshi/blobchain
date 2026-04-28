@@ -1,0 +1,49 @@
+# Two-node local mesh for testing peer gossip + reorg behavior.
+# Each node knows about the other via the PEERS env var.
+#
+# Usage:
+#   docker compose up --build
+# Then:
+#   curl localhost:8081/health
+#   curl localhost:8082/health
+#   curl localhost:8081/peers
+#
+# Mining on either node should reach the other within ~1 second.
+
+services:
+  node-a:
+    build: .
+    container_name: blob-node-a
+    environment:
+      PORT: 8080
+      NODE_ID: node-a
+      DB_PATH: /data/blobchain.db
+      PEERS: ws://node-b:8080/ws
+      # Optional bridge env (uncomment + fill to enable):
+      # SOLANA_RPC_URL: ${SOLANA_RPC_URL}
+      # SOLANA_SPL_MINT_ADDRESS: ${SOLANA_SPL_MINT_ADDRESS}
+      # SOLANA_MINT_AUTHORITY_SECRET_KEY: ${SOLANA_MINT_AUTHORITY_SECRET_KEY}
+      # BRIDGE_BLOB_PRIVATE_KEY: ${BRIDGE_BLOB_PRIVATE_KEY}
+    ports:
+      - "8081:8080"
+    volumes:
+      - blob-data-a:/data
+    restart: unless-stopped
+
+  node-b:
+    build: .
+    container_name: blob-node-b
+    environment:
+      PORT: 8080
+      NODE_ID: node-b
+      DB_PATH: /data/blobchain.db
+      PEERS: ws://node-a:8080/ws
+    ports:
+      - "8082:8080"
+    volumes:
+      - blob-data-b:/data
+    restart: unless-stopped
+
+volumes:
+  blob-data-a:
+  blob-data-b:

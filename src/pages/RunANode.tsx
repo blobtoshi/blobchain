@@ -6,12 +6,18 @@ import { Button } from "@/components/ui/button";
 const QUICKSTART = `git clone https://github.com/blobchain/blobchain
 cd blobchain/node
 npm install
-npm start                  # listens on :9090`;
+npm start                  # listens on :8080`;
 
 const DOCKER = `docker run -d --name blob-node \\
-  -p 9090:9090 \\
+  -p 8080:8080 \\
   -v blob-data:/data \\
+  -e PEERS=wss://node1.blobchain.network/ws,wss://node2.blobchain.network/ws \\
   ghcr.io/blobchain/node:latest`;
+
+const COMPOSE = `# Spin up two peered nodes locally for testing
+cd blobchain/node
+docker compose up --build
+# → node A on :8081, node B on :8082, peered together`;
 
 function CodeBlock({ code }: { code: string }) {
   const [copied, setCopied] = useState(false);
@@ -92,13 +98,23 @@ export default function RunANode() {
           <CodeBlock code={DOCKER} />
         </section>
 
+        {/* Docker compose / peers */}
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold tracking-tight">Peer with the network</h2>
+          <p className="text-xs text-muted-foreground">
+            Pass a comma-separated <code className="px-1 py-0.5 rounded bg-foreground/5 text-foreground text-[11px]">PEERS</code> list
+            to gossip blocks with other nodes. New blocks propagate in ~1 second; depth-1 reorgs heal automatically.
+          </p>
+          <CodeBlock code={COMPOSE} />
+        </section>
+
         {/* Connect */}
         <section className="space-y-3">
           <h2 className="text-lg font-semibold tracking-tight">Point your wallet at it</h2>
           <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
             <li>Open the Blob Chain desktop app.</li>
             <li>On first launch (or via <span className="text-foreground">Settings → Node</span>), pick <span className="text-foreground">Custom URL…</span></li>
-            <li>Enter <code className="px-1.5 py-0.5 rounded bg-foreground/5 text-foreground text-xs">http://localhost:9090</code> and click Connect.</li>
+            <li>Enter <code className="px-1.5 py-0.5 rounded bg-foreground/5 text-foreground text-xs">http://localhost:8080</code> and click Connect.</li>
           </ol>
         </section>
 

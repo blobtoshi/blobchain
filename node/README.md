@@ -144,23 +144,25 @@ byte-for-byte synced with the edge versions.
 
 ---
 
-## Deploying multiple nodes (later)
+## Deploying multiple peered nodes
 
-For now, run a single local node. When you're ready to deploy four
-always-online nodes, any of these work cleanly with this code:
+The node is fully peer-to-peer in Phase 3. Two-node smoke test:
 
-- **Fly.io** — `fly launch` from `node/`, mount a volume at `/data`
-- **Railway** — set `DB_PATH=/data/blobchain.db` with a volume
-- **Render** — Web Service, persistent disk
-- **Plain VPS** — `pm2 start "npm start"` behind nginx with a TLS cert
+```bash
+cd node
+docker compose up --build
+curl -s localhost:8081/health  # peers: 1
+curl -s localhost:8082/health  # peers: 1
+```
 
-Phase 3 will add node↔node peering so the four servers gossip blocks to
-each other and converge on a single chain.
+For a real deployment, set `PEERS=` to a comma-separated list of other
+nodes' WebSocket URLs (use `wss://` in production). See
+[`PEERS.md`](./PEERS.md) for the full peering protocol, reorg policy,
+and operational notes.
 
----
+Bridge endpoints (`/bridge/mint`, `/bridge/redeem`) are active when all
+of `SOLANA_RPC_URL`, `SOLANA_SPL_MINT_ADDRESS`,
+`SOLANA_MINT_AUTHORITY_SECRET_KEY`, and `BRIDGE_BLOB_PRIVATE_KEY` are
+set. When unset, the node still serves chain traffic and the wallet
+falls back to the cloud-hosted bridge.
 
-## What's intentionally *not* here yet
-
-- Solana bridge (`bridge-mint`, `bridge-redeem`) — staying on Supabase for now, will be ported in Phase 3.
-- Access-code / locked gate — kept on Supabase; gets removed at launch.
-- Node↔node peering / chain reorg handling — Phase 3.

@@ -89,8 +89,27 @@ function createWindow() {
   if (DEV_URL) {
     mainWindow.loadURL(DEV_URL);
   } else {
-    mainWindow.loadFile(path.join(__dirname, "..", "dist", "index.html"));
+    const indexPath = path.join(__dirname, "..", "dist", "index.html");
+    if (!fs.existsSync(indexPath)) {
+      mainWindow.loadURL(
+        "data:text/html;charset=utf-8," +
+        encodeURIComponent(
+          `<body style="font-family:system-ui;background:#0b0d12;color:#fff;padding:24px">
+             <h2>Build missing</h2>
+             <p>Could not find <code>${indexPath.replace(/</g, "&lt;")}</code>.</p>
+             <p>Run <code>npm run build</code> in the <code>desktop-app/</code> folder before launching or packaging.</p>
+           </body>`
+        )
+      );
+    } else {
+      mainWindow.loadFile(indexPath);
+    }
   }
+
+  // Surface any load failures (most common: assets requested with absolute "/" paths under file://).
+  mainWindow.webContents.on("did-fail-load", (_e, code, desc, url) => {
+    console.error("[electron] did-fail-load", { code, desc, url });
+  });
 
   mainWindow.on("closed", () => { mainWindow = null; });
 }

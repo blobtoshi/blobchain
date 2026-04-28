@@ -6,6 +6,10 @@ import path from "node:path";
 // Electron loads via file:// — base must be relative.
 export default defineConfig({
   base: "./",
+  // The website's .env (with VITE_SUPABASE_URL etc.) lives one level up.
+  // Without this, Vite can't find it and the bundle ships with empty
+  // env vars, causing "supabaseUrl is required" at runtime in Electron.
+  envDir: path.resolve(__dirname, ".."),
   plugins: [
     react(),
     nodePolyfills({

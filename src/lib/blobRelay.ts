@@ -450,6 +450,14 @@ export type BridgeConfig = {
 };
 
 export async function fetchBridgeConfig(): Promise<BridgeConfig | null> {
+  await ensureRelayMode();
+  if (activeMode === "node" && nodeClient) {
+    const c = await nodeClient.fetchBridgeConfig();
+    if (c && c.enabled) {
+      return { bridgeAddress: c.bridgeAddress, splMintAddress: c.splMintAddress, solanaRpcUrl: c.solanaRpcUrl };
+    }
+    // Node has no bridge configured — fall back to the Supabase bridge config.
+  }
   try {
     const url = `${(import.meta as any).env.VITE_SUPABASE_URL}/functions/v1/bridge-config`;
     const res = await fetch(url, {
@@ -469,6 +477,12 @@ export async function registerBridgeRequest(p: {
   amount: number;
   from_address: string;
 }): Promise<{ ok: boolean; error?: string; data?: BridgeRequest }> {
+  await ensureRelayMode();
+  if (activeMode === "node" && nodeClient) {
+    const r = await nodeClient.registerBridgeMint(p);
+    if (!r.ok) return { ok: false, error: r.error };
+    return { ok: true, data: r.data as BridgeRequest };
+  }
   const { data, error } = await supabase.functions.invoke("bridge-mint", { body: p });
   if (error) return { ok: false, error: error.message };
   if ((data as any)?.error) return { ok: false, error: (data as any).error };
@@ -476,6 +490,10 @@ export async function registerBridgeRequest(p: {
 }
 
 export async function pollBridgeRequest(blob_tx_id: string): Promise<BridgeRequest | null> {
+  await ensureRelayMode();
+  if (activeMode === "node" && nodeClient) {
+    return (await nodeClient.pollBridgeMint(blob_tx_id)) as BridgeRequest | null;
+  }
   try {
     const url = `${(import.meta as any).env.VITE_SUPABASE_URL}/functions/v1/bridge-mint?blob_tx_id=${encodeURIComponent(blob_tx_id)}`;
     const res = await fetch(url, {
@@ -514,6 +532,12 @@ export async function registerRedeem(p: {
   blob_address: string;
   amount: number;
 }): Promise<{ ok: boolean; error?: string; data?: RedeemRequest }> {
+  await ensureRelayMode();
+  if (activeMode === "node" && nodeClient) {
+    const r = await nodeClient.registerBridgeRedeem(p);
+    if (!r.ok) return { ok: false, error: r.error };
+    return { ok: true, data: r.data as RedeemRequest };
+  }
   const { data, error } = await supabase.functions.invoke("bridge-redeem", { body: p });
   if (error) return { ok: false, error: error.message };
   if ((data as any)?.error) return { ok: false, error: (data as any).error };
@@ -521,6 +545,10 @@ export async function registerRedeem(p: {
 }
 
 export async function pollRedeem(sol_signature: string): Promise<RedeemRequest | null> {
+  await ensureRelayMode();
+  if (activeMode === "node" && nodeClient) {
+    return (await nodeClient.pollBridgeRedeem(sol_signature)) as RedeemRequest | null;
+  }
   try {
     const url = `${(import.meta as any).env.VITE_SUPABASE_URL}/functions/v1/bridge-redeem?sol_signature=${encodeURIComponent(sol_signature)}`;
     const res = await fetch(url, {

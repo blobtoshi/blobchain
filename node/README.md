@@ -65,17 +65,11 @@ On startup (and every 6h after), the node compares its local git commit against 
 ## Connecting clients
 
 ### Website
-The React app at `src/` ships with a multi-node pool (`src/lib/nodePool.ts`). It probes a list of bundled URLs + any user-added URLs in parallel, picks the lowest-latency healthy one, and fails over automatically when a node dies. To make it default to your node at build time:
-
-```bash
-# .env.local in the website project
-VITE_BLOB_NODE_URL=http://localhost:8080
-```
-
+The React app at `src/` ships with a multi-node pool (`src/lib/nodePool.ts`). It probes a list of bundled URLs + any user-added URLs in parallel, picks the lowest-latency healthy one, and fails over automatically when a node dies.
 End users don't need to set anything — they can add and pin nodes from the **Network** tab in the app.
 
 ### Desktop wallet
-`desktop-app/` ships with the same pool. Manage URLs from the in-app Node settings. The desktop wallet is node-only — it has no Supabase code path at all.
+`desktop-app/` ships with the same pool. Manage URLs from the in-app Node settings. The desktop wallet is node-only, no bridge.
 
 ### Other clients
 The HTTP and WebSocket protocols below are stable. Anything that can speak HTTP + JSON over WS can be a client.

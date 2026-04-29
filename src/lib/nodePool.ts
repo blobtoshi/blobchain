@@ -12,12 +12,20 @@
 // swapping the storage adapter (electron disk file vs localStorage).
 
 import { BlobNodeClient } from "@/lib/blobNodeClient";
+import {
+  runConsensusRound, divergedUrls,
+  type ConsensusSnapshot,
+} from "@/lib/tipConsensus";
 
 export type NodeHealth = {
   url: string;
   ok: boolean;
   ms: number | null; // round-trip in ms when ok
   checkedAt: number;
+  // True if cross-node consensus flagged this node as serving a chain
+  // that disagrees with the majority. Quarantined nodes are never picked
+  // as the active node (eclipse-attack mitigation).
+  diverged?: boolean;
 };
 
 export type StorageAdapter = {
@@ -37,6 +45,9 @@ const PROBE_INTERVAL_MS = 60_000;
 const PROBE_TIMEOUT_MS = 2500;
 const FAILOVER_FAIL_WINDOW_MS = 10_000;
 const FAILOVER_FAIL_THRESHOLD = 3;
+// How often to run cross-node tip consensus. Cheaper than a full health
+// probe (one tip request per node) so we run it more often than PROBE_INTERVAL.
+const CONSENSUS_INTERVAL_MS = 20_000;
 
 function defaultStorage(): StorageAdapter {
   return {
@@ -64,7 +75,8 @@ function defaultStorage(): StorageAdapter {
 export type PoolEvent =
   | { type: "active-changed"; url: string | null }
   | { type: "health-updated"; health: NodeHealth[] }
-  | { type: "config-changed"; pinned: string | null; custom: string[] };
+  | { type: "config-changed"; pinned: string | null; custom: string[] }
+  | { type: "consensus-updated"; snapshot: ConsensusSnapshot };
 
 type Listener = (e: PoolEvent) => void;
 

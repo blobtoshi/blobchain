@@ -25,12 +25,11 @@ export type StorageAdapter = {
   write: (cfg: { pinned: string | null; custom: string[] }) => void;
 };
 
-// Bundled node list — placeholder URLs until public nodes are live.
+// Bundled public node list — production fleet.
 export const BUNDLED_NODES: string[] = [
   "https://node.blobchain.network",
   "https://node-eu.blobchain.network",
   "https://node-us.blobchain.network",
-  "http://localhost:9090",
 ];
 
 const STORAGE_KEY = "blob:node-config";

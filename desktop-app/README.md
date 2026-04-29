@@ -1,8 +1,8 @@
-# BLOB Wallet — Desktop
+# BLOB Wallet — Desktop (v1.0)
 
 A standalone Electron wallet for BLOB CHAIN. Connects directly to any full node over REST + WebSocket, so you can manage funds and send transactions even when the website is offline.
 
-The desktop app is **node-only**. It has no Supabase code path. The Solana bridge is intentionally not included here — bridging happens on the website.
+The desktop app is **node-only**. The Solana bridge is intentionally not included here — bridging happens on the website.
 
 ## Features
 

@@ -21,6 +21,7 @@ import {
 import { Gossip, send } from "./lib/gossip.js";
 import { ingestTx, ingestEntry, ingestBlock } from "./lib/ingest.js";
 import { PeerManager } from "./lib/peers.js";
+import { startUpdateChecker } from "./lib/updateCheck.js";
 // Bridge intentionally not imported — runs on the website's edge functions.
 import { verifySig, pubKeyToAddress } from "./lib/crypto.js";
 import type {

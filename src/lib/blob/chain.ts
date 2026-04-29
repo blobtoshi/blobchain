@@ -3,6 +3,7 @@ import { to8 } from "./fees";
 import {
   BLOCK_TIME, INITIAL_REWARD, HALVING_BLOCKS, GENESIS_TIME_MS, TX_FEE,
 } from "./constants";
+import { runtimeSeedForHeightSync } from "./runtimeSeed";
 
 // Mulberry32 PRNG
 export function mkPrng(seed) {
@@ -24,6 +25,7 @@ export function getBlockInfo(chain?: any[], hasEntry?: boolean) {
   const tip = chain && chain.length > 0 ? chain[chain.length - 1] : null;
   const prevHeight = tip ? Number(tip.height) : 0;
   const prevTs = tip ? Number(tip.timestamp) : GENESIS_TIME_MS;
+  const prevHash = tip ? String(tip.hash ?? "") : null;
   const height = prevHeight + 1;
   const elapsed = Math.max(0, Math.floor((Date.now() - prevTs) / 1000));
   const remaining = Math.max(0, BLOCK_TIME - elapsed);
@@ -31,10 +33,14 @@ export function getBlockInfo(chain?: any[], hasEntry?: boolean) {
   const awaitingMiner = overdue && !hasEntry;
   const overtime = overdue ? elapsed - BLOCK_TIME : 0;
   const reward = getRewardForHeight(height);
-  const seed = BigInt(height) * 6364136223846793n + 1442695040888963407n;
+  // Runtime seed: bound to prev block's hash so the obstacle layout cannot be
+  // pre-solved by offline bots before block H-1 is sealed. Falls back to the
+  // cosmetic seed at genesis.
+  const seed = runtimeSeedForHeightSync(height, prevHash);
   return {
     height, elapsed, remaining, reward,
-    seed: Number(BigInt.asUintN(31, seed)),
+    seed,
+    prevHash,
     awaitingMiner, overtime, overdue,
   };
 }

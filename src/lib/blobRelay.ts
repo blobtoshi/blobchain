@@ -223,29 +223,92 @@ export async function fetchEntries(blockHeight: number): Promise<Entry[]> {
   }, []);
 }
 
+// Two-phase entry submission (commit-reveal + PoW).
+//
+// Phase 4 hardening: the network no longer accepts the old single-shot
+// `submitEntry`. Submission is now:
+//   1. compute commit_hash = sha256(score|inputs_hash|salt) (blinds the score)
+//   2. mine ENTRY_POW_BITS of leading-zero PoW on (height, address, commit_hash, nonce)
+//      → ~0.5–1.5s on a laptop, ~10x more for sybil rigs across many wallets
+//   3. submitEntryCommit during the early part of the block window
+//   4. submitEntryReveal during the last ENTRY_REVEAL_WINDOW_SECONDS, exposing
+//      the trace + salt — the node re-simulates and accepts the score
+//
+// The legacy `pushEntry` signature is preserved so existing callers (the
+// game UI) don't need to change — we just do the dance internally.
+import { signData } from "@/lib/blob/crypto";
+import {
+  ENTRY_POW_BITS, commitHash, mineEntryPow, randomSalt,
+} from "@/lib/blob/entryPow";
+
+export type EntrySubmission = Entry & {
+  publicKey: string;
+  privateKey?: string;
+  inputs?: string;
+  inputs_hash?: string;
+  frame_count?: number;
+  engine_version?: number;
+};
+
 export async function pushEntry(
-  e: Entry & { publicKey: string },
-): Promise<{ ok: boolean; error?: string }> {
+  e: EntrySubmission,
+): Promise<{ ok: boolean; error?: string; phase?: "commit" | "reveal" }> {
   const c = await waitForNode();
   if (!c) return { ok: false, error: "All nodes unreachable" };
+  if (!e.privateKey) return { ok: false, error: "missing privateKey for commit-reveal signing" };
+  if (!e.inputs_hash) return { ok: false, error: "missing inputs_hash" };
+
   try {
-    await c.submitEntry({
+    const salt = randomSalt();
+    const commit_hash = await commitHash(e.score, e.inputs_hash, salt);
+
+    // Mine PoW (yields to the event loop so the game UI stays responsive).
+    const { nonce } = await mineEntryPow(
+      e.block_height, e.address, commit_hash, ENTRY_POW_BITS,
+    );
+
+    // Sign the commit message exactly as the validator expects.
+    const commitPayload = `commit:${e.block_height}:${e.address}:${commit_hash}`;
+    const commitSig = await signData(e.privateKey, commitPayload);
+
+    await c.submitEntryCommit({
       address: e.address,
-      score: e.score,
       block_height: e.block_height,
-      block_seed: e.block_seed ?? "",
-      signature: e.signature,
+      commit_hash,
+      pow_nonce: nonce,
       publicKey: e.publicKey,
-      inputs: e.inputs ?? "",
-      inputs_hash: e.inputs_hash ?? "",
-      frame_count: e.frame_count ?? 0,
+      signature: commitSig,
       engine_version: e.engine_version ?? 0,
     });
-    if (activeUrl) pool.reportSuccess(activeUrl);
-    return { ok: true };
+
+    // Reveal — sign the reveal payload, then send the trace + salt.
+    const revealPayload = `reveal:${e.block_height}:${e.address}:${Math.floor(e.score)}:${e.inputs_hash}:${salt}`;
+    const revealSig = await signData(e.privateKey, revealPayload);
+
+    try {
+      await c.submitEntryReveal({
+        address: e.address,
+        block_height: e.block_height,
+        block_seed: String(e.block_seed ?? ""),
+        score: e.score,
+        frame_count: e.frame_count ?? 0,
+        inputs: e.inputs ?? "",
+        inputs_hash: e.inputs_hash,
+        salt,
+        publicKey: e.publicKey,
+        signature: revealSig,
+        engine_version: e.engine_version ?? 0,
+      });
+      if (activeUrl) pool.reportSuccess(activeUrl);
+      return { ok: true };
+    } catch (err: any) {
+      // Commit succeeded but reveal didn't — retry-on-poll will re-attempt
+      // by re-running pushEntry from the game when the user finishes again.
+      return { ok: false, error: err?.message ?? String(err), phase: "reveal" };
+    }
   } catch (err: any) {
     if (activeUrl) pool.reportFailure(activeUrl);
-    return { ok: false, error: err?.message ?? String(err) };
+    return { ok: false, error: err?.message ?? String(err), phase: "commit" };
   }
 }
 
@@ -303,7 +366,12 @@ export type BridgeRequest = {
   created_at: string;
   confirmed_at: string | null;
   minted_at: string | null;
+  confirmations?: number | null;
 };
+
+// Required BLOB-chain confirmations before the bridge mints on Solana.
+// MUST stay in sync with REQUIRED_CONFIRMATIONS in supabase/functions/bridge-mint.
+export const BRIDGE_REQUIRED_CONFIRMATIONS = 3;
 
 export type BridgeConfig = {
   bridgeAddress: string;

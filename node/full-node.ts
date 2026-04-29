@@ -16,10 +16,10 @@ import { feeInfo } from "./lib/validate.js";
 import {
   BLOCK_TIME_SECONDS, GENESIS_HASH, GENESIS_TIME_MS, MAX_BLOCK_SIZE, MAX_TX_SIZE,
   MAX_SUPPLY, computeBlockHash, getRewardForHeight, pickWinner,
-  seedForHeight, to8, currentHeight,
+  runtimeSeedForHeight, to8, currentHeight,
 } from "./lib/consensus.js";
 import { Gossip, send } from "./lib/gossip.js";
-import { ingestTx, ingestEntry, ingestBlock } from "./lib/ingest.js";
+import { ingestTx, ingestEntryCommit, ingestEntryReveal, ingestBlock } from "./lib/ingest.js";
 import { PeerManager } from "./lib/peers.js";
 import { startUpdateChecker } from "./lib/updateCheck.js";
 // Bridge intentionally not imported — runs on the website's edge functions.
@@ -309,8 +309,26 @@ async function handleMessage(ws: WebSocket, msg: ClientMsg) {
     }
 
     case "submitEntry": {
-      const r = ingestEntry(d, msg.entry);
-      if (!r.ok) return send(ws, { type: "error", ref: "submitEntry", message: r.error });
+      // Legacy single-shot path no longer accepted post-Phase-4 hardening.
+      // Clients must commit-then-reveal; PoW is required on the commit.
+      return send(ws, {
+        type: "error", ref: "submitEntry",
+        message: "legacy submitEntry no longer accepted — upgrade client to commit-reveal",
+      });
+    }
+
+    case "submitEntryCommit": {
+      const r = ingestEntryCommit(d, msg.commit);
+      if (!r.ok) return send(ws, { type: "error", ref: "submitEntryCommit", message: r.error });
+      return send(ws, {
+        type: "ack", ref: "submitEntryCommit",
+        data: { address: r.address, block_height: r.block_height },
+      });
+    }
+
+    case "submitEntryReveal": {
+      const r = ingestEntryReveal(d, msg.reveal);
+      if (!r.ok) return send(ws, { type: "error", ref: "submitEntryReveal", message: r.error });
       const entryMsg: ServerMsg = {
         type: "newEntry",
         entry: {
@@ -321,7 +339,10 @@ async function handleMessage(ws: WebSocket, msg: ClientMsg) {
       };
       gossip.broadcast(entryMsg);
       if (r.isNewBest) peers.broadcast(entryMsg);
-      return send(ws, { type: "ack", ref: "submitEntry", data: { score: r.score, verified: true } });
+      return send(ws, {
+        type: "ack", ref: "submitEntryReveal",
+        data: { score: r.score, verified: true },
+      });
     }
   }
 }
@@ -346,7 +367,10 @@ function trySealNextBlock(): boolean {
   }));
   if (entries.length === 0) return false;
 
-  const seedNum = seedForHeight(target);
+  // Runtime seed is bound to the previous block's hash so attackers can't
+  // pre-compute the level for a future height. Must match ingestBlock's
+  // expectation byte-for-byte.
+  const seedNum = runtimeSeedForHeight(target, previousHash);
   const winner = pickWinner(entries, seedNum);
 
   // Pack mempool by fee priority.

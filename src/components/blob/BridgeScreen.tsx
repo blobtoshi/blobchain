@@ -251,19 +251,21 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast }: any) {
     } catch {}
   };
 
-  const StatusPill = ({ status }: { status: Relay.BridgeRequest["status"] }) => {
+  const StatusPill = ({ r }: { r: Relay.BridgeRequest }) => {
+    const N = Relay.BRIDGE_REQUIRED_CONFIRMATIONS;
+    const confs = Math.max(0, Math.min(N, Number(r.confirmations ?? 0)));
     const map = {
-      pending:   { text: "Waiting for block",  cls: "text-muted-foreground border-border" },
-      confirmed: { text: "Confirmed on Blob",  cls: "text-primary border-primary/40" },
-      minting:   { text: "Minting on Solana",  cls: "text-primary border-primary/40" },
-      minted:    { text: "Minted",             cls: "text-[hsl(var(--success,142_70%_45%))] border-[hsl(var(--success,142_70%_45%))]/40" },
-      failed:    { text: "Failed",             cls: "text-destructive border-destructive/40" },
+      pending:   { text: "Waiting for block",                       cls: "text-muted-foreground border-border" },
+      confirmed: { text: `Awaiting confirmations (${confs}/${N})`,  cls: "text-primary border-primary/40" },
+      minting:   { text: "Minting on Solana",                       cls: "text-primary border-primary/40" },
+      minted:    { text: "Minted",                                  cls: "text-[hsl(var(--success,142_70%_45%))] border-[hsl(var(--success,142_70%_45%))]/40" },
+      failed:    { text: "Failed",                                  cls: "text-destructive border-destructive/40" },
     } as const;
-    const m = map[status];
+    const m = map[r.status];
     return (
       <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border ${m.cls}`}>
-        {status === "minted" ? <CheckCircle2 className="w-3 h-3" />
-         : status === "failed" ? <AlertCircle className="w-3 h-3" />
+        {r.status === "minted" ? <CheckCircle2 className="w-3 h-3" />
+         : r.status === "failed" ? <AlertCircle className="w-3 h-3" />
          : <Loader2 className="w-3 h-3 animate-spin" />}
         {m.text}
       </span>

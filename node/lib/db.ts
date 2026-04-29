@@ -185,10 +185,10 @@ export function openDb(path: string) {
     getBalance: db.prepare<[string], { balance: number }>(
       `SELECT balance FROM balances WHERE address = ?`,
     ),
-    bumpBalance: db.prepare<[number, string]>(
-      `INSERT INTO balances (address, balance) VALUES (?, ?)
-       ON CONFLICT(address) DO UPDATE SET balance = balance + excluded.balance`.replace("?, ?", "?2, ?1"),
-    ),
+    bumpBalance: db.prepare<{ address: string; delta: number }>(`
+      INSERT INTO balances (address, balance) VALUES (@address, @delta)
+      ON CONFLICT(address) DO UPDATE SET balance = balances.balance + excluded.balance
+    `),
     countBalances: db.prepare<[], { c: number }>(
       `SELECT COUNT(*) AS c FROM balances`,
     ),
@@ -197,21 +197,13 @@ export function openDb(path: string) {
     ),
   };
 
-  // The `bumpBalance` parameter-rewrite trick above is too clever; replace
-  // with a clean prepared statement that accepts (address, delta) by name.
-  const bumpBalance = db.prepare(`
-    INSERT INTO balances (address, balance) VALUES (@address, @delta)
-    ON CONFLICT(address) DO UPDATE SET balance = balances.balance + excluded.balance
-  `);
-  (stmts as any).bumpBalance = bumpBalance;
-
   return { db, stmts };
 }
 
 /** Apply a balance delta (positive = credit, negative = debit). */
 export function applyBalanceDelta(d: DB, address: string, delta: number) {
   if (!address || delta === 0) return;
-  (d.stmts as any).bumpBalance.run({ address, delta });
+  d.stmts.bumpBalance.run({ address, delta });
 }
 
 /**

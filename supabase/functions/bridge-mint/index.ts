@@ -46,7 +46,7 @@ const corsHeaders = {
 
 // Bridge deposit address on Blob Chain.
 // MUST match GENESIS.bridgeAddress in src/lib/blob/constants.ts (pinned at genesis).
-const BRIDGE_ADDRESS = "1E4QWFYb5Pqj8iAV2be8Ee88yEbvhU9iTs";
+const BRIDGE_ADDRESS = "13yfvVYknMVa6xoKhVSrFHrshBBQv6rbvm";
 
 const SOLANA_SPL_MINT_ADDRESS = Deno.env.get("SOLANA_SPL_MINT_ADDRESS") ?? "";
 

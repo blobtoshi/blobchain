@@ -41,8 +41,6 @@ export const MEMO_PROGRAM_ID = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
 // node operators' servers. Edge functions self-check that their loaded private
 // key derives this exact address on every redeem call.
 export const BRIDGE_ADDRESS = "13yfvVYknMVa6xoKhVSrFHrshBBQv6rbvm";
-export const BRIDGE_PUBLIC_KEY =
-  "03f2d496af89a9349bbe4ee26cb7493600c9cb6a860d04b9e12259a94a9d1952fc";
 
 export const GENESIS = {
   height: 0,
@@ -58,7 +56,6 @@ export const GENESIS = {
   totalSupply: 0,
   nodeCount: 0,
   bridgeAddress: BRIDGE_ADDRESS,
-  bridgePublicKey: BRIDGE_PUBLIC_KEY,
 };
 
 // Custom event used to navigate the explorer to a specific address from

@@ -188,7 +188,7 @@ export function useBlockchain(walletRef: React.MutableRefObject<WalletLike>) {
   }, []);
 
   const onTxBroadcast = useCallback((tx: Tx) => {
-    setMempool((m) => [...m, tx]);
+    setMempool((m) => (m.find((x) => x.id === tx.id) ? m : [...m, tx]));
   }, []);
 
   return {

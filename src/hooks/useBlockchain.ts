@@ -211,7 +211,7 @@ export function useBlockchain(walletRef: React.MutableRefObject<WalletLike>) {
   }, []);
 
   return {
-    chain, mempool, entries, myEntry, blockInfo, newBlock,
+    chain, mempool, entries, myEntry, blockInfo, blockTime, newBlock,
     onEntrySubmit, onTxBroadcast,
   };
 }

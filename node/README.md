@@ -30,7 +30,6 @@ cd node
 docker compose up --build
 ```
 
-Brings up two peered nodes on `localhost:8081` and `localhost:8082`. Each one mounts a named volume so the SQLite chain data survives `docker compose down`. Use this as a template for production deployments.
 
 For a single container:
 

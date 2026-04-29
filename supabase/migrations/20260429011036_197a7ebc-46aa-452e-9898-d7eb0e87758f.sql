@@ -1,0 +1,1 @@
+DELETE FROM public.access_codes WHERE code = 'OWNER-PERMANENT-ACCESS';

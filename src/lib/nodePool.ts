@@ -147,10 +147,13 @@ class NodePool {
   }
 
   getHealth(): NodeHealth[] {
-    return this.getCandidates().map((u) =>
-      this.health.get(u) ?? { url: u, ok: false, ms: null, checkedAt: 0 },
-    );
+    return this.getCandidates().map((u) => {
+      const h = this.health.get(u) ?? { url: u, ok: false, ms: null, checkedAt: 0 };
+      return { ...h, diverged: this.quarantine.has(u) };
+    });
   }
+
+  isQuarantined(url: string): boolean { return this.quarantine.has(clean(url)); }
 
   getActive(): string | null { return this.active; }
   getPinned(): string | null { return this.pinned; }
@@ -244,15 +247,52 @@ class NodePool {
   private recomputeActive() {
     let next: string | null = null;
     if (this.pinned) {
-      next = this.pinned; // honor pin even if currently unhealthy — caller will retry
+      // Honor user pin — but if the pinned node has been flagged as serving
+      // a divergent chain, the UI surfaces that warning. We still respect
+      // the pin so the user can choose to override the consensus check.
+      next = this.pinned;
     } else {
-      const healthy = [...this.health.values()].filter((h) => h.ok && h.ms !== null);
+      // Auto mode: pick the lowest-latency healthy node that has NOT been
+      // quarantined by cross-node tip consensus. This is the eclipse-attack
+      // mitigation: even if a malicious node is fastest, it can't be
+      // selected while the rest of the network disagrees with its chain.
+      const healthy = [...this.health.values()]
+        .filter((h) => h.ok && h.ms !== null && !this.quarantine.has(h.url));
       healthy.sort((a, b) => (a.ms! - b.ms!));
       next = healthy[0]?.url ?? null;
+      // Fallback: if every healthy node is quarantined (suspicious!), prefer
+      // having SOME connection over none. The UI will scream about it.
+      if (!next) {
+        const anyHealthy = [...this.health.values()]
+          .filter((h) => h.ok && h.ms !== null)
+          .sort((a, b) => (a.ms! - b.ms!));
+        next = anyHealthy[0]?.url ?? null;
+      }
     }
     if (next === this.active) return;
     this.active = next;
     this.emit({ type: "active-changed", url: this.active });
+  }
+
+  private async runConsensus() {
+    const urls = this.getCandidates().filter((u) => {
+      const h = this.health.get(u);
+      return h?.ok === true; // only ask reachable nodes
+    });
+    if (urls.length === 0) return;
+    const snap = await runConsensusRound(urls);
+    this.lastConsensus = snap;
+    const newQ = divergedUrls(snap);
+    // Detect quarantine changes — only re-pick / re-emit when something moved.
+    const changed =
+      newQ.size !== this.quarantine.size ||
+      [...newQ].some((u) => !this.quarantine.has(u));
+    this.quarantine = newQ;
+    this.emit({ type: "consensus-updated", snapshot: snap });
+    if (changed) {
+      this.emit({ type: "health-updated", health: this.getHealth() });
+      this.recomputeActive();
+    }
   }
 
   private persist() {

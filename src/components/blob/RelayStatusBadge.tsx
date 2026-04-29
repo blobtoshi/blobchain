@@ -7,7 +7,7 @@ import type { NodeStatus } from "@/lib/blobNodeClient";
 
 export function RelayStatusBadge() {
   const [status, setStatus] = useState<RelayStatus>({
-    activeUrl: null, health: [], pinned: null, custom: [],
+    activeUrl: null, health: [], pinned: null, custom: [], consensus: null,
   });
   const [wsStatus, setWsStatus] = useState<NodeStatus>("idle");
   const [tip, setTip] = useState<number>(0);

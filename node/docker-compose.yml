@@ -12,9 +12,9 @@ services:
     container_name: blob-node
     environment:
       PORT: 8080
-      NODE_ID: ${NODE_ID:-blob-node}
+      NODE_ID: node-blobchain-network
       DB_PATH: /data/blobchain.db
-      PEERS: ${PEERS:-}
+      PEERS: "wss://node.blobchain.network/ws,wss://node-eu.blobchain.network/ws,wss://node-us.blobchain.network/ws"
     ports:
       - "8080:8080"
     volumes:

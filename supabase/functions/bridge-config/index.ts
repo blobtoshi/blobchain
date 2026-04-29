@@ -8,7 +8,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, OPTIONS",
 };
 
-// MUST match GENESIS.bridgeAddress in src/lib/blob/constants.ts (pinned at genesis).
+// MUST match BRIDGE_ADDRESS in src/lib/blob/constants.ts.
 const BRIDGE_ADDRESS = "13yfvVYknMVa6xoKhVSrFHrshBBQv6rbvm";
 
 Deno.serve((req) => {

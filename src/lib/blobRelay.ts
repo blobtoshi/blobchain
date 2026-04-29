@@ -11,6 +11,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { BlobNodeClient } from "@/lib/blobNodeClient";
 import { getNodePool, type NodeHealth } from "@/lib/nodePool";
+import type { ConsensusSnapshot } from "@/lib/tipConsensus";
 
 export type Block = {
   height: number;
@@ -88,16 +89,23 @@ export type RelayStatus = {
   health: NodeHealth[];
   pinned: string | null;
   custom: string[];
+  // Cross-node tip consensus (eclipse-attack defense). null until the first
+  // round runs.
+  consensus: ConsensusSnapshot | null;
 };
 
 const statusListeners = new Set<(s: RelayStatus) => void>();
-function emitStatus() {
-  const s: RelayStatus = {
+function snapshotStatus(): RelayStatus {
+  return {
     activeUrl,
     health: pool.getHealth(),
     pinned: pool.getPinned(),
     custom: pool.getCustom(),
+    consensus: pool.getConsensus(),
   };
+}
+function emitStatus() {
+  const s = snapshotStatus();
   for (const l of statusListeners) { try { l(s); } catch { /* ignore */ } }
 }
 pool.on(() => emitStatus());
@@ -105,14 +113,7 @@ pool.on(() => emitStatus());
 export function onRelayStatus(fn: (s: RelayStatus) => void): () => void {
   statusListeners.add(fn);
   // Fire once with current state.
-  try {
-    fn({
-      activeUrl,
-      health: pool.getHealth(),
-      pinned: pool.getPinned(),
-      custom: pool.getCustom(),
-    });
-  } catch { /* ignore */ }
+  try { fn(snapshotStatus()); } catch { /* ignore */ }
   return () => statusListeners.delete(fn);
 }
 

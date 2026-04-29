@@ -11,7 +11,7 @@ import {
 } from "@/lib/blobRelay";
 import { BUNDLED_NODES } from "@/lib/nodePool";
 import { BlobNodeClient } from "@/lib/blobNodeClient";
-import { Loader2, RefreshCw, Server, Plus, X, Check } from "lucide-react";
+import { Loader2, RefreshCw, Server, Plus, X, Check, ShieldAlert } from "lucide-react";
 
 const AUTO = "__auto__";
 
@@ -24,7 +24,7 @@ function latencyTone(ms: number | null): string {
 
 export default function NodeConnectionCard() {
   const [status, setStatus] = useState<RelayStatus>({
-    activeUrl: null, health: [], pinned: null, custom: [],
+    activeUrl: null, health: [], pinned: null, custom: [], consensus: null,
   });
   const [scanning, setScanning] = useState(false);
   const [draft, setDraft] = useState("");
@@ -40,6 +40,9 @@ export default function NodeConnectionCard() {
   const activeHealth = status.health.find((h) => h.url === status.activeUrl);
   const cleanedDraft = draft.trim().replace(/\/+$/, "");
   const validDraft = /^https?:\/\//.test(cleanedDraft);
+  const consensus = status.consensus;
+  const divergedNodes = status.health.filter((h) => h.diverged);
+  const activeDiverged = !!activeHealth?.diverged;
 
   async function rescan() {
     setScanning(true);
@@ -93,9 +96,11 @@ export default function NodeConnectionCard() {
 
       {/* Active node summary */}
       <div className={`rounded-md border p-3 mb-3 ${
-        status.activeUrl
-          ? "border-primary/30 bg-primary/[0.05]"
-          : "border-[hsl(var(--danger)/0.4)] bg-[hsl(var(--danger)/0.06)]"
+        !status.activeUrl
+          ? "border-[hsl(var(--danger)/0.4)] bg-[hsl(var(--danger)/0.06)]"
+          : activeDiverged
+            ? "border-destructive/50 bg-destructive/[0.06]"
+            : "border-primary/30 bg-primary/[0.05]"
       }`}>
         <div className="flex items-center gap-2">
           <Server className="w-3.5 h-3.5 text-foreground/60 shrink-0" />
@@ -103,6 +108,11 @@ export default function NodeConnectionCard() {
           <span className="text-sm font-medium num truncate flex-1">
             {status.activeUrl ?? "All nodes unreachable"}
           </span>
+          {activeDiverged && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-destructive shrink-0">
+              <ShieldAlert className="w-3 h-3" /> diverged
+            </span>
+          )}
           {activeHealth && (
             <span className={`text-[11px] tabular-nums ${latencyTone(activeHealth.ms)}`}>
               {activeHealth.ms !== null ? `${activeHealth.ms} ms` : "down"}
@@ -110,6 +120,37 @@ export default function NodeConnectionCard() {
           )}
         </div>
       </div>
+
+      {/* Cross-node consensus banner — eclipse-attack mitigation */}
+      {divergedNodes.length > 0 && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/[0.06] p-3 mb-3">
+          <div className="flex items-start gap-2">
+            <ShieldAlert className="w-3.5 h-3.5 text-destructive shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-medium text-destructive">
+                {divergedNodes.length === 1
+                  ? "1 node disagrees with the network"
+                  : `${divergedNodes.length} nodes disagree with the network`}
+              </div>
+              <div className="text-[11px] text-foreground/70 mt-0.5 leading-snug">
+                {consensus?.consensusHeight != null
+                  ? <>Compared chain hash at block #{consensus.consensusHeight} across {consensus.participants} peers ({consensus.agreeing} agreed). Diverged nodes are skipped during auto-selection to defend against eclipse attacks.</>
+                  : <>Cross-node tip consensus detected a mismatch. These nodes will not be auto-selected.</>}
+              </div>
+              <div className="mt-1.5 space-y-0.5">
+                {divergedNodes.map((d) => (
+                  <div key={d.url} className="num text-[10px] text-foreground/60 truncate">• {d.url}</div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {activeDiverged && (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/[0.06] p-3 mb-3 text-[11px] text-amber-300">
+          You're pinned to a node whose chain disagrees with the rest of the network. Switch to <span className="font-medium">Auto</span> or pick a different node to avoid acting on a potentially fabricated chain.
+        </div>
+      )}
 
       {/* Picker */}
       <div className="space-y-2 mb-3">

@@ -12,12 +12,20 @@
 // swapping the storage adapter (electron disk file vs localStorage).
 
 import { BlobNodeClient } from "@/lib/blobNodeClient";
+import {
+  runConsensusRound, divergedUrls,
+  type ConsensusSnapshot,
+} from "@/lib/tipConsensus";
 
 export type NodeHealth = {
   url: string;
   ok: boolean;
   ms: number | null; // round-trip in ms when ok
   checkedAt: number;
+  // True if cross-node consensus flagged this node as serving a chain
+  // that disagrees with the majority. Quarantined nodes are never picked
+  // as the active node (eclipse-attack mitigation).
+  diverged?: boolean;
 };
 
 export type StorageAdapter = {
@@ -37,6 +45,9 @@ const PROBE_INTERVAL_MS = 60_000;
 const PROBE_TIMEOUT_MS = 2500;
 const FAILOVER_FAIL_WINDOW_MS = 10_000;
 const FAILOVER_FAIL_THRESHOLD = 3;
+// How often to run cross-node tip consensus. Cheaper than a full health
+// probe (one tip request per node) so we run it more often than PROBE_INTERVAL.
+const CONSENSUS_INTERVAL_MS = 20_000;
 
 function defaultStorage(): StorageAdapter {
   return {
@@ -64,7 +75,8 @@ function defaultStorage(): StorageAdapter {
 export type PoolEvent =
   | { type: "active-changed"; url: string | null }
   | { type: "health-updated"; health: NodeHealth[] }
-  | { type: "config-changed"; pinned: string | null; custom: string[] };
+  | { type: "config-changed"; pinned: string | null; custom: string[] }
+  | { type: "consensus-updated"; snapshot: ConsensusSnapshot };
 
 type Listener = (e: PoolEvent) => void;
 
@@ -76,7 +88,10 @@ class NodePool {
   private active: string | null = null;
   private listeners = new Set<Listener>();
   private probeTimer: any = null;
+  private consensusTimer: any = null;
   private failureLog: number[] = []; // timestamps of recent active-node failures
+  private quarantine = new Set<string>(); // urls flagged by tip consensus
+  private lastConsensus: ConsensusSnapshot | null = null;
 
   constructor(storage?: StorageAdapter) {
     this.storage = storage ?? defaultStorage();
@@ -92,11 +107,26 @@ class NodePool {
     if (this.probeTimer) return;
     this.probeAll();
     this.probeTimer = setInterval(() => this.probeAll(), PROBE_INTERVAL_MS);
+    // Run an initial consensus check shortly after first probes complete,
+    // then on a steady cadence.
+    setTimeout(() => this.runConsensus(), 1500);
+    this.consensusTimer = setInterval(() => this.runConsensus(), CONSENSUS_INTERVAL_MS);
   }
 
   stop() {
     if (this.probeTimer) clearInterval(this.probeTimer);
+    if (this.consensusTimer) clearInterval(this.consensusTimer);
     this.probeTimer = null;
+    this.consensusTimer = null;
+  }
+
+  getConsensus(): ConsensusSnapshot | null { return this.lastConsensus; }
+
+  // Force a consensus round immediately (e.g., right after the user pins
+  // a brand-new custom node so they get instant feedback).
+  async refreshConsensus(): Promise<ConsensusSnapshot | null> {
+    await this.runConsensus();
+    return this.lastConsensus;
   }
 
   on(fn: Listener): () => void {
@@ -117,10 +147,13 @@ class NodePool {
   }
 
   getHealth(): NodeHealth[] {
-    return this.getCandidates().map((u) =>
-      this.health.get(u) ?? { url: u, ok: false, ms: null, checkedAt: 0 },
-    );
+    return this.getCandidates().map((u) => {
+      const h = this.health.get(u) ?? { url: u, ok: false, ms: null, checkedAt: 0 };
+      return { ...h, diverged: this.quarantine.has(u) };
+    });
   }
+
+  isQuarantined(url: string): boolean { return this.quarantine.has(clean(url)); }
 
   getActive(): string | null { return this.active; }
   getPinned(): string | null { return this.pinned; }
@@ -197,6 +230,8 @@ class NodePool {
     await Promise.all(urls.map((u) => this.probeOne(u)));
     this.emit({ type: "health-updated", health: this.getHealth() });
     this.recomputeActive();
+    // Reachability changed → reassess cross-node consensus too.
+    void this.runConsensus();
   }
 
   private async probeOne(url: string) {
@@ -214,15 +249,52 @@ class NodePool {
   private recomputeActive() {
     let next: string | null = null;
     if (this.pinned) {
-      next = this.pinned; // honor pin even if currently unhealthy — caller will retry
+      // Honor user pin — but if the pinned node has been flagged as serving
+      // a divergent chain, the UI surfaces that warning. We still respect
+      // the pin so the user can choose to override the consensus check.
+      next = this.pinned;
     } else {
-      const healthy = [...this.health.values()].filter((h) => h.ok && h.ms !== null);
+      // Auto mode: pick the lowest-latency healthy node that has NOT been
+      // quarantined by cross-node tip consensus. This is the eclipse-attack
+      // mitigation: even if a malicious node is fastest, it can't be
+      // selected while the rest of the network disagrees with its chain.
+      const healthy = [...this.health.values()]
+        .filter((h) => h.ok && h.ms !== null && !this.quarantine.has(h.url));
       healthy.sort((a, b) => (a.ms! - b.ms!));
       next = healthy[0]?.url ?? null;
+      // Fallback: if every healthy node is quarantined (suspicious!), prefer
+      // having SOME connection over none. The UI will scream about it.
+      if (!next) {
+        const anyHealthy = [...this.health.values()]
+          .filter((h) => h.ok && h.ms !== null)
+          .sort((a, b) => (a.ms! - b.ms!));
+        next = anyHealthy[0]?.url ?? null;
+      }
     }
     if (next === this.active) return;
     this.active = next;
     this.emit({ type: "active-changed", url: this.active });
+  }
+
+  private async runConsensus() {
+    const urls = this.getCandidates().filter((u) => {
+      const h = this.health.get(u);
+      return h?.ok === true; // only ask reachable nodes
+    });
+    if (urls.length === 0) return;
+    const snap = await runConsensusRound(urls);
+    this.lastConsensus = snap;
+    const newQ = divergedUrls(snap);
+    // Detect quarantine changes — only re-pick / re-emit when something moved.
+    const changed =
+      newQ.size !== this.quarantine.size ||
+      [...newQ].some((u) => !this.quarantine.has(u));
+    this.quarantine = newQ;
+    this.emit({ type: "consensus-updated", snapshot: snap });
+    if (changed) {
+      this.emit({ type: "health-updated", health: this.getHealth() });
+      this.recomputeActive();
+    }
   }
 
   private persist() {

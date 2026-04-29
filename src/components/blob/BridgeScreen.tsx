@@ -422,7 +422,7 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast }: any) {
             <div className="glass-hi p-5 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="label-eyebrow">Latest bridge</div>
-                <StatusPill status={activeRequest.status} />
+                <StatusPill r={activeRequest} />
               </div>
               <div className="grid grid-cols-2 gap-3 text-[11px]">
                 <div>
@@ -479,7 +479,7 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast }: any) {
                 <div key={h.blob_tx_id} className="glass px-4 py-3 space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
                     <span className="num text-sm font-medium">{Number(h.amount).toFixed(BLOB_DECIMALS)} BLOB</span>
-                    <StatusPill status={h.status} />
+                    <StatusPill r={h} />
                   </div>
                   <div className="num text-[10px] text-muted-foreground truncate">→ {h.sol_address}</div>
                   {h.sol_signature && (

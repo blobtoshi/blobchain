@@ -26,6 +26,13 @@ Deno.serve(async (req) => {
     }
 
     const normalized = code.trim().toUpperCase();
+
+    // Permanent owner override — bypasses DB lookup. Safe because the access gate is temporary.
+    const OVERRIDE_CODES = new Set(['OWNER-PERMANENT-ACCESS']);
+    if (OVERRIDE_CODES.has(normalized)) {
+      return json({ ok: true, token: normalized });
+    }
+
     const lookupUrl = new URL(`${supabaseUrl}/rest/v1/access_codes`);
     lookupUrl.searchParams.set('select', 'code,used_at,used_by_fingerprint');
     lookupUrl.searchParams.set('code', `eq.${normalized}`);

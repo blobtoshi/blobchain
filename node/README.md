@@ -52,6 +52,14 @@ docker run -p 8080:8080 -v blobchain-data:/data \
 | `DB_PATH` | `./data/blobchain.db` | SQLite file (auto-created)                                    |
 | `NODE_ID` | random UUID           | Stable identifier across restarts                             |
 | `PEERS`   | *(empty)*             | Comma-separated WebSocket URLs of other nodes (see PEERS.md)  |
+| `UPDATE_REPO` | `blobchain/blobchain` | GitHub `owner/repo` to check for new releases             |
+| `UPDATE_BRANCH` | `main`              | Branch tracked for the update check                         |
+| `UPDATE_CHECK` | `1`                  | Set to `0` to disable the startup update check              |
+| `UPDATE_CHECK_INTERVAL_MS` | `21600000` | Re-check cadence (default 6h)                       |
+
+### Update notifications
+
+On startup (and every 6h after), the node compares its local git commit against the configured GitHub repo/branch. If a newer commit exists upstream, a banner is printed in the logs prompting the operator to run `git pull && npm install` (or `docker compose pull && docker compose up -d --build`). The check is best-effort and silently skipped if the node isn't a git checkout or GitHub is unreachable.
 
 ---
 

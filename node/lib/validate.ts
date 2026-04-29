@@ -1,6 +1,6 @@
-// Validates incoming transactions and mining entries. Mirrors the rules
-// implemented in `submit-tx` and `submit-entry` edge functions so a tx that
-// would have been accepted by Supabase is also accepted here, and vice-versa.
+// Validates incoming transactions and mining-entry commits/reveals.
+// Mirrors the rules implemented in `submit-tx` so a tx that would have been
+// accepted by Supabase is also accepted here, and vice-versa.
 
 import { pubKeyToAddress, verifySig, sha256hex } from "./crypto.js";
 import {
@@ -9,10 +9,15 @@ import {
 } from "./simulator.js";
 import {
   BLOB_UNIT, MAX_BLOCK_SIZE, MAX_TX_SIZE, currentHeight,
+  ENTRY_POW_BITS, ENTRY_REVEAL_WINDOW_SECONDS,
+  GENESIS_HASH, runtimeSeedForHeight, verifyEntryPow,
+  windowOpenMsForHeight, windowCloseMsForHeight,
 } from "./consensus.js";
 import type { DB } from "./db.js";
 import { rowToBlock, rowToTx } from "./db.js";
-import type { SubmitTxPayload, SubmitEntryPayload } from "../wsProtocol.js";
+import type {
+  SubmitTxPayload, SubmitEntryCommitPayload, SubmitEntryRevealPayload,
+} from "../wsProtocol.js";
 
 const ADDR_RE = /^[1][1-9A-HJ-NP-Za-km-z]{25,34}$/;
 const PUB_RE = /^(02|03)[0-9a-fA-F]{64}$/;
@@ -20,6 +25,8 @@ const SIG_RE = /^[0-9a-fA-F]{128}$/;
 const ID_RE = /^[0-9a-fA-F]{8,64}$/;
 const HASH_RE = /^[0-9a-fA-F]{64}$/;
 const SEED_RE = /^[0-9]+$/;
+const SALT_RE = /^[0-9a-fA-F]{32}$/;
+const NONCE_RE = /^[0-9a-fA-F]{1,32}$/;
 const MEMO_RE = /^[\x20-\x7E\u00A0-\uFFFF\n\t]*$/;
 
 const BASE_FEE_RATE = 10;
@@ -62,21 +69,10 @@ export function feeInfo(d: DB) {
   };
 }
 
-// ── Balance (full chain scan; fine for an MVP node) ─────────────────────
+// ── Balance (now O(1) via materialized index) ───────────────────────────
 function calcBalance(d: DB, address: string): number {
-  let bal = 0;
-  const allBlocks = d.db.prepare<[], { winner: string | null; reward: number; transactions: string }>(
-    `SELECT winner, reward, transactions FROM blocks ORDER BY height ASC`,
-  ).all();
-  for (const b of allBlocks) {
-    if (b.winner === address) bal += Number(b.reward ?? 0);
-    let txs: Array<{ from: string; to: string; amount: number; fee?: number }> = [];
-    try { txs = JSON.parse(b.transactions); } catch { /* ignore */ }
-    for (const tx of txs) {
-      if (tx.to === address) bal += Number(tx.amount);
-      if (tx.from === address) bal -= Number(tx.amount) + Number(tx.fee ?? 0);
-    }
-  }
+  const row = d.stmts.getBalance.get(address);
+  let bal = Number(row?.balance ?? 0);
   for (const p of d.stmts.getMempoolForAddress.all(address)) {
     bal -= Number(p.amount) + Number(p.fee ?? 0);
   }
@@ -161,8 +157,70 @@ export function validateTx(d: DB, body: SubmitTxPayload): ValidationResult<Valid
   });
 }
 
-// ── Entry validation ────────────────────────────────────────────────────
-export type ValidatedEntry = {
+// ── Helpers ─────────────────────────────────────────────────────────────
+function expectedRuntimeSeed(d: DB, block_height: number): string {
+  const prev = d.stmts.getBlockByHeight.get(block_height - 1);
+  const prevHash = prev?.hash ?? (block_height === 1 ? null : GENESIS_HASH);
+  return String(runtimeSeedForHeight(block_height, prevHash));
+}
+
+// ── Entry COMMIT validation ─────────────────────────────────────────────
+export type ValidatedCommit = {
+  address: string;
+  block_height: number;
+  commit_hash: string;
+  pow_nonce: string;
+  publicKey: string;
+  signature: string;
+};
+
+export function validateEntryCommit(
+  d: DB, body: SubmitEntryCommitPayload,
+): ValidationResult<ValidatedCommit> {
+  const {
+    address, block_height, commit_hash, pow_nonce,
+    publicKey, signature, engine_version,
+  } = body ?? ({} as SubmitEntryCommitPayload);
+
+  if (typeof address !== "string" || !ADDR_RE.test(address)) return err("invalid address");
+  if (typeof publicKey !== "string" || !PUB_RE.test(publicKey)) return err("invalid publicKey");
+  if (typeof signature !== "string" || !SIG_RE.test(signature)) return err("invalid signature");
+  if (typeof block_height !== "number" || block_height < 1) return err("invalid block_height");
+  if (typeof commit_hash !== "string" || !HASH_RE.test(commit_hash)) return err("invalid commit_hash");
+  if (typeof pow_nonce !== "string" || !NONCE_RE.test(pow_nonce)) return err("invalid pow_nonce");
+  if (engine_version !== ENGINE_VERSION) return err(`engine_version mismatch (expected ${ENGINE_VERSION})`);
+
+  const tip = d.stmts.getTip.get();
+  const activeHeight = (tip?.height ?? 0) + 1;
+  const tHeight = currentHeight();
+  if (block_height !== activeHeight) return err(`stale block_height (active is #${activeHeight})`);
+  if (block_height > tHeight) return err("block not yet open");
+
+  // Reject commits arriving inside the reveal window — only reveals are
+  // accepted there. This is what makes copy-then-snipe unprofitable.
+  const windowClose = windowCloseMsForHeight(block_height);
+  const revealOpens = windowClose - ENTRY_REVEAL_WINDOW_SECONDS * 1000;
+  if (Date.now() >= revealOpens) {
+    return err(`commit window closed (reveal phase began ${ENTRY_REVEAL_WINDOW_SECONDS}s before block close)`);
+  }
+
+  const derived = pubKeyToAddress(publicKey.toLowerCase());
+  if (derived !== address) return err("address does not match publicKey");
+
+  // PoW gate — bound to (height, address, commit_hash) so a nonce can't be
+  // reused across heights / addresses / commits.
+  if (!verifyEntryPow(block_height, address, commit_hash, pow_nonce, ENTRY_POW_BITS)) {
+    return err(`proof-of-work too weak (need ${ENTRY_POW_BITS} leading zero bits)`);
+  }
+
+  const payload = `commit:${block_height}:${address}:${commit_hash}`;
+  if (!verifySig(publicKey, signature, payload)) return err("bad signature");
+
+  return ok({ address, block_height, commit_hash, pow_nonce, publicKey, signature });
+}
+
+// ── Entry REVEAL validation ─────────────────────────────────────────────
+export type ValidatedReveal = {
   address: string;
   score: number;
   block_height: number;
@@ -174,11 +232,13 @@ export type ValidatedEntry = {
   frame_count: number;
 };
 
-export function validateEntry(d: DB, body: SubmitEntryPayload): ValidationResult<ValidatedEntry> {
+export function validateEntryReveal(
+  d: DB, body: SubmitEntryRevealPayload,
+): ValidationResult<ValidatedReveal> {
   const {
     address, score, block_height, block_seed,
-    signature, publicKey, frame_count, inputs, inputs_hash, engine_version,
-  } = body ?? ({} as SubmitEntryPayload);
+    signature, publicKey, frame_count, inputs, inputs_hash, salt, engine_version,
+  } = body ?? ({} as SubmitEntryRevealPayload);
 
   if (typeof address !== "string" || !ADDR_RE.test(address)) return err("invalid address");
   if (typeof publicKey !== "string" || !PUB_RE.test(publicKey)) return err("invalid publicKey");
@@ -190,6 +250,7 @@ export function validateEntry(d: DB, body: SubmitEntryPayload): ValidationResult
   if (typeof frame_count !== "number" || !Number.isInteger(frame_count)) return err("invalid frame_count");
   if (typeof inputs !== "string" || inputs.length > MAX_INPUTS_STR) return err("invalid inputs trace");
   if (typeof inputs_hash !== "string" || !HASH_RE.test(inputs_hash)) return err("invalid inputs_hash");
+  if (typeof salt !== "string" || !SALT_RE.test(salt)) return err("invalid salt");
   if (engine_version !== ENGINE_VERSION) return err(`engine_version mismatch (expected ${ENGINE_VERSION})`);
 
   const derived = pubKeyToAddress(publicKey.toLowerCase());
@@ -201,12 +262,30 @@ export function validateEntry(d: DB, body: SubmitEntryPayload): ValidationResult
   if (block_height !== activeHeight) return err(`stale block_height (active is #${activeHeight})`);
   if (block_height > tHeight) return err("block not yet open");
 
+  // Block_seed must be the runtime seed (derived from prev hash). This is
+  // what blocks pre-computed solver output for a future height.
+  const expSeed = expectedRuntimeSeed(d, block_height);
+  if (block_seed !== expSeed) return err("block_seed does not match runtime seed for this height");
+
+  // Must have a matching commit, sent before the reveal window opened.
+  const commit = d.stmts.getCommit.get(address, block_height);
+  if (!commit) return err("no prior commit for this (address, height)");
+  const windowClose = windowCloseMsForHeight(block_height);
+  const revealOpens = windowClose - ENTRY_REVEAL_WINDOW_SECONDS * 1000;
+  if (commit.received_at >= revealOpens) return err("commit was received too late to reveal");
+
+  // Commit must bind exactly this (score, inputs_hash, salt).
+  const expectedCommit = sha256hex(`${Math.floor(sc)}|${inputs_hash}|${salt}`);
+  if (expectedCommit !== commit.commit_hash) return err("reveal does not match commit_hash");
+
+  // inputs_hash must match the canonical inputs trace.
   const computedHash = sha256hex(inputs);
   if (computedHash !== inputs_hash) return err("inputs_hash does not match trace");
 
-  const payload = `${block_height}:${address}:${Math.floor(sc)}:${inputs_hash}`;
+  const payload = `reveal:${block_height}:${address}:${Math.floor(sc)}:${inputs_hash}:${salt}`;
   if (!verifySig(publicKey, signature, payload)) return err("bad signature");
 
+  // Deterministic replay against the runtime seed.
   const events = inputs.length === 0 ? [] : parseCanonicalInputs(inputs);
   const plaus = plausibilityCheck(events, frame_count, Math.floor(sc));
   if (plaus) return err(`replay rejected: ${plaus}`);

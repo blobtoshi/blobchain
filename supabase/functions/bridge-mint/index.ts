@@ -99,8 +99,16 @@ async function fetchNodeJson(nodeUrl: string, path: string): Promise<any> {
   } finally { clearTimeout(t); }
 }
 
+// Required BLOB-chain confirmations on the deposit tx before we mint on
+// Solana. Hardens the bridge against depth-1 reorgs: the BLOB chain only
+// supports same-tip tie-break reorgs, so 3 confirmations is overkill but
+// gives the user a clear "this is final" signal in the UI.
+const REQUIRED_CONFIRMATIONS = 3;
+
 // Look for the bridge tx in the sealed chain via the node's HTTP API.
-// We page backward from chain tip in chunks of 500 blocks (node max).
+// We page backward from chain tip in chunks of 500 blocks (node max) and
+// also return the current confirmation depth so the caller can decide
+// whether to wait before minting.
 async function findConfirmedBridgeTx(
   nodeUrl: string,
   txId: string,
@@ -118,7 +126,6 @@ async function findConfirmedBridgeTx(
   if (!Number.isFinite(tipHeight) || tipHeight <= 0) return null;
 
   const PAGE = 500;
-  // Scan most-recent blocks first; cap total scan at 5000 blocks for safety.
   const MAX_SCAN = 5000;
   let end = tipHeight;
   let scanned = 0;
@@ -131,7 +138,6 @@ async function findConfirmedBridgeTx(
       console.error("[bridge-mint] /blocks failed", e);
       return null;
     }
-    // Iterate newest-first within the page
     for (let i = blocks.length - 1; i >= 0; i--) {
       const b = blocks[i];
       const txs = Array.isArray(b?.transactions) ? b.transactions : [];
@@ -140,10 +146,15 @@ async function findConfirmedBridgeTx(
         if (tx.to !== BRIDGE_ADDRESS) continue;
         if (fromAddress && tx.from !== fromAddress) continue;
         if (amount != null && Number(tx.amount) !== Number(amount)) continue;
+        const blockHeight = Number(b.height);
+        // Confirmations include the block itself: tip == blockHeight → 1 conf.
+        const confirmations = Math.max(0, tipHeight - blockHeight + 1);
         return {
           tx,
-          height: Number(b.height),
+          height: blockHeight,
           memo: typeof tx.memo === "string" ? tx.memo : "",
+          confirmations,
+          tipHeight,
         };
       }
     }

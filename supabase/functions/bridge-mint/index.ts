@@ -369,10 +369,38 @@ Deno.serve(async (req) => {
     const nodeUrl = sanitizeNodeUrl(node_url);
     if (!nodeUrl) return bad("invalid or missing node_url");
 
+    console.log("[bridge-mint] lookup", { nodeUrl, blob_tx_id, from_address, amt, expected_to: BRIDGE_ADDRESS });
+
+    // Diagnostic: dump current mempool from the node so we can see what the
+    // edge function actually sees vs what the user sees in their browser.
+    let mempoolDump: any[] = [];
+    try {
+      mempoolDump = await fetchNodeJson(nodeUrl, "/mempool");
+      console.log("[bridge-mint] mempool size", Array.isArray(mempoolDump) ? mempoolDump.length : "not-array");
+      if (Array.isArray(mempoolDump)) {
+        const match = mempoolDump.find((t) => t?.id === blob_tx_id);
+        console.log("[bridge-mint] mempool tx by id", match ?? "(not found)");
+      }
+    } catch (e) {
+      console.error("[bridge-mint] diagnostic mempool fetch failed", e);
+    }
+
     const pending = await findPendingBridgeTx(nodeUrl, blob_tx_id, from_address, amt);
     const confirmed = pending ? null : await findConfirmedBridgeTx(nodeUrl, blob_tx_id, from_address, amt);
     if (!pending && !confirmed) {
-      return bad("matching BLOB transaction not found in mempool or chain");
+      // Build a richer error so the client can see WHY it failed.
+      const sample = Array.isArray(mempoolDump) ? mempoolDump.slice(0, 3).map((t) => ({
+        id: t?.id, from: t?.from, to: t?.to, amount: t?.amount,
+      })) : null;
+      return new Response(JSON.stringify({
+        error: "matching BLOB transaction not found in mempool or chain",
+        debug: {
+          nodeUrl,
+          looking_for: { blob_tx_id, from_address, amount: amt, to: BRIDGE_ADDRESS },
+          mempool_size: Array.isArray(mempoolDump) ? mempoolDump.length : null,
+          mempool_sample: sample,
+        },
+      }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const memoSol = extractSolFromMemo(pending ? (pending as any).memo : (confirmed as any).memo);

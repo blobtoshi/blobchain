@@ -366,7 +366,12 @@ export type BridgeRequest = {
   created_at: string;
   confirmed_at: string | null;
   minted_at: string | null;
+  confirmations?: number | null;
 };
+
+// Required BLOB-chain confirmations before the bridge mints on Solana.
+// MUST stay in sync with REQUIRED_CONFIRMATIONS in supabase/functions/bridge-mint.
+export const BRIDGE_REQUIRED_CONFIRMATIONS = 3;
 
 export type BridgeConfig = {
   bridgeAddress: string;

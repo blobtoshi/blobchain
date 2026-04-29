@@ -40,6 +40,9 @@ export default function NodeConnectionCard() {
   const activeHealth = status.health.find((h) => h.url === status.activeUrl);
   const cleanedDraft = draft.trim().replace(/\/+$/, "");
   const validDraft = /^https?:\/\//.test(cleanedDraft);
+  const consensus = status.consensus;
+  const divergedNodes = status.health.filter((h) => h.diverged);
+  const activeDiverged = !!activeHealth?.diverged;
 
   async function rescan() {
     setScanning(true);

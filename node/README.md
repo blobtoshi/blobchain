@@ -178,7 +178,12 @@ Always serve `/ws` over `wss://` in production.
 
 ## What this node does *not* do
 
-- **Solana bridge.** Mint / redeem requires custodial keys and lives in Supabase Edge Functions on the website side. The node never touches Solana. (`lib/bridge.ts` is a stub.)
-- **Alpha access gate.** Temporary, lives on Supabase, will be removed at launch.
+- **Solana bridge.** Mint / redeem requires custodial keys and lives in edge functions on the website side. The node never touches Solana. (`lib/bridge.ts` is a stub.)
 
 Everything else — chain reads, mempool, mining, address registry, real-time updates — happens here.
+
+---
+
+## License
+
+MIT

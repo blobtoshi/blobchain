@@ -70,31 +70,85 @@ const safeParse = (s: unknown, fb: unknown) => {
 
 type Supa = ReturnType<typeof createClient>;
 
-// Look for the bridge tx in the sealed chain. Returns the matching tx (or null).
+// ── Node HTTP API helpers ──────────────────────────────────────────────
+// We query the user's full-node HTTP API directly (mempool + sealed blocks)
+// instead of mirroring chain state into Supabase tables. Callers must pass
+// `node_url` (e.g. a cloudflared tunnel URL) so the edge function knows
+// where to look. Localhost is allowed for local dev only.
+function sanitizeNodeUrl(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim().replace(/\/+$/, "");
+  if (!trimmed) return null;
+  let u: URL;
+  try { u = new URL(trimmed); } catch { return null; }
+  if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+  // Block obvious SSRF surfaces. http:// only allowed for localhost dev.
+  if (u.protocol === "http:" && !/^(localhost|127\.0\.0\.1)$/i.test(u.hostname)) {
+    return null;
+  }
+  return `${u.protocol}//${u.host}${u.pathname.replace(/\/+$/, "")}`;
+}
+
+async function fetchNodeJson(nodeUrl: string, path: string): Promise<any> {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), 8000);
+  try {
+    const r = await fetch(`${nodeUrl}${path}`, { signal: ac.signal });
+    if (!r.ok) throw new Error(`node ${path} ${r.status}`);
+    return await r.json();
+  } finally { clearTimeout(t); }
+}
+
+// Look for the bridge tx in the sealed chain via the node's HTTP API.
+// We page backward from chain tip in chunks of 500 blocks (node max).
 async function findConfirmedBridgeTx(
-  supa: Supa,
+  nodeUrl: string,
   txId: string,
   fromAddress: string | null,
   amount: number | null,
 ) {
-  const { data: blocks } = await supa
-    .from("blob_chain")
-    .select("height,transactions")
-    .order("height", { ascending: false })
-    .limit(500);
-  for (const b of blocks ?? []) {
-    const txs = safeParse((b as any).transactions, []) as any[];
-    for (const tx of txs) {
-      if (tx.id !== txId) continue;
-      if (tx.to !== BRIDGE_ADDRESS) continue;
-      if (fromAddress && tx.from !== fromAddress) continue;
-      if (amount != null && Number(tx.amount) !== Number(amount)) continue;
-      return {
-        tx,
-        height: Number((b as any).height),
-        memo: typeof tx.memo === "string" ? tx.memo : "",
-      };
+  let tipHeight: number;
+  try {
+    const tip = await fetchNodeJson(nodeUrl, "/chain/tip");
+    tipHeight = Number(tip?.height ?? 0);
+  } catch (e) {
+    console.error("[bridge-mint] /chain/tip failed", e);
+    return null;
+  }
+  if (!Number.isFinite(tipHeight) || tipHeight <= 0) return null;
+
+  const PAGE = 500;
+  // Scan most-recent blocks first; cap total scan at 5000 blocks for safety.
+  const MAX_SCAN = 5000;
+  let end = tipHeight;
+  let scanned = 0;
+  while (end >= 1 && scanned < MAX_SCAN) {
+    const from = Math.max(1, end - PAGE + 1);
+    let blocks: any[] = [];
+    try {
+      blocks = await fetchNodeJson(nodeUrl, `/blocks?from=${from}&limit=${end - from + 1}`);
+    } catch (e) {
+      console.error("[bridge-mint] /blocks failed", e);
+      return null;
     }
+    // Iterate newest-first within the page
+    for (let i = blocks.length - 1; i >= 0; i--) {
+      const b = blocks[i];
+      const txs = Array.isArray(b?.transactions) ? b.transactions : [];
+      for (const tx of txs) {
+        if (tx?.id !== txId) continue;
+        if (tx.to !== BRIDGE_ADDRESS) continue;
+        if (fromAddress && tx.from !== fromAddress) continue;
+        if (amount != null && Number(tx.amount) !== Number(amount)) continue;
+        return {
+          tx,
+          height: Number(b.height),
+          memo: typeof tx.memo === "string" ? tx.memo : "",
+        };
+      }
+    }
+    scanned += (end - from + 1);
+    end = from - 1;
   }
   return null;
 }
@@ -106,20 +160,25 @@ function extractSolFromMemo(memo: unknown): string {
 }
 
 async function findPendingBridgeTx(
-  supa: Supa,
+  nodeUrl: string,
   txId: string,
   fromAddress: string,
   amount: number,
 ) {
-  const { data } = await supa
-    .from("blob_mempool")
-    .select("id,from_address,to_address,amount,memo")
-    .eq("id", txId).maybeSingle();
-  if (!data) return null;
-  if (data.from_address !== fromAddress) return null;
-  if (data.to_address !== BRIDGE_ADDRESS) return null;
-  if (Number(data.amount) !== Number(amount)) return null;
-  return data;
+  let mempool: any[] = [];
+  try {
+    mempool = await fetchNodeJson(nodeUrl, "/mempool");
+  } catch (e) {
+    console.error("[bridge-mint] /mempool failed", e);
+    return null;
+  }
+  if (!Array.isArray(mempool)) return null;
+  const tx = mempool.find((t) => t?.id === txId);
+  if (!tx) return null;
+  if (tx.from !== fromAddress) return null;
+  if (tx.to !== BRIDGE_ADDRESS) return null;
+  if (Number(tx.amount) !== Number(amount)) return null;
+  return { id: tx.id, from_address: tx.from, to_address: tx.to, amount: tx.amount, memo: tx.memo };
 }
 
 // Delegate the heavy SPL mint to a dedicated function so each step gets its
@@ -163,16 +222,18 @@ async function backgroundMint(
 }
 
 // Process a bridge request: confirm originating tx, then dispatch the mint as
-// a background task. Idempotent.
-async function processRequest(supa: Supa, row: any) {
+// a background task. Idempotent. If `nodeUrl` is null we skip the chain
+// re-check (used by GET poll when client didn't pass a node_url) — minting
+// still proceeds for rows already marked confirmed.
+async function processRequest(supa: Supa, row: any, nodeUrl: string | null) {
   if (row.status === "minted" || row.status === "failed" || row.status === "minting") return row;
 
-  const confirmed = await findConfirmedBridgeTx(
-    supa, row.blob_tx_id, row.from_address, Number(row.amount),
-  );
-  if (!confirmed) return row;
-
   if (row.status === "pending") {
+    if (!nodeUrl) return row; // need a node to confirm; caller will retry
+    const confirmed = await findConfirmedBridgeTx(
+      nodeUrl, row.blob_tx_id, row.from_address, Number(row.amount),
+    );
+    if (!confirmed) return row;
     await supa.from("bridge_requests").update({
       status: "confirmed",
       confirmed_at: new Date().toISOString(),
@@ -191,10 +252,6 @@ async function processRequest(supa: Supa, row: any) {
     return latest ?? row;
   }
 
-  // Mint inline (awaited) within the request scope. Dynamic imports cannot
-  // safely outlive the request in this runtime, and the mint itself is fast
-  // (~1-2s) so we just wait. The first call pays the SDK load cost (~1-2s);
-  // subsequent calls reuse the cached module.
   await backgroundMint(supa, row.blob_tx_id, row.sol_address, Number(row.amount));
   const { data: latest } = await supa.from("bridge_requests")
     .select("*").eq("blob_tx_id", row.blob_tx_id).maybeSingle();
@@ -232,11 +289,15 @@ Deno.serve(async (req) => {
   // Recovery: rebuild a bridge_requests row from on-chain data alone.
   if (req.method === "POST" && url.pathname.endsWith("/recover")) {
     try {
-      const { blob_tx_id } = (await req.json()) ?? {};
+      const body = (await req.json()) ?? {};
+      const { blob_tx_id, node_url } = body;
       if (typeof blob_tx_id !== "string" || !TX_ID_RE.test(blob_tx_id)) {
         return bad("invalid blob_tx_id");
       }
-      const found = await findConfirmedBridgeTx(supa, blob_tx_id, null, null);
+      const nodeUrl = sanitizeNodeUrl(node_url);
+      if (!nodeUrl) return bad("invalid or missing node_url");
+
+      const found = await findConfirmedBridgeTx(nodeUrl, blob_tx_id, null, null);
       if (!found) return bad("tx not found in chain", 404);
 
       const memoSol = extractSolFromMemo(found.memo);
@@ -265,13 +326,12 @@ Deno.serve(async (req) => {
         }
         row = inserted;
       } else if (row.status === "failed" || row.status === "pending") {
-        // reset failed/pending to confirmed so processRequest can mint
         const { data: upd } = await supa.from("bridge_requests")
           .update({ status: "confirmed", confirmed_at: new Date().toISOString(), error: null })
           .eq("blob_tx_id", blob_tx_id).select().single();
         row = upd ?? row;
       }
-      const updated = await processRequest(supa, row);
+      const updated = await processRequest(supa, row, nodeUrl);
       return ok_(updated);
     } catch (e) {
       console.error("[bridge-mint/recover] error", e);
@@ -279,14 +339,15 @@ Deno.serve(async (req) => {
     }
   }
 
-  // GET ?blob_tx_id=... → status, attempt mint if ready
+  // GET ?blob_tx_id=...&node_url=... → status, attempt mint if ready
   if (req.method === "GET") {
     const txId = url.searchParams.get("blob_tx_id") ?? "";
     if (!TX_ID_RE.test(txId)) return bad("invalid blob_tx_id");
+    const nodeUrl = sanitizeNodeUrl(url.searchParams.get("node_url"));
     const { data: row } = await supa.from("bridge_requests")
       .select("*").eq("blob_tx_id", txId).maybeSingle();
     if (!row) return bad("not found", 404);
-    const updated = await processRequest(supa, row);
+    const updated = await processRequest(supa, row, nodeUrl);
     return ok_(updated);
   }
 
@@ -294,7 +355,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { blob_tx_id, sol_address, amount, from_address } = body ?? {};
+    const { blob_tx_id, sol_address, amount, from_address, node_url } = body ?? {};
 
     if (typeof blob_tx_id !== "string" || !TX_ID_RE.test(blob_tx_id))
       return bad("invalid blob_tx_id");
@@ -305,9 +366,11 @@ Deno.serve(async (req) => {
     const amt = Number(amount);
     if (!Number.isFinite(amt) || amt <= 0 || amt > 1_000_000)
       return bad("invalid amount");
+    const nodeUrl = sanitizeNodeUrl(node_url);
+    if (!nodeUrl) return bad("invalid or missing node_url");
 
-    const pending = await findPendingBridgeTx(supa, blob_tx_id, from_address, amt);
-    const confirmed = pending ? null : await findConfirmedBridgeTx(supa, blob_tx_id, from_address, amt);
+    const pending = await findPendingBridgeTx(nodeUrl, blob_tx_id, from_address, amt);
+    const confirmed = pending ? null : await findConfirmedBridgeTx(nodeUrl, blob_tx_id, from_address, amt);
     if (!pending && !confirmed) {
       return bad("matching BLOB transaction not found in mempool or chain");
     }
@@ -339,7 +402,7 @@ Deno.serve(async (req) => {
       row = inserted;
     }
 
-    const updated = await processRequest(supa, row);
+    const updated = await processRequest(supa, row, nodeUrl);
     return ok_(updated);
   } catch (e) {
     console.error("[bridge-mint] unexpected error", e);

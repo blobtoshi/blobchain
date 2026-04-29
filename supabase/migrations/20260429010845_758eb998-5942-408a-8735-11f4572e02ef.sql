@@ -1,0 +1,1 @@
+INSERT INTO public.access_codes (code, note) VALUES ('OWNER-PERMANENT-ACCESS', 'Permanent owner access code');

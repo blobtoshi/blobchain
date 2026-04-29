@@ -6,7 +6,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Index from "./pages/Index.tsx";
 
 import NotFound from "./pages/NotFound.tsx";
-import AlphaLock from "./components/AlphaLock";
 import { RelayStatusBadge } from "@/components/blob/RelayStatusBadge";
 
 const queryClient = new QueryClient();
@@ -16,16 +15,14 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <AlphaLock>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </AlphaLock>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Index />} />
+
+          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </BrowserRouter>
       {import.meta.env.DEV && <RelayStatusBadge />}
     </TooltipProvider>
   </QueryClientProvider>

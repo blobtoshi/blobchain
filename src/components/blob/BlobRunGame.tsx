@@ -99,14 +99,13 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit }) {
   }, [recordEvent]);
 
   // Async submission path — split out so the rAF loop stays synchronous.
+  // Phase 4: the relay handles PoW + commit-reveal internally.
   const submitRun = useCallback(async (state: SimState) => {
     const finalScore = state.score;
     const frameCount = state.frame;
     if (finalScore <= 0) return; // anti-Sybil: must clear first obstacle
     const canonical = encodeInputs(inputsRef.current);
     const inputsHash = await hashInputs(canonical);
-    const payload = `${blockInfo.height}:${wallet.address}:${finalScore}:${inputsHash}`;
-    const sig = await signData(wallet.privateKey, payload);
     const entry = {
       block_height: blockInfo.height,
       block_seed: String(blockInfo.seed),
@@ -116,10 +115,16 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit }) {
       inputs: canonical,
       inputs_hash: inputsHash,
       engine_version: ENGINE_VERSION,
-      signature: sig,
+      // Legacy signature field — unused by the new commit-reveal path but
+      // kept on the local entry record so the UI can dedupe / display it.
+      signature: "",
       submitted_at: new Date().toISOString(),
     };
-    Relay.pushEntry({ ...entry, publicKey: wallet.publicKey });
+    Relay.pushEntry({
+      ...entry,
+      publicKey: wallet.publicKey,
+      privateKey: wallet.privateKey,
+    });
     onEntrySubmit(entry);
   }, [blockInfo, wallet, onEntrySubmit]);
 

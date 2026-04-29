@@ -118,12 +118,16 @@ Custodial keys can't live in a decentralized client, so this piece runs server-s
 
 ---
 
-## Status
+## Status — v1.0 (Live)
 
 - ✅ Standalone full node with deterministic consensus
-- ✅ Browser + desktop talk to nodes directly (no Supabase chain backend)
+- ✅ Browser + desktop talk to nodes directly (no centralized chain backend)
 - ✅ Multi-node failover, latency-based selection, user pinning
 - ✅ Node ↔ node gossip with depth-1 reorgs
-- ✅ Bridge isolated to a single Supabase exception
-- ⏳ Public node fleet bootstrap (placeholder URLs in `nodePool` until real ones are live)
-- ⏳ Alpha access gate — kept on Supabase for now, removed at launch
+- ✅ Public node fleet live (`node.blobchain.network`, `node-eu`, `node-us`)
+- ✅ Solana bridge (mint / redeem) live
+- ✅ Open access — no gate, anyone can mine, send, and bridge
+
+## License
+
+MIT

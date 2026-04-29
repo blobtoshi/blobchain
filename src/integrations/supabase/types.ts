@@ -14,54 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      access_codes: {
-        Row: {
-          code: string
-          created_at: string
-          note: string | null
-          used_at: string | null
-          used_by_fingerprint: string | null
-        }
-        Insert: {
-          code: string
-          created_at?: string
-          note?: string | null
-          used_at?: string | null
-          used_by_fingerprint?: string | null
-        }
-        Update: {
-          code?: string
-          created_at?: string
-          note?: string | null
-          used_at?: string | null
-          used_by_fingerprint?: string | null
-        }
-        Relationships: []
-      }
-      access_requests: {
-        Row: {
-          created_at: string
-          id: string
-          notes: string | null
-          status: string
-          x_username: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          notes?: string | null
-          status?: string
-          x_username: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          notes?: string | null
-          status?: string
-          x_username?: string
-        }
-        Relationships: []
-      }
       bridge_redeems: {
         Row: {
           amount: number

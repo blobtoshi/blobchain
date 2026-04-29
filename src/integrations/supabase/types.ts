@@ -63,6 +63,7 @@ export type Database = {
         Row: {
           amount: number
           blob_tx_id: string
+          confirmations: number
           confirmed_at: string | null
           created_at: string
           error: string | null
@@ -75,6 +76,7 @@ export type Database = {
         Insert: {
           amount: number
           blob_tx_id: string
+          confirmations?: number
           confirmed_at?: string | null
           created_at?: string
           error?: string | null
@@ -87,6 +89,7 @@ export type Database = {
         Update: {
           amount?: number
           blob_tx_id?: string
+          confirmations?: number
           confirmed_at?: string | null
           created_at?: string
           error?: string | null

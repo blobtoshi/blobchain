@@ -230,6 +230,8 @@ class NodePool {
     await Promise.all(urls.map((u) => this.probeOne(u)));
     this.emit({ type: "health-updated", health: this.getHealth() });
     this.recomputeActive();
+    // Reachability changed → reassess cross-node consensus too.
+    void this.runConsensus();
   }
 
   private async probeOne(url: string) {

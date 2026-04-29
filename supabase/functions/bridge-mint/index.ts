@@ -289,11 +289,15 @@ Deno.serve(async (req) => {
   // Recovery: rebuild a bridge_requests row from on-chain data alone.
   if (req.method === "POST" && url.pathname.endsWith("/recover")) {
     try {
-      const { blob_tx_id } = (await req.json()) ?? {};
+      const body = (await req.json()) ?? {};
+      const { blob_tx_id, node_url } = body;
       if (typeof blob_tx_id !== "string" || !TX_ID_RE.test(blob_tx_id)) {
         return bad("invalid blob_tx_id");
       }
-      const found = await findConfirmedBridgeTx(supa, blob_tx_id, null, null);
+      const nodeUrl = sanitizeNodeUrl(node_url);
+      if (!nodeUrl) return bad("invalid or missing node_url");
+
+      const found = await findConfirmedBridgeTx(nodeUrl, blob_tx_id, null, null);
       if (!found) return bad("tx not found in chain", 404);
 
       const memoSol = extractSolFromMemo(found.memo);
@@ -322,13 +326,12 @@ Deno.serve(async (req) => {
         }
         row = inserted;
       } else if (row.status === "failed" || row.status === "pending") {
-        // reset failed/pending to confirmed so processRequest can mint
         const { data: upd } = await supa.from("bridge_requests")
           .update({ status: "confirmed", confirmed_at: new Date().toISOString(), error: null })
           .eq("blob_tx_id", blob_tx_id).select().single();
         row = upd ?? row;
       }
-      const updated = await processRequest(supa, row);
+      const updated = await processRequest(supa, row, nodeUrl);
       return ok_(updated);
     } catch (e) {
       console.error("[bridge-mint/recover] error", e);
@@ -336,14 +339,15 @@ Deno.serve(async (req) => {
     }
   }
 
-  // GET ?blob_tx_id=... → status, attempt mint if ready
+  // GET ?blob_tx_id=...&node_url=... → status, attempt mint if ready
   if (req.method === "GET") {
     const txId = url.searchParams.get("blob_tx_id") ?? "";
     if (!TX_ID_RE.test(txId)) return bad("invalid blob_tx_id");
+    const nodeUrl = sanitizeNodeUrl(url.searchParams.get("node_url"));
     const { data: row } = await supa.from("bridge_requests")
       .select("*").eq("blob_tx_id", txId).maybeSingle();
     if (!row) return bad("not found", 404);
-    const updated = await processRequest(supa, row);
+    const updated = await processRequest(supa, row, nodeUrl);
     return ok_(updated);
   }
 
@@ -351,7 +355,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { blob_tx_id, sol_address, amount, from_address } = body ?? {};
+    const { blob_tx_id, sol_address, amount, from_address, node_url } = body ?? {};
 
     if (typeof blob_tx_id !== "string" || !TX_ID_RE.test(blob_tx_id))
       return bad("invalid blob_tx_id");
@@ -362,9 +366,11 @@ Deno.serve(async (req) => {
     const amt = Number(amount);
     if (!Number.isFinite(amt) || amt <= 0 || amt > 1_000_000)
       return bad("invalid amount");
+    const nodeUrl = sanitizeNodeUrl(node_url);
+    if (!nodeUrl) return bad("invalid or missing node_url");
 
-    const pending = await findPendingBridgeTx(supa, blob_tx_id, from_address, amt);
-    const confirmed = pending ? null : await findConfirmedBridgeTx(supa, blob_tx_id, from_address, amt);
+    const pending = await findPendingBridgeTx(nodeUrl, blob_tx_id, from_address, amt);
+    const confirmed = pending ? null : await findConfirmedBridgeTx(nodeUrl, blob_tx_id, from_address, amt);
     if (!pending && !confirmed) {
       return bad("matching BLOB transaction not found in mempool or chain");
     }
@@ -396,7 +402,7 @@ Deno.serve(async (req) => {
       row = inserted;
     }
 
-    const updated = await processRequest(supa, row);
+    const updated = await processRequest(supa, row, nodeUrl);
     return ok_(updated);
   } catch (e) {
     console.error("[bridge-mint] unexpected error", e);

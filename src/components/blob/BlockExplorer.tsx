@@ -108,7 +108,7 @@ function FilterPanel({ activeCount, onClear, defaultOpen = false, children }: { 
   );
 }
 
-export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
+export default function BlockExplorer({ chain, blockInfo, blockTime, mempool }: any) {
   const [tab, setTab] = useState<"overview" | "blocks" | "txs" | "mempool" | "addresses">("overview");
   const [query, setQuery] = useState("");
   const [selBlock, setSelBlock] = useState<number | null>(null);
@@ -421,7 +421,7 @@ export default function BlockExplorer({ chain, blockInfo, mempool }: any) {
           </div>
           <div className="glass-hi px-3 py-2.5 ring-1 ring-[hsl(var(--warning)/0.2)] grid grid-cols-[50px_1fr_60px_70px_40px] sm:grid-cols-[60px_1fr_80px_100px_50px] gap-2 items-center text-xs">
             <span className="num text-[hsl(var(--warning))]">#{blockInfo.height}</span>
-            <span className="text-muted-foreground">{blockInfo.awaitingMiner ? "⏸ awaiting miner" : `⏳ mining · ${blockInfo.remaining}s`}</span>
+            <span className="text-muted-foreground">{blockInfo.awaitingMiner ? "⏸ awaiting miner" : `⏳ mining · ${blockTime?.remaining ?? blockInfo.remaining ?? 0}s`}</span>
             <span className="text-muted-foreground">—</span>
             <span className="num text-[hsl(var(--warning))]">{blockInfo.reward} BLOB</span>
             <span className="num text-right text-muted-foreground">—</span>

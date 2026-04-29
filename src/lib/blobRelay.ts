@@ -331,7 +331,11 @@ export async function registerBridgeRequest(p: {
   amount: number;
   from_address: string;
 }): Promise<{ ok: boolean; error?: string; data?: BridgeRequest }> {
-  const { data, error } = await supabase.functions.invoke("bridge-mint", { body: p });
+  const node_url = getNodePool().getActive();
+  if (!node_url) return { ok: false, error: "no active node — connect to a node first" };
+  const { data, error } = await supabase.functions.invoke("bridge-mint", {
+    body: { ...p, node_url },
+  });
   if (error) return { ok: false, error: error.message };
   if ((data as any)?.error) return { ok: false, error: (data as any).error };
   return { ok: true, data: data as BridgeRequest };
@@ -339,7 +343,10 @@ export async function registerBridgeRequest(p: {
 
 export async function pollBridgeRequest(blob_tx_id: string): Promise<BridgeRequest | null> {
   try {
-    const url = `${(import.meta as any).env.VITE_SUPABASE_URL}/functions/v1/bridge-mint?blob_tx_id=${encodeURIComponent(blob_tx_id)}`;
+    const node_url = getNodePool().getActive();
+    const params = new URLSearchParams({ blob_tx_id });
+    if (node_url) params.set("node_url", node_url);
+    const url = `${(import.meta as any).env.VITE_SUPABASE_URL}/functions/v1/bridge-mint?${params.toString()}`;
     const res = await fetch(url, {
       headers: { apikey: (import.meta as any).env.VITE_SUPABASE_PUBLISHABLE_KEY },
     });

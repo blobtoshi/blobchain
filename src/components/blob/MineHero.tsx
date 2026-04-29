@@ -1,8 +1,10 @@
+import { memo } from "react";
 import { Play } from "lucide-react";
 
-export default function MineHero({ blockInfo, onLaunch }: any) {
-  const m = Math.floor(blockInfo.remaining / 60);
-  const s = blockInfo.remaining % 60;
+function MineHero({ blockInfo, blockTime, onLaunch }: any) {
+  const remaining = blockTime?.remaining ?? blockInfo.remaining ?? 0;
+  const m = Math.floor(remaining / 60);
+  const s = remaining % 60;
   const time = m > 0 ? `${m}m ${s}s` : `${s}s`;
   return (
     <div className="relative overflow-hidden rounded-3xl glass-pane px-6 py-12 sm:py-16 text-center">
@@ -40,3 +42,5 @@ export default function MineHero({ blockInfo, onLaunch }: any) {
     </div>
   );
 }
+
+export default memo(MineHero);

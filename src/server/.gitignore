@@ -1,9 +1,0 @@
-# Local SQLite + WAL files
-data/
-*.db
-*.db-shm
-*.db-wal
-
-node_modules/
-*.log
-.DS_Store

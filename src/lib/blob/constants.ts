@@ -36,10 +36,11 @@ export const FEE_BUCKETS = [1, 5, 10, 20, 50, 100];
 export const BRIDGE_FEE_BLOB = 0.0015;
 export const MEMO_PROGRAM_ID = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
 
-// Bridge keypair is pinned at GENESIS — verifiable by anyone, never editable.
-// The matching private key lives only in the BRIDGE_BLOB_PRIVATE_KEY secret on
-// node operators' servers. Edge functions self-check that their loaded private
-// key derives this exact address on every redeem call.
+// Bridge keypair address — pinned as a protocol constant, not part of the
+// genesis block itself. The matching private key lives only in the
+// BRIDGE_BLOB_PRIVATE_KEY secret on the bridge edge functions, which
+// self-check that their loaded private key derives this exact address on
+// every redeem call.
 export const BRIDGE_ADDRESS = "13yfvVYknMVa6xoKhVSrFHrshBBQv6rbvm";
 
 export const GENESIS = {
@@ -55,7 +56,6 @@ export const GENESIS = {
   hash: "412c22f77b50de1a3faec282597d49b58a04bb5161e6d414f9885ab09de24bc7",
   totalSupply: 0,
   nodeCount: 0,
-  bridgeAddress: BRIDGE_ADDRESS,
 };
 
 // Custom event used to navigate the explorer to a specific address from

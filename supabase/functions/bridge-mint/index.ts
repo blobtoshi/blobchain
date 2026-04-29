@@ -222,16 +222,18 @@ async function backgroundMint(
 }
 
 // Process a bridge request: confirm originating tx, then dispatch the mint as
-// a background task. Idempotent.
-async function processRequest(supa: Supa, row: any) {
+// a background task. Idempotent. If `nodeUrl` is null we skip the chain
+// re-check (used by GET poll when client didn't pass a node_url) — minting
+// still proceeds for rows already marked confirmed.
+async function processRequest(supa: Supa, row: any, nodeUrl: string | null) {
   if (row.status === "minted" || row.status === "failed" || row.status === "minting") return row;
 
-  const confirmed = await findConfirmedBridgeTx(
-    supa, row.blob_tx_id, row.from_address, Number(row.amount),
-  );
-  if (!confirmed) return row;
-
   if (row.status === "pending") {
+    if (!nodeUrl) return row; // need a node to confirm; caller will retry
+    const confirmed = await findConfirmedBridgeTx(
+      nodeUrl, row.blob_tx_id, row.from_address, Number(row.amount),
+    );
+    if (!confirmed) return row;
     await supa.from("bridge_requests").update({
       status: "confirmed",
       confirmed_at: new Date().toISOString(),
@@ -250,10 +252,6 @@ async function processRequest(supa: Supa, row: any) {
     return latest ?? row;
   }
 
-  // Mint inline (awaited) within the request scope. Dynamic imports cannot
-  // safely outlive the request in this runtime, and the mint itself is fast
-  // (~1-2s) so we just wait. The first call pays the SDK load cost (~1-2s);
-  // subsequent calls reuse the cached module.
   await backgroundMint(supa, row.blob_tx_id, row.sol_address, Number(row.amount));
   const { data: latest } = await supa.from("bridge_requests")
     .select("*").eq("blob_tx_id", row.blob_tx_id).maybeSingle();

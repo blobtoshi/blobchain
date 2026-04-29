@@ -48,6 +48,8 @@ export type ClientMsg =
   | { type: "ping"; t: number }
   | { type: "submitTx"; tx: SubmitTxPayload }
   | { type: "submitEntry"; entry: SubmitEntryPayload }
+  | { type: "submitEntryCommit"; commit: SubmitEntryCommitPayload }
+  | { type: "submitEntryReveal"; reveal: SubmitEntryRevealPayload }
   | { type: "getChainTip" }
   | { type: "getBlocks"; fromHeight: number; limit?: number }
   | { type: "getMempool" };
@@ -64,6 +66,9 @@ export type SubmitTxPayload = {
   timestamp: number;
 };
 
+// Legacy single-shot entry submission. Kept for client backwards compatibility
+// during the commit-reveal rollout — full nodes will stop accepting it once
+// all clients are upgraded.
 export type SubmitEntryPayload = {
   address: string;
   score: number;
@@ -74,6 +79,30 @@ export type SubmitEntryPayload = {
   inputs: string;
   inputs_hash: string;
   frame_count: number;
+  engine_version: number;
+};
+
+export type SubmitEntryCommitPayload = {
+  address: string;
+  block_height: number;
+  commit_hash: string;
+  pow_nonce: string;
+  publicKey: string;
+  signature: string;
+  engine_version: number;
+};
+
+export type SubmitEntryRevealPayload = {
+  address: string;
+  block_height: number;
+  block_seed: string;
+  score: number;
+  frame_count: number;
+  inputs: string;
+  inputs_hash: string;
+  salt: string;
+  publicKey: string;
+  signature: string;
   engine_version: number;
 };
 
@@ -97,4 +126,4 @@ export type ChainTip = {
   timestamp: number;
 };
 
-export const PROTOCOL_VERSION = "1.0.0";
+export const PROTOCOL_VERSION = "1.1.0";

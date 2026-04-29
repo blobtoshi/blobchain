@@ -1,0 +1,1 @@
+ALTER TABLE public.bridge_redeems ADD COLUMN IF NOT EXISTS confirmations integer;

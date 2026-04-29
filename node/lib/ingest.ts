@@ -2,30 +2,34 @@
 //   • txs and entries from local clients (wallets) over WS
 //   • txs, entries, AND full blocks from peer nodes over WS
 //
-// All three pathways funnel through these pure functions so the rules can't
-// drift between the client-handler code path and the peer-handler code path.
-//
-// `ingestBlock` is the new piece for Phase 3 — it validates a block produced
-// by a peer (or a competing local seal) and atomically applies it, including a
-// depth-1 reorg when both nodes sealed the same height ~simultaneously.
+// All pathways funnel through these pure functions so the rules can't drift
+// between the client-handler code path and the peer-handler code path.
 
 import type { DB } from "./db.js";
-import { rowToTx } from "./db.js";
+import { applyBalanceDelta } from "./db.js";
 import {
-  validateTx, validateEntry,
+  validateTx, validateEntryCommit, validateEntryReveal,
 } from "./validate.js";
 import {
   BLOCK_TIME_SECONDS, GENESIS_HASH, GENESIS_TIME_MS, MAX_BLOCK_SIZE, MAX_SUPPLY,
-  computeBlockHash, getRewardForHeight, pickWinner, seedForHeight, to8,
-  currentHeight,
+  computeBlockHash, getRewardForHeight, pickWinner, runtimeSeedForHeight, to8,
+  currentHeight, tieBreakKey,
+  BLOCK_FUTURE_TOLERANCE_MS, BLOCK_PAST_TOLERANCE_MS,
 } from "./consensus.js";
-import type { Block, Tx, SubmitTxPayload, SubmitEntryPayload } from "../wsProtocol.js";
+import type {
+  Block, Tx, SubmitTxPayload,
+  SubmitEntryCommitPayload, SubmitEntryRevealPayload,
+} from "../wsProtocol.js";
 
 export type IngestTxResult =
   | { ok: true; isNew: boolean; tx: Tx; bytes: number }
   | { ok: false; error: string };
 
-export type IngestEntryResult =
+export type IngestCommitResult =
+  | { ok: true; address: string; block_height: number }
+  | { ok: false; error: string };
+
+export type IngestRevealResult =
   | { ok: true; isNewBest: boolean; address: string; score: number; block_height: number; block_seed: string; signature: string }
   | { ok: false; error: string };
 
@@ -57,9 +61,29 @@ export function ingestTx(d: DB, payload: SubmitTxPayload): IngestTxResult {
   };
 }
 
-// ── ENTRY ───────────────────────────────────────────────────────────────
-export function ingestEntry(d: DB, payload: SubmitEntryPayload): IngestEntryResult {
-  const r = validateEntry(d, payload);
+// ── ENTRY COMMIT ────────────────────────────────────────────────────────
+export function ingestEntryCommit(d: DB, payload: SubmitEntryCommitPayload): IngestCommitResult {
+  const r = validateEntryCommit(d, payload);
+  if (!r.ok) return { ok: false, error: r.error };
+  const c = r.value;
+  d.stmts.insertCommit.run({
+    address: c.address,
+    block_height: c.block_height,
+    commit_hash: c.commit_hash,
+    pow_nonce: c.pow_nonce,
+    public_key: c.publicKey,
+    signature: c.signature,
+    received_at: Date.now(),
+  });
+  d.stmts.upsertAddress.run({
+    address: c.address, public_key: c.publicKey, last_active: Date.now(),
+  });
+  return { ok: true, address: c.address, block_height: c.block_height };
+}
+
+// ── ENTRY REVEAL ────────────────────────────────────────────────────────
+export function ingestEntryReveal(d: DB, payload: SubmitEntryRevealPayload): IngestRevealResult {
+  const r = validateEntryReveal(d, payload);
   if (!r.ok) return { ok: false, error: r.error };
   const e = r.value;
   const existing = d.stmts.getExistingEntry.get(e.address, e.block_height);
@@ -75,10 +99,9 @@ export function ingestEntry(d: DB, payload: SubmitEntryPayload): IngestEntryResu
     inputs_hash: isNewBest ? e.inputs_hash : null,
     frame_count: isNewBest ? e.frame_count : null,
   });
+  d.stmts.markCommitRevealed.run(e.address, e.block_height);
   d.stmts.upsertAddress.run({
-    address: e.address,
-    public_key: e.publicKey,
-    last_active: Date.now(),
+    address: e.address, public_key: e.publicKey, last_active: Date.now(),
   });
   return {
     ok: true,
@@ -96,7 +119,7 @@ export function ingestEntry(d: DB, payload: SubmitEntryPayload): IngestEntryResu
 // Two paths through this function:
 //   1. height = tip + 1 → straightforward append after full validation
 //   2. height = tip     → potential reorg vs. our just-sealed tip; keep the
-//                         block with the lexicographically smaller hash.
+//                         block whose deterministic tieBreakKey is smaller.
 //                         Anything deeper than 1 is rejected with
 //                         needsResync=true so the peer manager triggers a
 //                         range pull.
@@ -129,26 +152,29 @@ export function ingestBlock(d: DB, block: Block): IngestBlockResult {
 
   // Validate consensus invariants. Same checks the sealer applies before insert.
   const isReplace = block.height === tipHeight; // reorg candidate
+  const prevBlockRow = isReplace
+    ? d.stmts.getBlockByHeight.get(block.height - 1)
+    : null;
   const expectedPrev = isReplace
-    ? (d.stmts.getBlockByHeight.get(block.height - 1)?.previous_hash !== undefined
-        ? d.stmts.getBlockByHeight.get(block.height - 1)?.hash ?? GENESIS_HASH
-        : GENESIS_HASH)
+    ? (prevBlockRow?.hash ?? GENESIS_HASH)
     : tipHash;
   if (block.previousHash !== expectedPrev) {
     return { ok: false, error: "bad prev", needsResync: true };
   }
 
-  const expectedSeed = String(seedForHeight(block.height));
+  const expectedSeed = String(runtimeSeedForHeight(block.height, expectedPrev));
   if (block.seed !== expectedSeed) return { ok: false, error: "bad seed" };
 
   // Compare timestamp against the *prev* block of this candidate, not our tip.
   const prevTsForCandidate = isReplace
-    ? (d.stmts.getBlockByHeight.get(block.height - 1)?.timestamp ?? GENESIS_TIME_MS)
+    ? (prevBlockRow?.timestamp ?? GENESIS_TIME_MS)
     : tipTs;
-  if (block.timestamp < prevTsForCandidate + BLOCK_TIME_SECONDS * 1000) {
+  // Tightened: allow at most BLOCK_PAST_TOLERANCE_MS of clock drift below the
+  // canonical block-spacing minimum.
+  if (block.timestamp < prevTsForCandidate + BLOCK_TIME_SECONDS * 1000 - BLOCK_PAST_TOLERANCE_MS) {
     return { ok: false, error: "block too soon" };
   }
-  if (block.timestamp > Date.now() + 60_000) {
+  if (block.timestamp > Date.now() + BLOCK_FUTURE_TOLERANCE_MS) {
     return { ok: false, error: "block from the future" };
   }
 
@@ -185,7 +211,7 @@ export function ingestBlock(d: DB, block: Block): IngestBlockResult {
 
   const baseReward = getRewardForHeight(block.height);
   const prevSupply = isReplace
-    ? (d.stmts.getBlockByHeight.get(block.height - 1)?.total_supply ?? 0)
+    ? (prevBlockRow?.total_supply ?? 0)
     : (tip?.total_supply ?? 0);
   const remainingIssuance = Math.max(0, MAX_SUPPLY - prevSupply);
   const expectedCoinbase = expectedWinner ? Math.min(baseReward, remainingIssuance) : 0;
@@ -216,16 +242,23 @@ export function ingestBlock(d: DB, block: Block): IngestBlockResult {
     if (existingByHeight && existingByHeight.hash === block.hash) {
       return { ok: true, applied: "duplicate" };
     }
-    // Tie-break: lexicographically smaller hash wins.
-    if (existingByHeight && existingByHeight.hash <= block.hash) {
-      return { ok: false, error: "lost tie-break" };
+    // Deterministic, unforgeable tie-break: lower sha256(block||prev||seedHeight) wins.
+    if (existingByHeight) {
+      const incomingKey = tieBreakKey(block.hash, block.previousHash, block.height);
+      const haveKey = tieBreakKey(existingByHeight.hash, existingByHeight.previous_hash, existingByHeight.height);
+      if (haveKey <= incomingKey) return { ok: false, error: "lost tie-break" };
     }
     const apply = d.db.transaction(() => {
-      // Restore losing block's txs to the mempool.
+      // Restore losing block's txs to the mempool AND undo its balance effects.
       if (existingByHeight) {
+        if (existingByHeight.winner) {
+          applyBalanceDelta(d, existingByHeight.winner, -Number(existingByHeight.reward ?? 0));
+        }
         let oldTxs: Tx[] = [];
         try { oldTxs = JSON.parse(existingByHeight.transactions); } catch { /* ignore */ }
         for (const t of oldTxs) {
+          if (t.to)   applyBalanceDelta(d, t.to,   -Number(t.amount));
+          if (t.from) applyBalanceDelta(d, t.from,  Number(t.amount) + Number(t.fee ?? 0));
           d.stmts.insertTx.run({
             id: t.id, from_address: t.from, to_address: t.to,
             amount: t.amount, fee: t.fee, fee_rate: t.feeRate,
@@ -236,6 +269,7 @@ export function ingestBlock(d: DB, block: Block): IngestBlockResult {
         d.db.prepare(`DELETE FROM blocks WHERE height = ?`).run(block.height);
       }
       d.stmts.insertBlock.run(blockToRow(block));
+      applyBlockBalances(d, block);
       for (const t of block.transactions) d.stmts.deleteTxs.run(t.id);
     });
     apply();
@@ -245,10 +279,22 @@ export function ingestBlock(d: DB, block: Block): IngestBlockResult {
   // ── Append path ───────────────────────────────────────────────────────
   const apply = d.db.transaction(() => {
     d.stmts.insertBlock.run(blockToRow(block));
+    applyBlockBalances(d, block);
     for (const t of block.transactions) d.stmts.deleteTxs.run(t.id);
+    // Garbage-collect commits older than the new tip — they can no longer
+    // be revealed against. Keep one window of slack for late peers.
+    d.stmts.deleteOldCommits.run(block.height - 1);
   });
   apply();
   return { ok: true, applied: "appended" };
+}
+
+function applyBlockBalances(d: DB, block: Block) {
+  if (block.winner) applyBalanceDelta(d, block.winner, Number(block.reward ?? 0));
+  for (const t of block.transactions) {
+    if (t.to)   applyBalanceDelta(d, t.to,   Number(t.amount));
+    if (t.from) applyBalanceDelta(d, t.from, -(Number(t.amount) + Number(t.fee ?? 0)));
+  }
 }
 
 function blockToRow(block: Block) {

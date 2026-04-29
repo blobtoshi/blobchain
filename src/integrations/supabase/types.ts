@@ -20,6 +20,7 @@ export type Database = {
           blob_address: string
           blob_tx_id: string | null
           bridge_fee: number | null
+          confirmations: number | null
           created_at: string
           credit_amount: number | null
           credited_at: string | null
@@ -33,6 +34,7 @@ export type Database = {
           blob_address: string
           blob_tx_id?: string | null
           bridge_fee?: number | null
+          confirmations?: number | null
           created_at?: string
           credit_amount?: number | null
           credited_at?: string | null
@@ -46,6 +48,7 @@ export type Database = {
           blob_address?: string
           blob_tx_id?: string | null
           bridge_fee?: number | null
+          confirmations?: number | null
           created_at?: string
           credit_amount?: number | null
           credited_at?: string | null

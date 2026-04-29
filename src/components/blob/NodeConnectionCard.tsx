@@ -11,7 +11,7 @@ import {
 } from "@/lib/blobRelay";
 import { BUNDLED_NODES } from "@/lib/nodePool";
 import { BlobNodeClient } from "@/lib/blobNodeClient";
-import { Loader2, RefreshCw, Server, Plus, X, Check } from "lucide-react";
+import { Loader2, RefreshCw, Server, Plus, X, Check, ShieldAlert } from "lucide-react";
 
 const AUTO = "__auto__";
 
@@ -24,7 +24,7 @@ function latencyTone(ms: number | null): string {
 
 export default function NodeConnectionCard() {
   const [status, setStatus] = useState<RelayStatus>({
-    activeUrl: null, health: [], pinned: null, custom: [],
+    activeUrl: null, health: [], pinned: null, custom: [], consensus: null,
   });
   const [scanning, setScanning] = useState(false);
   const [draft, setDraft] = useState("");

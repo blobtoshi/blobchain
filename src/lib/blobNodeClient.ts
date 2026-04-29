@@ -12,6 +12,7 @@
 import type {
   Block, Tx, Entry, ChainTip, ServerMsg, ClientMsg,
   SubmitTxPayload, SubmitEntryPayload,
+  SubmitEntryCommitPayload, SubmitEntryRevealPayload,
 } from "@/lib/wsProtocol";
 
 export type FeeInfo = {
@@ -185,8 +186,18 @@ export class BlobNodeClient {
     return this.requestAck("submitTx", { type: "submitTx", tx }) as Promise<{ id: string; fee: number; bytes: number }>;
   }
 
+  // Legacy single-shot — kept so old peers don't break, but full nodes will
+  // reject it post-Phase-4. New code should use commit + reveal.
   submitEntry(entry: SubmitEntryPayload): Promise<{ score: number; verified: boolean }> {
     return this.requestAck("submitEntry", { type: "submitEntry", entry }) as Promise<{ score: number; verified: boolean }>;
+  }
+
+  submitEntryCommit(commit: SubmitEntryCommitPayload): Promise<{ address: string; block_height: number }> {
+    return this.requestAck("submitEntryCommit", { type: "submitEntryCommit", commit }) as Promise<{ address: string; block_height: number }>;
+  }
+
+  submitEntryReveal(reveal: SubmitEntryRevealPayload): Promise<{ score: number; verified: boolean }> {
+    return this.requestAck("submitEntryReveal", { type: "submitEntryReveal", reveal }) as Promise<{ score: number; verified: boolean }>;
   }
 
   // ── Internals ────────────────────────────────────────────────────────

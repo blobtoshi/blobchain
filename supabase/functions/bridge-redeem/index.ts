@@ -30,7 +30,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
-// MUST match GENESIS.bridgeAddress in src/lib/blob/constants.ts (pinned at genesis).
+// MUST match BRIDGE_ADDRESS in src/lib/blob/constants.ts.
 const BRIDGE_ADDRESS = "13yfvVYknMVa6xoKhVSrFHrshBBQv6rbvm";
 const BRIDGE_FEE_BLOB = 0.0015;
 const MEMO_PROGRAM_ID = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";

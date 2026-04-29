@@ -47,6 +47,7 @@ export type ClientMsg =
   | { type: "subscribe" }
   | { type: "ping"; t: number }
   | { type: "submitTx"; tx: SubmitTxPayload }
+  | { type: "submitEntry"; entry: SubmitEntryPayload }
   | { type: "submitEntryCommit"; commit: SubmitEntryCommitPayload }
   | { type: "submitEntryReveal"; reveal: SubmitEntryRevealPayload }
   | { type: "getChainTip" }
@@ -65,43 +66,43 @@ export type SubmitTxPayload = {
   timestamp: number;
 };
 
-/**
- * Phase 4: commit-reveal split.
- *
- * 1. Player finishes a run, computes inputs_hash, picks a random salt, and
- *    sends `submitEntryCommit` with `commit_hash = sha256(score|inputs_hash|salt)`
- *    plus a PoW nonce that satisfies ENTRY_POW_BITS.
- * 2. During the last ENTRY_REVEAL_WINDOW_SECONDS of the block window, the
- *    player sends `submitEntryReveal` with the actual score, inputs trace,
- *    salt, and a fresh signature. The node verifies that
- *    sha256(score|inputs_hash|salt) matches the stored commit_hash and that
- *    the deterministic replay produces the claimed score.
- *
- * Sealing only counts entries whose commit was received before the reveal
- * window opened — this kills "snipe-then-copy" attacks because by the time
- * an attacker sees a victim's inputs trace, no new commits are accepted.
- */
+// Legacy single-shot entry submission. Kept for client backwards compatibility
+// during the commit-reveal rollout — full nodes will stop accepting it once
+// all clients are upgraded.
+export type SubmitEntryPayload = {
+  address: string;
+  score: number;
+  block_height: number;
+  block_seed: string;
+  signature: string;
+  publicKey: string;
+  inputs: string;
+  inputs_hash: string;
+  frame_count: number;
+  engine_version: number;
+};
+
 export type SubmitEntryCommitPayload = {
   address: string;
   block_height: number;
-  commit_hash: string;       // sha256(score || inputs_hash || salt) — 64 hex
-  pow_nonce: string;         // bound to (block_height, address, commit_hash)
+  commit_hash: string;
+  pow_nonce: string;
   publicKey: string;
-  signature: string;         // signs `commit:${block_height}:${address}:${commit_hash}`
+  signature: string;
   engine_version: number;
 };
 
 export type SubmitEntryRevealPayload = {
   address: string;
   block_height: number;
-  block_seed: string;        // runtime seed for the height (must match prev hash)
+  block_seed: string;
   score: number;
   frame_count: number;
-  inputs: string;            // canonical "f:t,f:t,..." trace
-  inputs_hash: string;       // sha256(inputs) — must match the inputs_hash in the commit
-  salt: string;              // 32 hex chars (16 bytes)
+  inputs: string;
+  inputs_hash: string;
+  salt: string;
   publicKey: string;
-  signature: string;         // signs `reveal:${block_height}:${address}:${score}:${inputs_hash}:${salt}`
+  signature: string;
   engine_version: number;
 };
 

@@ -563,11 +563,11 @@ export default function BlobChainApp({ disableBridge = false }: { disableBridge?
                 </div>
               </div>
             ) : !gameLaunched ? (
-              <MineHero blockInfo={blockInfo} onLaunch={() => setGameLaunched(true)} />
+              <MineHero blockInfo={blockInfo} blockTime={blockTime} onLaunch={() => setGameLaunched(true)} />
             ) : (
-              <BlobRunGame wallet={wallet} blockInfo={blockInfo} onEntrySubmit={onEntrySubmit} />
+              <BlobRunGame wallet={wallet} blockInfo={blockInfo} blockTime={blockTime} onEntrySubmit={onEntrySubmit} />
             )}
-            <MiningPanel blockInfo={blockInfo} entries={entries} myEntry={myEntry} chain={chain} />
+            <MiningPanel blockInfo={blockInfo} blockTime={blockTime} entries={entries} myEntry={myEntry} chain={chain} />
           </div>
         )}
         {screen === "wallet" && (
@@ -580,8 +580,8 @@ export default function BlobChainApp({ disableBridge = false }: { disableBridge?
             ? <BridgeScreen wallet={wallet} chain={chain} mempool={mempool} onBroadcast={onTxBroadcast} />
             : <LockedGate />
         )}
-        {screen === "chain" && <BlockExplorer chain={chain} blockInfo={blockInfo} mempool={mempool} />}
-        {screen === "network" && <NetworkView nodeCount={nodeCount} chain={chain} blockInfo={blockInfo} mempool={mempool} />}
+        {screen === "chain" && <BlockExplorer chain={chain} blockInfo={blockInfo} blockTime={blockTime} mempool={mempool} />}
+        {screen === "network" && <NetworkView nodeCount={nodeCount} chain={chain} blockInfo={blockInfo} blockTime={blockTime} mempool={mempool} />}
       </main>
 
       {ConnectWalletDialog}

@@ -238,6 +238,7 @@ const httpServer = app.listen(PORT, () => {
   log("info", `full node listening on :${PORT}`, {
     dbPath: DB_PATH, nodeId: NODE_ID, peers: PEERS_RAW || "(none)",
   });
+  startUpdateChecker(log);
 });
 
 const wss = new WebSocketServer({ server: httpServer, path: "/ws" });

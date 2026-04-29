@@ -372,7 +372,7 @@ function trySealNextBlock(): boolean {
 
   const timestamp = Date.now();
   const winnerScore = Number(winner?.score ?? 0);
-  const seedStr = String(target);
+  const seedStr = String(seedNum);
   const hash = computeBlockHash({
     height: target, previousHash, timestamp,
     winner: winner?.address ?? null, winnerScore,

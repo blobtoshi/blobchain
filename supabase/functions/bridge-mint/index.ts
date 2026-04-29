@@ -239,23 +239,33 @@ async function backgroundMint(
 async function processRequest(supa: Supa, row: any, nodeUrl: string | null) {
   if (row.status === "minted" || row.status === "failed" || row.status === "minting") return row;
 
-  if (row.status === "pending") {
-    if (!nodeUrl) return row; // need a node to confirm; caller will retry
-    const confirmed = await findConfirmedBridgeTx(
+  // Re-check chain on every poll so the confirmation count keeps climbing
+  // until we reach REQUIRED_CONFIRMATIONS — that's what the UI displays.
+  if ((row.status === "pending" || row.status === "confirmed") && nodeUrl) {
+    const found = await findConfirmedBridgeTx(
       nodeUrl, row.blob_tx_id, row.from_address, Number(row.amount),
     );
-    if (!confirmed) return row;
-    await supa.from("bridge_requests").update({
-      status: "confirmed",
-      confirmed_at: new Date().toISOString(),
-    }).eq("blob_tx_id", row.blob_tx_id);
-    row.status = "confirmed";
+    if (!found) return row; // still in mempool / not yet sealed
+    const confs = found.confirmations;
+    const patch: Record<string, unknown> = { confirmations: confs };
+    if (row.status === "pending") {
+      patch.status = "confirmed";
+      patch.confirmed_at = new Date().toISOString();
+      row.status = "confirmed";
+    }
+    await supa.from("bridge_requests").update(patch).eq("blob_tx_id", row.blob_tx_id);
+    row.confirmations = confs;
+    if (confs < REQUIRED_CONFIRMATIONS) return row; // wait
   }
+
+  if (row.status !== "confirmed") return row;
+  if (Number(row.confirmations ?? 0) < REQUIRED_CONFIRMATIONS) return row;
 
   const { data: claimed } = await supa.from("bridge_requests")
     .update({ status: "minting" })
     .eq("blob_tx_id", row.blob_tx_id)
     .eq("status", "confirmed")
+    .gte("confirmations", REQUIRED_CONFIRMATIONS)
     .select().maybeSingle();
   if (!claimed) {
     const { data: latest } = await supa.from("bridge_requests")

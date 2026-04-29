@@ -40,7 +40,7 @@ export const MEMO_PROGRAM_ID = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
 // The matching private key lives only in the BRIDGE_BLOB_PRIVATE_KEY secret on
 // node operators' servers. Edge functions self-check that their loaded private
 // key derives this exact address on every redeem call.
-export const BRIDGE_ADDRESS = "1E4QWFYb5Pqj8iAV2be8Ee88yEbvhU9iTs";
+export const BRIDGE_ADDRESS = "13yfvVYknMVa6xoKhVSrFHrshBBQv6rbvm";
 export const BRIDGE_PUBLIC_KEY =
   "03f2d496af89a9349bbe4ee26cb7493600c9cb6a860d04b9e12259a94a9d1952fc";
 

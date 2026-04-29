@@ -4,7 +4,7 @@ A proof-of-gaming blockchain. Players run a side-scrolling game; the highest ver
 
 - **Live site:** https://blobchain.network
 - **Full node:** [`node/`](./node) — Node.js + SQLite, peer-to-peer over WebSocket
-- **Desktop wallet:** [`desktop-app/`](./desktop-app) — Electron, connects to any node
+- **Desktop App:** [`desktop-app/`](./desktop-app) — Electron, connects to any node
 - **Bridge (Solana ↔ BLOB):** Supabase Edge Functions, [`supabase/functions/bridge-*`](./supabase/functions)
 
 ---
@@ -13,7 +13,7 @@ A proof-of-gaming blockchain. Players run a side-scrolling game; the highest ver
 
 ```
 ┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
-│  Website (this) │      │  Desktop wallet │      │  Other clients  │
+│  Website (this) │      │  Desktop App    │      │  Other clients  │
 │  React + Vite   │      │  Electron       │      │                 │
 └────────┬────────┘      └────────┬────────┘      └────────┬────────┘
          │                        │                        │
@@ -32,7 +32,7 @@ A proof-of-gaming blockchain. Players run a side-scrolling game; the highest ver
         └──────────────────────────────────────────┘
 ```
 
-Everything chain-related — blocks, mempool, mining entries, address registry, fee info, real-time gossip — flows through the node pool. The only piece still using Supabase from the website is the Solana bridge, because minting / burning SPL tokens requires custodial keys.
+Everything chain-related — blocks, mempool, mining entries, address registry, fee info, real-time gossip — flows through the node pool. The only piece using Supabase from the website is the Solana bridge, because minting / burning SPL tokens requires custodial keys.
 
 ---
 
@@ -47,28 +47,6 @@ Everything chain-related — blocks, mempool, mining entries, address registry, 
 | `src/server/`           | Editor-only mirror of `node/` (read-only — see `src/server/EDITOR_ONLY.md`) |
 | `desktop-app/`          | Electron wallet that wraps the website code, bridge tab disabled            |
 | `supabase/functions/`   | Bridge edge functions only (`bridge-config`, `bridge-mint`, `bridge-execute-mint`, `bridge-redeem`) |
-
----
-
-## Run the website locally
-
-```bash
-npm install
-npm run dev
-```
-
-Open http://localhost:8080. By default the website connects to the bundled public node list and auto-selects the lowest-latency healthy node.
-
-### Point the website at your own node
-
-Open the **Network** tab in the app and add your node URL under "Node connection." Or set a default at build time:
-
-```bash
-# .env.local
-VITE_BLOB_NODE_URL=http://localhost:8080
-```
-
-If your node goes down, the website automatically fails over to the next healthy node in the pool. See [`node/README.md`](./node/README.md) for full details.
 
 ---
 
@@ -93,7 +71,7 @@ npm run dev:vite      # Vite dev server
 npm run dev:electron  # Electron in another terminal
 ```
 
-The desktop wallet stores its encrypted vault on disk and lets you manage multiple node URLs (auto / pinned). The bridge tab is intentionally hidden — bridging stays on the website.
+The desktop App stores its encrypted vault on disk and lets you manage multiple node URLs (auto / pinned). The bridge tab is intentionally hidden — bridging stays on the website.
 
 ---
 
@@ -105,7 +83,7 @@ Mint $BLOB on Solana from the BLOB chain, or redeem SPL $BLOB back to the chain.
 2. Edge function verifies the on-chain proof against the active node.
 3. Edge function uses the Solana mint authority key to mint or burn SPL tokens.
 
-Custodial keys can't live in a decentralized client, so this piece runs server-side. Required secrets are managed in Lovable Cloud.
+Custodial keys can't live in a decentralized client, so this piece runs server-side. Required secrets are managed in Supabase.
 
 ---
 
@@ -118,7 +96,7 @@ Custodial keys can't live in a decentralized client, so this piece runs server-s
 
 ---
 
-## Status — v1.0 (Live)
+## Status — v0.1.0 (Live)
 
 - ✅ Standalone full node with deterministic consensus
 - ✅ Browser + desktop talk to nodes directly (no centralized chain backend)
@@ -126,7 +104,7 @@ Custodial keys can't live in a decentralized client, so this piece runs server-s
 - ✅ Node ↔ node gossip with depth-1 reorgs
 - ✅ Public node fleet live (`node.blobchain.network`, `node-eu`, `node-us`)
 - ✅ Solana bridge (mint / redeem) live
-- ✅ Open access — no gate, anyone can mine, send, and bridge
+- 🚧 Android/iOS application
 
 ## License
 

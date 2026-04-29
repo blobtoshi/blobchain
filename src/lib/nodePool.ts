@@ -88,7 +88,10 @@ class NodePool {
   private active: string | null = null;
   private listeners = new Set<Listener>();
   private probeTimer: any = null;
+  private consensusTimer: any = null;
   private failureLog: number[] = []; // timestamps of recent active-node failures
+  private quarantine = new Set<string>(); // urls flagged by tip consensus
+  private lastConsensus: ConsensusSnapshot | null = null;
 
   constructor(storage?: StorageAdapter) {
     this.storage = storage ?? defaultStorage();
@@ -104,11 +107,26 @@ class NodePool {
     if (this.probeTimer) return;
     this.probeAll();
     this.probeTimer = setInterval(() => this.probeAll(), PROBE_INTERVAL_MS);
+    // Run an initial consensus check shortly after first probes complete,
+    // then on a steady cadence.
+    setTimeout(() => this.runConsensus(), 1500);
+    this.consensusTimer = setInterval(() => this.runConsensus(), CONSENSUS_INTERVAL_MS);
   }
 
   stop() {
     if (this.probeTimer) clearInterval(this.probeTimer);
+    if (this.consensusTimer) clearInterval(this.consensusTimer);
     this.probeTimer = null;
+    this.consensusTimer = null;
+  }
+
+  getConsensus(): ConsensusSnapshot | null { return this.lastConsensus; }
+
+  // Force a consensus round immediately (e.g., right after the user pins
+  // a brand-new custom node so they get instant feedback).
+  async refreshConsensus(): Promise<ConsensusSnapshot | null> {
+    await this.runConsensus();
+    return this.lastConsensus;
   }
 
   on(fn: Listener): () => void {

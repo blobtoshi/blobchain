@@ -15,11 +15,6 @@ services:
       NODE_ID: ${NODE_ID:-blob-node}
       DB_PATH: /data/blobchain.db
       PEERS: ${PEERS:-}
-      # Bridge configuration
-      SOLANA_RPC_URL: ${SOLANA_RPC_URL}
-      SOLANA_SPL_MINT_ADDRESS: ${SOLANA_SPL_MINT_ADDRESS}
-      SOLANA_MINT_AUTHORITY_SECRET_KEY: ${SOLANA_MINT_AUTHORITY_SECRET_KEY}
-      BRIDGE_BLOB_PRIVATE_KEY: ${BRIDGE_BLOB_PRIVATE_KEY}
     ports:
       - "8080:8080"
     volumes:

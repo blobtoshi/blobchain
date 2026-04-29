@@ -9,7 +9,7 @@ import {
 import blobCoin from "@/assets/blob-coin.png";
 import NodeConnectionCard from "@/components/blob/NodeConnectionCard";
 
-export default function NetworkView({ nodeCount, chain, blockInfo, mempool = [] }: any) {
+export default function NetworkView({ nodeCount, chain, blockInfo, blockTime, mempool = [] }: any) {
   const [feeInfo, setFeeInfo] = useState<{ recommendedFeeRate: number; minFeeRate: number; baseFeeRate: number } | null>(null);
   const [, setTick] = useState(0);
 
@@ -36,8 +36,9 @@ export default function NetworkView({ nodeCount, chain, blockInfo, mempool = [] 
   const nextHalvingDate = new Date(Date.now() + secondsToNextHalving * 1000);
   const nextReward = blockInfo.reward / 2;
 
-  const remaining = blockInfo.remaining;
-  const elapsedPct = Math.min(100, (blockInfo.elapsed / BLOCK_TIME) * 100);
+  const remaining = blockTime?.remaining ?? blockInfo.remaining ?? 0;
+  const elapsed = blockTime?.elapsed ?? blockInfo.elapsed ?? 0;
+  const elapsedPct = Math.min(100, (elapsed / BLOCK_TIME) * 100);
   const mm = String(Math.floor(remaining / 60)).padStart(2, "0");
   const ss = String(remaining % 60).padStart(2, "0");
 

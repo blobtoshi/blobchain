@@ -61,12 +61,38 @@ export function openDb(path: string) {
     );
     CREATE INDEX IF NOT EXISTS entries_height_idx ON entries(block_height);
 
+    -- Phase 4: commit-reveal for mining entries.
+    -- Commits are accepted during the early part of a block window. Reveals
+    -- arrive in the last ENTRY_REVEAL_WINDOW_SECONDS and must match a prior
+    -- commit. Sealing only counts entries whose commit was received before
+    -- the reveal window opened.
+    CREATE TABLE IF NOT EXISTS entry_commits (
+      address       TEXT NOT NULL,
+      block_height  INTEGER NOT NULL,
+      commit_hash   TEXT NOT NULL,
+      pow_nonce     TEXT NOT NULL,
+      public_key    TEXT NOT NULL,
+      signature     TEXT NOT NULL,
+      received_at   INTEGER NOT NULL,
+      revealed      INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (address, block_height)
+    );
+    CREATE INDEX IF NOT EXISTS entry_commits_height_idx ON entry_commits(block_height);
+
     CREATE TABLE IF NOT EXISTS addresses (
       address     TEXT PRIMARY KEY,
       public_key  TEXT,
       first_seen  INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000),
       last_active INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000)
     );
+
+    -- Materialized balance index. Updated atomically inside ingestBlock.
+    -- Avoids the O(n) full chain scan that calcBalance used to do per tx.
+    CREATE TABLE IF NOT EXISTS balances (
+      address TEXT PRIMARY KEY,
+      balance REAL NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS balances_balance_idx ON balances(balance DESC);
   `);
 
   // ── Prepared statements ───────────────────────────────────────────────
@@ -130,6 +156,23 @@ export function openDb(path: string) {
       `SELECT score FROM entries WHERE address = ? AND block_height = ?`,
     ),
 
+    // Commit-reveal statements.
+    insertCommit: db.prepare(`
+      INSERT OR IGNORE INTO entry_commits
+      (address, block_height, commit_hash, pow_nonce, public_key, signature, received_at)
+      VALUES
+      (@address, @block_height, @commit_hash, @pow_nonce, @public_key, @signature, @received_at)
+    `),
+    getCommit: db.prepare<[string, number], CommitRow>(
+      `SELECT * FROM entry_commits WHERE address = ? AND block_height = ?`,
+    ),
+    markCommitRevealed: db.prepare<[string, number]>(
+      `UPDATE entry_commits SET revealed = 1 WHERE address = ? AND block_height = ?`,
+    ),
+    deleteOldCommits: db.prepare<[number]>(
+      `DELETE FROM entry_commits WHERE block_height < ?`,
+    ),
+
     upsertAddress: db.prepare(`
       INSERT INTO addresses (address, public_key, last_active)
       VALUES (@address, @public_key, @last_active)
@@ -137,9 +180,67 @@ export function openDb(path: string) {
         public_key  = COALESCE(excluded.public_key, addresses.public_key),
         last_active = excluded.last_active
     `),
+
+    // Balance index statements.
+    getBalance: db.prepare<[string], { balance: number }>(
+      `SELECT balance FROM balances WHERE address = ?`,
+    ),
+    bumpBalance: db.prepare<[number, string]>(
+      `INSERT INTO balances (address, balance) VALUES (?, ?)
+       ON CONFLICT(address) DO UPDATE SET balance = balance + excluded.balance`.replace("?, ?", "?2, ?1"),
+    ),
+    countBalances: db.prepare<[], { c: number }>(
+      `SELECT COUNT(*) AS c FROM balances`,
+    ),
+    countBlocks: db.prepare<[], { c: number }>(
+      `SELECT COUNT(*) AS c FROM blocks`,
+    ),
   };
 
+  // The `bumpBalance` parameter-rewrite trick above is too clever; replace
+  // with a clean prepared statement that accepts (address, delta) by name.
+  const bumpBalance = db.prepare(`
+    INSERT INTO balances (address, balance) VALUES (@address, @delta)
+    ON CONFLICT(address) DO UPDATE SET balance = balances.balance + excluded.balance
+  `);
+  (stmts as any).bumpBalance = bumpBalance;
+
   return { db, stmts };
+}
+
+/** Apply a balance delta (positive = credit, negative = debit). */
+export function applyBalanceDelta(d: DB, address: string, delta: number) {
+  if (!address || delta === 0) return;
+  (d.stmts as any).bumpBalance.run({ address, delta });
+}
+
+/**
+ * Backfill the balances table from full chain history. Runs once on startup
+ * if the balances table is empty but blocks exist (fresh upgrade).
+ */
+export function seedBalancesFromChain(d: DB): number {
+  const have = d.stmts.countBalances.get();
+  if ((have?.c ?? 0) > 0) return 0;
+  const blocks = d.stmts.countBlocks.get();
+  if ((blocks?.c ?? 0) === 0) return 0;
+
+  const allBlocks = d.db.prepare<[], BlockRow>(
+    `SELECT * FROM blocks ORDER BY height ASC`,
+  ).all();
+
+  const txn = d.db.transaction(() => {
+    for (const b of allBlocks) {
+      if (b.winner) applyBalanceDelta(d, b.winner, Number(b.reward ?? 0));
+      let txs: Tx[] = [];
+      try { txs = JSON.parse(b.transactions); } catch { /* ignore */ }
+      for (const t of txs) {
+        if (t.to)   applyBalanceDelta(d, t.to,   Number(t.amount));
+        if (t.from) applyBalanceDelta(d, t.from, -(Number(t.amount) + Number(t.fee ?? 0)));
+      }
+    }
+  });
+  txn();
+  return allBlocks.length;
 }
 
 // ── Row types ────────────────────────────────────────────────────────────
@@ -181,6 +282,17 @@ type EntryRow = {
   inputs: string | null;
   inputs_hash: string | null;
   frame_count: number | null;
+};
+
+type CommitRow = {
+  address: string;
+  block_height: number;
+  commit_hash: string;
+  pow_nonce: string;
+  public_key: string;
+  signature: string;
+  received_at: number;
+  revealed: number;
 };
 
 // ── Row → wire converters ────────────────────────────────────────────────

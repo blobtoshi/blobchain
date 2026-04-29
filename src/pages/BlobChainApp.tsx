@@ -34,7 +34,7 @@ export default function BlobChainApp({ disableBridge = false }: { disableBridge?
 
   // ── Chain / mempool / entries (relay-backed) ──────────────────────────────
   const {
-    chain, mempool, entries, myEntry, blockInfo, newBlock,
+    chain, mempool, entries, myEntry, blockInfo, blockTime, newBlock,
     onEntrySubmit, onTxBroadcast,
   } = useBlockchain(walletRef);
 
@@ -434,7 +434,7 @@ export default function BlobChainApp({ disableBridge = false }: { disableBridge?
           <div className="flex items-center gap-2">
             <div className="hidden sm:flex flex-col items-center px-3 py-1 rounded-full border border-primary/30 bg-primary/5">
               <span className="text-[9px] tracking-widest text-primary/80 leading-none">NETWORK</span>
-              <span className="num text-[11px] text-primary leading-tight">{blockInfo.remaining}s</span>
+              <span className="num text-[11px] text-primary leading-tight">{blockTime.remaining}s</span>
             </div>
 
             {wallet && (

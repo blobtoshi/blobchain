@@ -134,7 +134,7 @@ export default function NetworkView({ nodeCount, chain, blockInfo, blockTime, me
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-[hsl(var(--warning))]" />
               </span>
               <div className="num text-xl font-semibold tabular-nums tracking-tight text-[hsl(var(--warning))]">
-                +{Math.floor(blockInfo.overtime / 60).toString().padStart(2, "0")}:{(blockInfo.overtime % 60).toString().padStart(2, "0")}
+                +{Math.floor((blockTime?.overtime ?? blockInfo.overtime ?? 0) / 60).toString().padStart(2, "0")}:{((blockTime?.overtime ?? blockInfo.overtime ?? 0) % 60).toString().padStart(2, "0")}
               </div>
             </div>
           ) : (
@@ -143,7 +143,7 @@ export default function NetworkView({ nodeCount, chain, blockInfo, blockTime, me
         </div>
         <Bar pct={blockInfo.awaitingMiner ? 100 : elapsedPct} tone={blockInfo.awaitingMiner ? "bg-[hsl(var(--warning))]" : "bg-primary"} />
         <div className="flex justify-between text-[11px] text-foreground/50 mt-1.5 num">
-          <span>{blockInfo.elapsed}s elapsed</span>
+          <span>{elapsed}s elapsed</span>
           <span>{blockInfo.awaitingMiner ? "needs ≥1 miner to seal" : `${remaining}s remaining`}</span>
         </div>
       </div>

@@ -9,7 +9,7 @@ import {
 import blobCoin from "@/assets/blob-coin.png";
 import NodeConnectionCard from "@/components/blob/NodeConnectionCard";
 
-export default function NetworkView({ nodeCount, chain, blockInfo, mempool = [] }: any) {
+export default function NetworkView({ nodeCount, chain, blockInfo, blockTime, mempool = [] }: any) {
   const [feeInfo, setFeeInfo] = useState<{ recommendedFeeRate: number; minFeeRate: number; baseFeeRate: number } | null>(null);
   const [, setTick] = useState(0);
 
@@ -36,8 +36,9 @@ export default function NetworkView({ nodeCount, chain, blockInfo, mempool = [] 
   const nextHalvingDate = new Date(Date.now() + secondsToNextHalving * 1000);
   const nextReward = blockInfo.reward / 2;
 
-  const remaining = blockInfo.remaining;
-  const elapsedPct = Math.min(100, (blockInfo.elapsed / BLOCK_TIME) * 100);
+  const remaining = blockTime?.remaining ?? blockInfo.remaining ?? 0;
+  const elapsed = blockTime?.elapsed ?? blockInfo.elapsed ?? 0;
+  const elapsedPct = Math.min(100, (elapsed / BLOCK_TIME) * 100);
   const mm = String(Math.floor(remaining / 60)).padStart(2, "0");
   const ss = String(remaining % 60).padStart(2, "0");
 
@@ -133,7 +134,7 @@ export default function NetworkView({ nodeCount, chain, blockInfo, mempool = [] 
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-[hsl(var(--warning))]" />
               </span>
               <div className="num text-xl font-semibold tabular-nums tracking-tight text-[hsl(var(--warning))]">
-                +{Math.floor(blockInfo.overtime / 60).toString().padStart(2, "0")}:{(blockInfo.overtime % 60).toString().padStart(2, "0")}
+                +{Math.floor((blockTime?.overtime ?? blockInfo.overtime ?? 0) / 60).toString().padStart(2, "0")}:{((blockTime?.overtime ?? blockInfo.overtime ?? 0) % 60).toString().padStart(2, "0")}
               </div>
             </div>
           ) : (
@@ -142,7 +143,7 @@ export default function NetworkView({ nodeCount, chain, blockInfo, mempool = [] 
         </div>
         <Bar pct={blockInfo.awaitingMiner ? 100 : elapsedPct} tone={blockInfo.awaitingMiner ? "bg-[hsl(var(--warning))]" : "bg-primary"} />
         <div className="flex justify-between text-[11px] text-foreground/50 mt-1.5 num">
-          <span>{blockInfo.elapsed}s elapsed</span>
+          <span>{elapsed}s elapsed</span>
           <span>{blockInfo.awaitingMiner ? "needs ≥1 miner to seal" : `${remaining}s remaining`}</span>
         </div>
       </div>

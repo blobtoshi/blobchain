@@ -1,12 +1,13 @@
 // Aggregates chain / mempool / entries state, real-time relay subscription,
 // and block-sealing logic. Returns everything Index needs to render.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Relay from "@/lib/blobRelay";
 import type { Block, Tx, Entry } from "@/lib/blobRelay";
 import { getBlockInfo } from "@/lib/blob/chain";
 import { GENESIS, BLOCK_TIME, GENESIS_TIME_MS } from "@/lib/blob/constants";
 
 export type BlockInfo = ReturnType<typeof getBlockInfo>;
+export type BlockTime = { remaining: number; elapsed: number; overtime: number };
 export type NewBlock = Block & { isMine: boolean };
 export type WalletLike = { address: string; [k: string]: unknown } | null;
 export type SubmittedEntry = Entry & {
@@ -22,15 +23,33 @@ export function useBlockchain(walletRef: React.MutableRefObject<WalletLike>) {
   const [mempool, setMempool] = useState<Tx[]>([]);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [myEntry, setMyEntry] = useState<Entry | null>(null);
-  const [blockInfo, setBlock] = useState<BlockInfo>(getBlockInfo());
+  const [rawInfo, setRawInfo] = useState<BlockInfo>(getBlockInfo());
   const [newBlock, setNewBlock] = useState<NewBlock | null>(null);
 
   // Tick block info every second.
   useEffect(() => {
-    setBlock(getBlockInfo(chain, entries.length > 0));
-    const iv = setInterval(() => setBlock(getBlockInfo(chain, entries.length > 0)), 1000);
+    setRawInfo(getBlockInfo(chain, entries.length > 0));
+    const iv = setInterval(() => setRawInfo(getBlockInfo(chain, entries.length > 0)), 1000);
     return () => clearInterval(iv);
   }, [chain, entries.length]);
+
+  // Split the per-second tick into two stable references:
+  //   • blockInfo: re-creates only when height / seed / reward / awaitingMiner /
+  //     overdue / prevHash change. Components that only care about block identity
+  //     (the running game canvas, the leaderboard, the explorer) skip re-renders
+  //     on the per-second countdown ticks.
+  //   • blockTime: a small object that *does* update every second. Components
+  //     that show the countdown subscribe to this one only.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const blockInfo = useMemo<BlockInfo>(() => rawInfo, [
+    rawInfo.height, rawInfo.seed, rawInfo.reward,
+    rawInfo.awaitingMiner, rawInfo.overdue, rawInfo.prevHash,
+  ]);
+  const blockTime = useMemo<BlockTime>(() => ({
+    remaining: rawInfo.remaining,
+    elapsed: rawInfo.elapsed,
+    overtime: rawInfo.overtime,
+  }), [rawInfo.remaining, rawInfo.elapsed, rawInfo.overtime]);
 
   // Refs to avoid stale closures inside async effects.
   const entriesRef = useRef(entries);
@@ -192,7 +211,7 @@ export function useBlockchain(walletRef: React.MutableRefObject<WalletLike>) {
   }, []);
 
   return {
-    chain, mempool, entries, myEntry, blockInfo, newBlock,
+    chain, mempool, entries, myEntry, blockInfo, blockTime, newBlock,
     onEntrySubmit, onTxBroadcast,
   };
 }

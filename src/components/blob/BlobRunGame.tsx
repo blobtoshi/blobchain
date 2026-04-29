@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, memo } from "react";
 import { Maximize2, Minimize2 } from "lucide-react";
 import * as Relay from "@/lib/blobRelay";
 import { signData } from "@/lib/blob/crypto";
@@ -20,7 +20,7 @@ type Trail = { x: number; y: number; action: string };
 const TRAIL_LEN = 4;          // was 8 — cuts ~4 per-frame drawImage calls
 const MAX_PARTICLES = 96;     // hard cap to bound worst-case allocations
 
-export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit }) {
+function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
   const cvs = useRef<HTMLCanvasElement | null>(null);
   const raf = useRef<number | null>(null);
   const stateRef = useRef<SimState | null>(null);
@@ -475,7 +475,7 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit }) {
             <div className="num text-4xl sm:text-6xl font-semibold leading-none drop-shadow-[0_0_24px_hsl(var(--primary)/0.4)] text-cyan-100">
               {gs.score.toLocaleString()}
             </div>
-            <div className="text-xs text-muted-foreground mb-6">Block closes in {blockInfo.remaining}s · Replay sealed for verification</div>
+            <div className="text-xs text-muted-foreground mb-6">Block closes in {blockTime?.remaining ?? blockInfo.remaining ?? 0}s · Replay sealed for verification</div>
             <button
               onClick={startRun}
               className="px-8 py-3 rounded-full bg-primary text-primary-foreground text-sm font-semibold tracking-wide hover:scale-[1.02] transition-transform shadow-[0_0_30px_hsl(var(--primary)/0.4)]"
@@ -493,3 +493,5 @@ export default function BlobRunGame({ wallet, blockInfo, onEntrySubmit }) {
     </div>
   );
 }
+
+export default memo(BlobRunGame);

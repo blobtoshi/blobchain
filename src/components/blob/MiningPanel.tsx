@@ -1,8 +1,9 @@
+import { memo } from "react";
 import { calcTotalSupply, winProbability } from "@/lib/blob/chain";
 import { MAX_SUPPLY } from "@/lib/blob/constants";
 import runnerArt from "@/assets/blob-coins-stack.png";
 
-export default function MiningPanel({ blockInfo, entries, myEntry, chain }: any) {
+function MiningPanel({ blockInfo, blockTime, entries, myEntry, chain }: any) {
   const sorted = [...entries].sort((a, b) => b.score - a.score);
   const total = entries.reduce((s: number, e: any) => s + e.score, 0);
   const supplyNow = calcTotalSupply(chain);
@@ -22,7 +23,7 @@ export default function MiningPanel({ blockInfo, entries, myEntry, chain }: any)
         <Stat label="Reward" value={`${blockInfo.reward} BLOB`} />
         <Stat
           label={blockInfo.awaitingMiner ? "Awaiting" : "Remaining"}
-          value={blockInfo.awaitingMiner ? "miner" : `${blockInfo.remaining}s`}
+          value={blockInfo.awaitingMiner ? "miner" : `${blockTime?.remaining ?? blockInfo.remaining ?? 0}s`}
           accent={blockInfo.awaitingMiner ? "text-[hsl(var(--warning))]" : "text-primary"}
         />
         <Stat label="Miners" value={entries.length} />
@@ -101,3 +102,5 @@ export default function MiningPanel({ blockInfo, entries, myEntry, chain }: any)
     </div>
   );
 }
+
+export default memo(MiningPanel);

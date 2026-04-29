@@ -34,7 +34,7 @@ export default function BlobChainApp({ disableBridge = false }: { disableBridge?
 
   // ── Chain / mempool / entries (relay-backed) ──────────────────────────────
   const {
-    chain, mempool, entries, myEntry, blockInfo, newBlock,
+    chain, mempool, entries, myEntry, blockInfo, blockTime, newBlock,
     onEntrySubmit, onTxBroadcast,
   } = useBlockchain(walletRef);
 
@@ -434,7 +434,7 @@ export default function BlobChainApp({ disableBridge = false }: { disableBridge?
           <div className="flex items-center gap-2">
             <div className="hidden sm:flex flex-col items-center px-3 py-1 rounded-full border border-primary/30 bg-primary/5">
               <span className="text-[9px] tracking-widest text-primary/80 leading-none">NETWORK</span>
-              <span className="num text-[11px] text-primary leading-tight">{blockInfo.remaining}s</span>
+              <span className="num text-[11px] text-primary leading-tight">{blockTime.remaining}s</span>
             </div>
 
             {wallet && (
@@ -563,11 +563,11 @@ export default function BlobChainApp({ disableBridge = false }: { disableBridge?
                 </div>
               </div>
             ) : !gameLaunched ? (
-              <MineHero blockInfo={blockInfo} onLaunch={() => setGameLaunched(true)} />
+              <MineHero blockInfo={blockInfo} blockTime={blockTime} onLaunch={() => setGameLaunched(true)} />
             ) : (
-              <BlobRunGame wallet={wallet} blockInfo={blockInfo} onEntrySubmit={onEntrySubmit} />
+              <BlobRunGame wallet={wallet} blockInfo={blockInfo} blockTime={blockTime} onEntrySubmit={onEntrySubmit} />
             )}
-            <MiningPanel blockInfo={blockInfo} entries={entries} myEntry={myEntry} chain={chain} />
+            <MiningPanel blockInfo={blockInfo} blockTime={blockTime} entries={entries} myEntry={myEntry} chain={chain} />
           </div>
         )}
         {screen === "wallet" && (
@@ -580,8 +580,8 @@ export default function BlobChainApp({ disableBridge = false }: { disableBridge?
             ? <BridgeScreen wallet={wallet} chain={chain} mempool={mempool} onBroadcast={onTxBroadcast} />
             : <LockedGate />
         )}
-        {screen === "chain" && <BlockExplorer chain={chain} blockInfo={blockInfo} mempool={mempool} />}
-        {screen === "network" && <NetworkView nodeCount={nodeCount} chain={chain} blockInfo={blockInfo} mempool={mempool} />}
+        {screen === "chain" && <BlockExplorer chain={chain} blockInfo={blockInfo} blockTime={blockTime} mempool={mempool} />}
+        {screen === "network" && <NetworkView nodeCount={nodeCount} chain={chain} blockInfo={blockInfo} blockTime={blockTime} mempool={mempool} />}
       </main>
 
       {ConnectWalletDialog}

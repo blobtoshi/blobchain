@@ -3,7 +3,6 @@
 // This node:
 //   • Serves HTTP REST + WebSocket /ws to wallets/desktop clients.
 //   • Peers with other full nodes (outbound WS dialer) for block/tx/entry gossip.
-//   • Does NOT run a Solana bridge — that lives on the website (custodial).
 //   • Seals blocks every 120s through the unified `ingest` chokepoint so the
 //     reorg + validation logic is shared with peer-supplied blocks.
 

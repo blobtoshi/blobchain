@@ -134,11 +134,24 @@ app.get("/blocks/:height/entries", (req, res) => {
   const h = Number(req.params.height);
   if (!Number.isFinite(h) || h < 0) { res.status(400).json({ error: "invalid height" }); return; }
   const row = d.stmts.getBlockByHeight.get(h);
-  if (!row) { res.status(404).json({ error: "not found" }); return; }
-  let entries: unknown = [];
-  try { entries = JSON.parse(row.mining_entries); } catch { /* keep [] */ }
-  res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-  res.json(entries);
+  if (row) {
+    // Block is sealed — return the entries baked into the block.
+    let entries: unknown = [];
+    try { entries = JSON.parse(row.mining_entries); } catch { /* keep [] */ }
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    res.json(entries);
+    return;
+  }
+  // Block not sealed yet — return live entries from the mempool table.
+  const live = d.stmts.getEntriesForHeight.all(h);
+  res.setHeader("Cache-Control", "no-store");
+  res.json(live.map((r) => ({
+    address: r.address,
+    score: r.score,
+    block_height: r.block_height,
+    block_seed: r.block_seed,
+    signature: r.signature,
+  })));
 });
 
 app.get("/entries", (req, res) => {

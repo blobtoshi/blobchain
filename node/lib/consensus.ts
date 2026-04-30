@@ -9,7 +9,7 @@ export const BLOCK_TIME_SECONDS = 120;
 export const INITIAL_REWARD = 10;
 export const HALVING_BLOCKS = 1_000_000;
 export const MAX_SUPPLY = 20_000_000;
-export const GENESIS_TIME_MS = 1_777_515_025_790;
+export const GENESIS_TIME_MS = 1_777_517_348_838;
 export const GENESIS_HASH =
   "412c22f77b50de1a3faec282597d49b58a04bb5161e6d414f9885ab09de24bc7";
 

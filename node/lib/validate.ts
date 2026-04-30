@@ -198,9 +198,18 @@ export function validateEntryCommit(
 
   // Reject commits arriving inside the reveal window — only reveals are
   // accepted there. This is what makes copy-then-snipe unprofitable.
+  //
+  // Overdue grace period: if the block's wall window has closed but no entry
+  // has landed yet, the chain has stalled (no winner to copy). We accept new
+  // commits indefinitely until the first entry lands — at which point the
+  // sealer immediately mints the block on its next 5s tick, closing the
+  // snipe window. Without this, missing one window stalls the chain forever.
   const windowClose = windowCloseMsForHeight(block_height);
   const revealOpens = windowClose - ENTRY_REVEAL_WINDOW_SECONDS * 1000;
-  if (Date.now() >= revealOpens) {
+  const blockOverdue = Date.now() >= windowClose;
+  const liveCount = d.stmts.getEntriesForHeight.all(block_height).length;
+  const inOverdueGrace = blockOverdue && liveCount === 0;
+  if (Date.now() >= revealOpens && !inOverdueGrace) {
     return err(`commit window closed (reveal phase began ${ENTRY_REVEAL_WINDOW_SECONDS}s before block close)`);
   }
 

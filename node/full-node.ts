@@ -371,7 +371,6 @@ function trySealNextBlock(): boolean {
 
   const previousHash = tip?.hash ?? GENESIS_HASH;
   const prevTs = tip?.timestamp ?? GENESIS_TIME_MS;
-  const prevTsClamped = Math.min(prevTs, Date.now());
   const elapsedMs = Date.now() - prevTs;
   if (target > 1 && elapsedMs < BLOCK_TIME_SECONDS * 1000) return false;
 

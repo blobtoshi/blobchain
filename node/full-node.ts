@@ -372,8 +372,8 @@ function trySealNextBlock(): boolean {
 
   const previousHash = tip?.hash ?? GENESIS_HASH;
   const prevTsClamped = Math.min(prevTs, Date.now());
-  const elapsedMs = Date.now() - prevTsClamped;
-  if (elapsedMs < BLOCK_TIME_SECONDS * 1000) return false;
+  const elapsedMs = Date.now() - prevTs;
+  if (target > 1 && elapsedMs < BLOCK_TIME_SECONDS * 1000) return false;
 
   const entries = d.stmts.getEntriesForHeight.all(target).map((r) => ({
     address: r.address, score: r.score, signature: r.signature,

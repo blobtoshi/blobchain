@@ -198,9 +198,18 @@ export function validateEntryCommit(
 
   // Reject commits arriving inside the reveal window — only reveals are
   // accepted there. This is what makes copy-then-snipe unprofitable.
+  //
+  // Overdue grace period: if the block's wall window has closed but no entry
+  // has landed yet, the chain has stalled (no winner to copy). We accept new
+  // commits indefinitely until the first entry lands — at which point the
+  // sealer immediately mints the block on its next 5s tick, closing the
+  // snipe window. Without this, missing one window stalls the chain forever.
   const windowClose = windowCloseMsForHeight(block_height);
   const revealOpens = windowClose - ENTRY_REVEAL_WINDOW_SECONDS * 1000;
-  if (Date.now() >= revealOpens) {
+  const blockOverdue = Date.now() >= windowClose;
+  const liveCount = d.stmts.getEntriesForHeight.all(block_height).length;
+  const inOverdueGrace = blockOverdue && liveCount === 0;
+  if (Date.now() >= revealOpens && !inOverdueGrace) {
     return err(`commit window closed (reveal phase began ${ENTRY_REVEAL_WINDOW_SECONDS}s before block close)`);
   }
 
@@ -268,11 +277,20 @@ export function validateEntryReveal(
   if (block_seed !== expSeed) return err("block_seed does not match runtime seed for this height");
 
   // Must have a matching commit, sent before the reveal window opened.
+  // Overdue grace: if the block has stalled with no entries, the commit may
+  // have been accepted after the normal reveal-window cutoff (see commit
+  // validation). In that case there's no rival reveal to copy from, so the
+  // late-commit check is skipped.
   const commit = d.stmts.getCommit.get(address, block_height);
   if (!commit) return err("no prior commit for this (address, height)");
   const windowClose = windowCloseMsForHeight(block_height);
   const revealOpens = windowClose - ENTRY_REVEAL_WINDOW_SECONDS * 1000;
-  if (commit.received_at >= revealOpens) return err("commit was received too late to reveal");
+  const blockOverdue = Date.now() >= windowClose;
+  const liveCount = d.stmts.getEntriesForHeight.all(block_height).length;
+  const inOverdueGrace = blockOverdue && liveCount === 0;
+  if (commit.received_at >= revealOpens && !inOverdueGrace) {
+    return err("commit was received too late to reveal");
+  }
 
   // Commit must bind exactly this (score, inputs_hash, salt).
   const expectedCommit = sha256hex(`${Math.floor(sc)}|${inputs_hash}|${salt}`);

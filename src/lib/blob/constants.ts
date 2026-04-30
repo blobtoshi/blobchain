@@ -12,7 +12,7 @@ export const BASE_FEE_RATE = 10;
 export const MIN_FEE_RATE = 1;
 export const MAX_MEMO_BYTES = 80;
 
-export const GENESIS_TIME_MS = 1777510067179;
+export const GENESIS_TIME_MS = 1777511786156;
 
 // Canvas dimensions / physics for Blob Run.
 export const CW = 780;

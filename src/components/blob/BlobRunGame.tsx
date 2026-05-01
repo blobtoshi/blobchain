@@ -21,6 +21,11 @@ const TRAIL_LEN = 4;          // was 8 — cuts ~4 per-frame drawImage calls
 const MAX_PARTICLES = 96;     // hard cap to bound worst-case allocations
 
 function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
+  // Mirror blockTime into a ref so the canvas/death overlay can read the
+  // freshest countdown value without forcing a React re-render every second.
+  // The component itself only re-renders when blockInfo identity changes.
+  const blockTimeRef = useRef(blockTime);
+  blockTimeRef.current = blockTime;
   const cvs = useRef<HTMLCanvasElement | null>(null);
   const raf = useRef<number | null>(null);
   const stateRef = useRef<SimState | null>(null);
@@ -475,7 +480,7 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
             <div className="num text-4xl sm:text-6xl font-semibold leading-none drop-shadow-[0_0_24px_hsl(var(--primary)/0.4)] text-cyan-100">
               {gs.score.toLocaleString()}
             </div>
-            <div className="text-xs text-muted-foreground mb-6">Block closes in {blockTime?.remaining ?? blockInfo.remaining ?? 0}s · Replay sealed for verification</div>
+            <div className="text-xs text-muted-foreground mb-6">Block closes in {blockTimeRef.current?.remaining ?? blockInfo.remaining ?? 0}s · Replay sealed for verification</div>
             <button
               onClick={startRun}
               className="px-8 py-3 rounded-full bg-primary text-primary-foreground text-sm font-semibold tracking-wide hover:scale-[1.02] transition-transform shadow-[0_0_30px_hsl(var(--primary)/0.4)]"

@@ -499,4 +499,12 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
   );
 }
 
-export default memo(BlobRunGame);
+// Custom equality: ignore blockTime prop changes (the per-second countdown).
+// The canvas drives itself via rAF, the dead overlay reads blockTime through
+// a ref, and React shouldn't reconcile this subtree once a second just to
+// update a value the running game doesn't display.
+export default memo(BlobRunGame, (prev, next) =>
+  prev.wallet === next.wallet &&
+  prev.blockInfo === next.blockInfo &&
+  prev.onEntrySubmit === next.onEntrySubmit
+);

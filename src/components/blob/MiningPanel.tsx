@@ -70,27 +70,45 @@ function MiningPanel({ blockInfo, blockTime, entries, myEntry, chain }: any) {
             <div className="label-eyebrow mb-3 px-1">Current block entries</div>
             <div className="space-y-1.5">
               {sorted.map((e: any, i: number) => {
-                const pct = total > 0 ? +((e.score / total) * 100).toFixed(1) : 0;
+                const isPending = !!e.pending;
+                const pct = !isPending && total > 0 ? +((e.score / total) * 100).toFixed(1) : 0;
                 const isMe = e.address === myEntry?.address;
                 return (
                   <div
                     key={e.address + i}
-                    className={`glass px-4 py-3 flex items-center gap-3 ${isMe ? "ring-1 ring-primary/40" : ""}`}
+                    className={`glass px-4 py-3 flex items-center gap-3 ${isMe ? "ring-1 ring-primary/40" : ""} ${isPending ? "opacity-70" : ""}`}
                   >
                     <span className="w-6 text-sm">
-                      {i === 0 ? "👑" : i === 1 ? "🥈" : i === 2 ? "🥉" : <span className="text-muted-foreground">{i + 1}</span>}
+                      {isPending ? (
+                        <span className="text-muted-foreground">·</span>
+                      ) : i === 0 ? "👑" : i === 1 ? "🥈" : i === 2 ? "🥉" : (
+                        <span className="text-muted-foreground">{i + 1}</span>
+                      )}
                     </span>
                     <span className={`flex-1 text-sm truncate ${isMe ? "text-primary" : "text-foreground/80"}`}>
                       {e.address?.slice(0, 14)}
                     </span>
-                    <span className="num text-sm font-medium">{e.score.toLocaleString()}</span>
-                    <div className="w-24 h-1 rounded-full bg-secondary overflow-hidden">
-                      <div
-                        className={`h-full ${isMe ? "bg-primary" : i === 0 ? "bg-[hsl(var(--warning))]" : "bg-muted-foreground"}`}
-                        style={{ width: `${Math.min(pct, 100)}%` }}
-                      />
-                    </div>
-                    <span className="num text-xs w-12 text-right text-muted-foreground">{pct}%</span>
+                    {isPending ? (
+                      <>
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground px-2 py-0.5 rounded-full border border-border/60">
+                          Committed
+                        </span>
+                        <span className="num text-sm font-medium text-muted-foreground">— — —</span>
+                        <div className="w-24 h-1 rounded-full bg-secondary overflow-hidden" />
+                        <span className="num text-xs w-12 text-right text-muted-foreground">—</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="num text-sm font-medium">{e.score.toLocaleString()}</span>
+                        <div className="w-24 h-1 rounded-full bg-secondary overflow-hidden">
+                          <div
+                            className={`h-full ${isMe ? "bg-primary" : i === 0 ? "bg-[hsl(var(--warning))]" : "bg-muted-foreground"}`}
+                            style={{ width: `${Math.min(pct, 100)}%` }}
+                          />
+                        </div>
+                        <span className="num text-xs w-12 text-right text-muted-foreground">{pct}%</span>
+                      </>
+                    )}
                   </div>
                 );
               })}

@@ -4,8 +4,12 @@ import { MAX_SUPPLY } from "@/lib/blob/constants";
 import runnerArt from "@/assets/blob-coins-stack.png";
 
 function MiningPanel({ blockInfo, blockTime, entries, myEntry, chain }: any) {
-  const sorted = [...entries].sort((a, b) => b.score - a.score);
-  const total = entries.reduce((s: number, e: any) => s + e.score, 0);
+  // Revealed entries sort by score desc; pending (commit-only) entries are
+  // shown after revealed ones with their score hidden until they reveal.
+  const revealed = entries.filter((e: any) => !e.pending).sort((a: any, b: any) => b.score - a.score);
+  const pending = entries.filter((e: any) => e.pending);
+  const sorted = [...revealed, ...pending];
+  const total = revealed.reduce((s: number, e: any) => s + e.score, 0);
   const supplyNow = calcTotalSupply(chain);
   const supplyPct = Math.min((supplyNow / MAX_SUPPLY) * 100, 100);
 

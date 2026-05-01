@@ -193,7 +193,7 @@ export function useBlockchain(walletRef: React.MutableRefObject<WalletLike>) {
     const prevTs = tip ? Number(tip.timestamp) : GENESIS_TIME_MS;
     const elapsedMs = Date.now() - prevTs;
     if (elapsedMs < BLOCK_TIME * 1000) return;
-    if (entriesRef.current.length === 0) return;
+    if (entriesRef.current.every((e) => e.pending)) return;
     const targetHeight = prevHeight + 1;
     if (chainRef.current.find(b => b.height === targetHeight)) return;
 

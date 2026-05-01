@@ -184,6 +184,50 @@ export function useBlockchain(walletRef: React.MutableRefObject<WalletLike>) {
     })();
   }, [blockInfo.height, blockInfo.seed]);
 
+  // Lightweight poll while the active block is open so newly-arrived commits
+  // (which don't broadcast a realtime onEntry until reveal) surface in the UI.
+  // Merges server pending rows in without clobbering already-revealed entries.
+  useEffect(() => {
+    const expectedSeed = String(blockInfo.seed);
+    const activeH = blockInfo.height;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const e = await Relay.fetchEntries(activeH);
+        if (cancelled) return;
+        const filtered = e.filter((en) =>
+          en.block_seed == null || String(en.block_seed) === expectedSeed
+        );
+        setEntries((prev) => {
+          // Preserve revealed rows already in state; upgrade pending → revealed
+          // when the server has the reveal.
+          const byAddr = new Map(prev.map((x) => [x.address, x]));
+          for (const en of filtered) {
+            const existing = byAddr.get(en.address);
+            if (!existing) {
+              byAddr.set(en.address, en);
+            } else if (existing.pending && !en.pending) {
+              byAddr.set(en.address, en);
+            }
+          }
+          // Drop locally-known rows the server has dropped (e.g. forked).
+          const serverAddrs = new Set(filtered.map((x) => x.address));
+          const merged = Array.from(byAddr.values()).filter(
+            (x) => serverAddrs.has(x.address) || !x.pending,
+          );
+          // Avoid setState if nothing actually changed.
+          if (merged.length === prev.length &&
+              merged.every((x, i) => x === prev[i])) {
+            return prev;
+          }
+          return merged;
+        });
+      } catch { /* ignore transient errors */ }
+    };
+    const iv = setInterval(poll, 5000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [blockInfo.height, blockInfo.seed]);
+
   // Block sealing — both reactive and 10s safety net.
   const sealingRef = useRef(false);
   const attemptSeal = useCallback(async () => {

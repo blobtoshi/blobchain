@@ -141,16 +141,32 @@ app.get("/blocks/:height/entries", (req, res) => {
     res.json(entries);
     return;
   }
-  // Block not sealed yet — return live entries from the mempool table.
+  // Block not sealed yet — return live entries from the mempool table,
+  // plus pending commits (revealed=0) shown with score=null so the UI can
+  // surface that miners have committed without leaking their scores.
   const live = d.stmts.getEntriesForHeight.all(h);
+  const revealed = new Set(live.map((r) => r.address));
+  const commits = d.stmts.getCommitsForHeight.all(h)
+    .filter((c) => !revealed.has(c.address));
   res.setHeader("Cache-Control", "no-store");
-  res.json(live.map((r) => ({
-    address: r.address,
-    score: r.score,
-    block_height: r.block_height,
-    block_seed: r.block_seed,
-    signature: r.signature,
-  })));
+  res.json([
+    ...live.map((r) => ({
+      address: r.address,
+      score: r.score,
+      block_height: r.block_height,
+      block_seed: r.block_seed,
+      signature: r.signature,
+      pending: false,
+    })),
+    ...commits.map((c) => ({
+      address: c.address,
+      score: null,
+      block_height: c.block_height,
+      block_seed: null,
+      signature: c.signature,
+      pending: true,
+    })),
+  ]);
 });
 
 app.get("/entries", (req, res) => {

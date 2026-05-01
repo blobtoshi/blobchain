@@ -51,12 +51,15 @@ export type Entry = {
   address: string;
   score: number;
   block_height: number;
-  block_seed?: string;
+  block_seed?: string | null;
   signature: string;
   inputs?: string;
   inputs_hash?: string;
   frame_count?: number;
   engine_version?: number;
+  // True when the miner has only submitted a commit and not yet revealed
+  // their score. UI shows the address but hides the score.
+  pending?: boolean;
 };
 
 // ── Active-node management ──────────────────────────────────────────────

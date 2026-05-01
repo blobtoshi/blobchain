@@ -32,9 +32,12 @@ export function useBlockchain(walletRef: React.MutableRefObject<WalletLike>) {
   // identical (e.g. immediately after a block seal). Each unnecessary render
   // walks calcBalance over the entire chain+mempool, which produces visible
   // GC stutter in the running game.
+  // Pending commits don't count toward "block has entries" — only revealed
+  // entries (score != null) trigger sealing or close the awaiting-miner state.
+  const revealedCount = entries.reduce((n, e) => n + (e.pending ? 0 : 1), 0);
   useEffect(() => {
     const update = () => {
-      const next = getBlockInfo(chain, entries.length > 0);
+      const next = getBlockInfo(chain, revealedCount > 0);
       setRawInfo((prev) => {
         if (
           prev.height === next.height &&
@@ -55,7 +58,7 @@ export function useBlockchain(walletRef: React.MutableRefObject<WalletLike>) {
     update();
     const iv = setInterval(update, 1000);
     return () => clearInterval(iv);
-  }, [chain, entries.length]);
+  }, [chain, revealedCount]);
 
   // Split the per-second tick into two stable references:
   //   • blockInfo: re-creates only when height / seed / reward / awaitingMiner /
@@ -181,6 +184,50 @@ export function useBlockchain(walletRef: React.MutableRefObject<WalletLike>) {
     })();
   }, [blockInfo.height, blockInfo.seed]);
 
+  // Lightweight poll while the active block is open so newly-arrived commits
+  // (which don't broadcast a realtime onEntry until reveal) surface in the UI.
+  // Merges server pending rows in without clobbering already-revealed entries.
+  useEffect(() => {
+    const expectedSeed = String(blockInfo.seed);
+    const activeH = blockInfo.height;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const e = await Relay.fetchEntries(activeH);
+        if (cancelled) return;
+        const filtered = e.filter((en) =>
+          en.block_seed == null || String(en.block_seed) === expectedSeed
+        );
+        setEntries((prev) => {
+          // Preserve revealed rows already in state; upgrade pending → revealed
+          // when the server has the reveal.
+          const byAddr = new Map(prev.map((x) => [x.address, x]));
+          for (const en of filtered) {
+            const existing = byAddr.get(en.address);
+            if (!existing) {
+              byAddr.set(en.address, en);
+            } else if (existing.pending && !en.pending) {
+              byAddr.set(en.address, en);
+            }
+          }
+          // Drop locally-known rows the server has dropped (e.g. forked).
+          const serverAddrs = new Set(filtered.map((x) => x.address));
+          const merged = Array.from(byAddr.values()).filter(
+            (x) => serverAddrs.has(x.address) || !x.pending,
+          );
+          // Avoid setState if nothing actually changed.
+          if (merged.length === prev.length &&
+              merged.every((x, i) => x === prev[i])) {
+            return prev;
+          }
+          return merged;
+        });
+      } catch { /* ignore transient errors */ }
+    };
+    const iv = setInterval(poll, 5000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [blockInfo.height, blockInfo.seed]);
+
   // Block sealing — both reactive and 10s safety net.
   const sealingRef = useRef(false);
   const attemptSeal = useCallback(async () => {
@@ -190,7 +237,7 @@ export function useBlockchain(walletRef: React.MutableRefObject<WalletLike>) {
     const prevTs = tip ? Number(tip.timestamp) : GENESIS_TIME_MS;
     const elapsedMs = Date.now() - prevTs;
     if (elapsedMs < BLOCK_TIME * 1000) return;
-    if (entriesRef.current.length === 0) return;
+    if (entriesRef.current.every((e) => e.pending)) return;
     const targetHeight = prevHeight + 1;
     if (chainRef.current.find(b => b.height === targetHeight)) return;
 
@@ -205,14 +252,14 @@ export function useBlockchain(walletRef: React.MutableRefObject<WalletLike>) {
   }, []);
 
   useEffect(() => {
-    if (blockInfo.overdue && entries.length > 0) attemptSeal();
+    if (blockInfo.overdue && revealedCount > 0) attemptSeal();
     const iv = setInterval(attemptSeal, 10_000);
     return () => clearInterval(iv);
-  }, [blockInfo.overdue, blockInfo.height, entries.length, attemptSeal]);
+  }, [blockInfo.overdue, blockInfo.height, revealedCount, attemptSeal]);
 
   useEffect(() => {
-    if (entries.length > 0) attemptSeal();
-  }, [entries.length, attemptSeal]);
+    if (revealedCount > 0) attemptSeal();
+  }, [revealedCount, attemptSeal]);
 
   const onEntrySubmit = useCallback((entry: SubmittedEntry) => {
     const current = blockInfoRef.current;

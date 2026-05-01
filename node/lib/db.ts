@@ -166,6 +166,9 @@ export function openDb(path: string) {
     getCommit: db.prepare<[string, number], CommitRow>(
       `SELECT * FROM entry_commits WHERE address = ? AND block_height = ?`,
     ),
+    getCommitsForHeight: db.prepare<[number], CommitRow>(
+      `SELECT * FROM entry_commits WHERE block_height = ?`,
+    ),
     markCommitRevealed: db.prepare<[string, number]>(
       `UPDATE entry_commits SET revealed = 1 WHERE address = ? AND block_height = ?`,
     ),

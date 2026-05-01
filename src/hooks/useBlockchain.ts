@@ -208,14 +208,14 @@ export function useBlockchain(walletRef: React.MutableRefObject<WalletLike>) {
   }, []);
 
   useEffect(() => {
-    if (blockInfo.overdue && entries.length > 0) attemptSeal();
+    if (blockInfo.overdue && revealedCount > 0) attemptSeal();
     const iv = setInterval(attemptSeal, 10_000);
     return () => clearInterval(iv);
-  }, [blockInfo.overdue, blockInfo.height, entries.length, attemptSeal]);
+  }, [blockInfo.overdue, blockInfo.height, revealedCount, attemptSeal]);
 
   useEffect(() => {
-    if (entries.length > 0) attemptSeal();
-  }, [entries.length, attemptSeal]);
+    if (revealedCount > 0) attemptSeal();
+  }, [revealedCount, attemptSeal]);
 
   const onEntrySubmit = useCallback((entry: SubmittedEntry) => {
     const current = blockInfoRef.current;

@@ -115,7 +115,7 @@ function MiningPanel({ blockInfo, blockTime, entries, myEntry, chain }: any) {
             </div>
             {myEntry && (
               <div className="mt-3 text-xs text-center text-muted-foreground">
-                Your win probability: <span className="text-primary num">{winProbability(myEntry.score, entries)}%</span>
+                Your win probability: <span className="text-primary num">{winProbability(myEntry.score, revealed)}%</span>
               </div>
             )}
           </>

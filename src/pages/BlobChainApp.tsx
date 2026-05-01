@@ -4,7 +4,7 @@
 // UI lives in src/components/blob/*, pure logic lives in src/lib/blob/*.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Send, Wallet, Plus, Download, Lock, Settings as SettingsIcon, LogOut, ChevronDown, Eye, EyeOff, ArrowLeftRight, Copy, Check, ShieldAlert, KeyRound, FileKey } from "lucide-react";
@@ -187,7 +187,14 @@ export default function BlobChainApp({ disableBridge = false }: { disableBridge?
     }
   }
 
-  const balance = wallet ? calcBalance(wallet.address, chain, mempool) : 0;
+  // Memoize balance — chain/mempool grow over a session and the parent
+  // re-renders every second from the block-time ticker. Without memo this
+  // walks every block + tx on each tick, producing per-second GC pressure
+  // that surfaces as stutter spikes in the running game canvas.
+  const balance = useMemo(
+    () => (wallet ? calcBalance(wallet.address, chain, mempool) : 0),
+    [wallet, chain, mempool],
+  );
   const nav = [
     { id: "mine", text: "Mine" },
     { id: "wallet", text: "Wallet" },

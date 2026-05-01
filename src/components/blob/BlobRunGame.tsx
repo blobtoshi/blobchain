@@ -45,12 +45,25 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
     return () => document.removeEventListener("fullscreenchange", onChange);
   }, []);
 
-  const toggleFullscreen = useCallback(async () => {
+  const toggleFullscreen = useCallback(() => {
+    // Must run synchronously inside the user gesture — iOS Safari and some
+    // Android browsers drop the gesture token across an `await`, which
+    // silently rejects the fullscreen request on mobile.
     try {
       if (!document.fullscreenElement) {
-        await wrapRef.current?.requestFullscreen?.();
+        const el = wrapRef.current as (HTMLDivElement & {
+          webkitRequestFullscreen?: () => Promise<void>;
+        }) | null;
+        if (!el) return;
+        const req = el.requestFullscreen?.bind(el) ?? el.webkitRequestFullscreen?.bind(el);
+        const p = req?.();
+        if (p && typeof p.catch === "function") p.catch(() => { /* ignore */ });
       } else {
-        await document.exitFullscreen?.();
+        const exit = (document as Document & {
+          webkitExitFullscreen?: () => Promise<void>;
+        });
+        const p = exit.exitFullscreen?.() ?? exit.webkitExitFullscreen?.();
+        if (p && typeof p.catch === "function") p.catch(() => { /* ignore */ });
       }
     } catch { /* ignore */ }
   }, []);
@@ -418,6 +431,28 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
 
   return (
     <div className="space-y-2">
+      {/* Toolbar above the canvas — keeps the fullscreen control out of the
+          play area so it never obstructs the running blob. Hidden while
+          actually in fullscreen (the wrapper itself fills the screen). */}
+      {!isFullscreen && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            aria-label="Enter fullscreen"
+            onClick={toggleFullscreen}
+            onTouchEnd={(e) => {
+              // Backup path for iOS Safari, which sometimes synthesizes
+              // click too late to count as a user gesture for fullscreen.
+              e.preventDefault();
+              toggleFullscreen();
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-background/60 backdrop-blur-sm border border-accent/40 text-accent text-[10px] tracking-[0.2em] uppercase hover:bg-accent/20 active:scale-95 transition shadow-[0_0_18px_hsl(var(--accent)/0.25)]"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+            Fullscreen
+          </button>
+        </div>
+      )}
       <div
         ref={wrapRef}
         className={`relative overflow-hidden border border-border/50 ${isFullscreen ? "rounded-none w-screen h-screen flex items-center justify-center bg-background" : "rounded-2xl"}`}
@@ -436,14 +471,17 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
           onTouchEnd={onTapEnd}
           onTouchCancel={onTapEnd}
         />
-        <button
-          type="button"
-          aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-          onClick={toggleFullscreen}
-          className="absolute top-3 right-3 z-10 p-2 rounded-full bg-background/60 backdrop-blur-sm border border-accent/40 text-accent hover:bg-accent/20 active:scale-95 transition shadow-[0_0_18px_hsl(var(--accent)/0.25)]"
-        >
-          {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-        </button>
+        {isFullscreen && (
+          <button
+            type="button"
+            aria-label="Exit fullscreen"
+            onClick={toggleFullscreen}
+            onTouchEnd={(e) => { e.preventDefault(); toggleFullscreen(); }}
+            className="absolute top-3 right-3 z-10 p-2 rounded-full bg-background/60 backdrop-blur-sm border border-accent/40 text-accent hover:bg-accent/20 active:scale-95 transition shadow-[0_0_18px_hsl(var(--accent)/0.25)]"
+          >
+            <Minimize2 className="w-4 h-4" />
+          </button>
+        )}
         {gs.status === "playing" && (
           <button
             type="button"

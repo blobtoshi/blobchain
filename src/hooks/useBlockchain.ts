@@ -32,9 +32,12 @@ export function useBlockchain(walletRef: React.MutableRefObject<WalletLike>) {
   // identical (e.g. immediately after a block seal). Each unnecessary render
   // walks calcBalance over the entire chain+mempool, which produces visible
   // GC stutter in the running game.
+  // Pending commits don't count toward "block has entries" — only revealed
+  // entries (score != null) trigger sealing or close the awaiting-miner state.
+  const revealedCount = entries.reduce((n, e) => n + (e.pending ? 0 : 1), 0);
   useEffect(() => {
     const update = () => {
-      const next = getBlockInfo(chain, entries.length > 0);
+      const next = getBlockInfo(chain, revealedCount > 0);
       setRawInfo((prev) => {
         if (
           prev.height === next.height &&
@@ -55,7 +58,7 @@ export function useBlockchain(walletRef: React.MutableRefObject<WalletLike>) {
     update();
     const iv = setInterval(update, 1000);
     return () => clearInterval(iv);
-  }, [chain, entries.length]);
+  }, [chain, revealedCount]);
 
   // Split the per-second tick into two stable references:
   //   • blockInfo: re-creates only when height / seed / reward / awaitingMiner /

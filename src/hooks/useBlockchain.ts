@@ -27,9 +27,33 @@ export function useBlockchain(walletRef: React.MutableRefObject<WalletLike>) {
   const [newBlock, setNewBlock] = useState<NewBlock | null>(null);
 
   // Tick block info every second.
+  // Skip the state update when nothing observable changed — otherwise this
+  // forces a parent re-render every second even when remaining/elapsed are
+  // identical (e.g. immediately after a block seal). Each unnecessary render
+  // walks calcBalance over the entire chain+mempool, which produces visible
+  // GC stutter in the running game.
   useEffect(() => {
-    setRawInfo(getBlockInfo(chain, entries.length > 0));
-    const iv = setInterval(() => setRawInfo(getBlockInfo(chain, entries.length > 0)), 1000);
+    const update = () => {
+      const next = getBlockInfo(chain, entries.length > 0);
+      setRawInfo((prev) => {
+        if (
+          prev.height === next.height &&
+          prev.seed === next.seed &&
+          prev.reward === next.reward &&
+          prev.awaitingMiner === next.awaitingMiner &&
+          prev.overdue === next.overdue &&
+          prev.prevHash === next.prevHash &&
+          prev.remaining === next.remaining &&
+          prev.elapsed === next.elapsed &&
+          prev.overtime === next.overtime
+        ) {
+          return prev;
+        }
+        return next;
+      });
+    };
+    update();
+    const iv = setInterval(update, 1000);
     return () => clearInterval(iv);
   }, [chain, entries.length]);
 

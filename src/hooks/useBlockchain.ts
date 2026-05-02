@@ -133,6 +133,7 @@ setMyEntry(prev => {
   if (Number(prev.block_height) < nextHeight) return null;
   return prev;
 });
+        },
       onTx: (t) => {
         setMempool(prev => prev.find(x => x.id === t.id) ? prev : [...prev, t]);
       },

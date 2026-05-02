@@ -110,13 +110,14 @@ export function pickWinner<T extends EntryForSelection>(
 ): T | null {
   if (!entries?.length) return null;
   const sorted = [...entries].sort((a, b) => (a.address < b.address ? -1 : 1));
-  const total = sorted.reduce((s, e) => s + Number(e.score || 0), 0);
+  const weighted = sorted.map(e => Math.pow(Number(e.score || 0), 2.5));
+  const total = weighted.reduce((s, w) => s + w, 0);
   if (total === 0) return sorted[0] ?? null;
   const rng = mkPrng(blockSeed);
   let target = rng() * total;
-  for (const e of sorted) {
-    target -= Number(e.score || 0);
-    if (target <= 0) return e;
+  for (let i = 0; i < sorted.length; i++) {
+    target -= weighted[i];
+    if (target <= 0) return sorted[i];
   }
   return sorted[sorted.length - 1] ?? null;
 }

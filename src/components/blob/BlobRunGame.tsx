@@ -138,13 +138,15 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
       signature: "",
       submitted_at: new Date().toISOString(),
     };
-    Relay.pushEntry({
-      ...entry,
-      publicKey: wallet.publicKey,
-      privateKey: wallet.privateKey,
-    });
-    onEntrySubmit(entry);
-  }, [blockInfo, wallet, onEntrySubmit]);
+onEntrySubmit(entry);
+const result = await Relay.pushEntry({
+  ...entry,
+  publicKey: wallet.publicKey,
+  privateKey: wallet.privateKey,
+});
+if (!result.ok) {
+  console.error("[submitRun] entry failed:", result.error, "phase:", result.phase);
+}
 
   const startRun = useCallback(() => {
     if (raf.current != null) cancelAnimationFrame(raf.current);

@@ -345,59 +345,14 @@ async function handleMessage(ws: WebSocket, msg: ClientMsg) {
       });
     }
 
-case "newEntryCommit": {
-  const r = ingestEntryCommit(d, msg.commit);
-
-  if (r.ok) {
-    peers.broadcast(msg);
-  }
-
-  break;
-}
-
-case "submitEntryCommit": {
-  const r = ingestEntryCommit(d, msg.commit);
-
-  if (!r.ok) {
-    return send(ws, {
-      type: "error",
-      ref: "submitEntryCommit",
-      message: r.error
-    });
-  }
-
-  
-  const commitMsg = {
-    type: "newEntryCommit",
-    commit: msg.commit
-  };
-
-  // send to connected UI clients (browser)
-  gossip.broadcast(commitMsg);
-
-  // send to other nodes 
-  peers.broadcast(commitMsg);
-
-  
-  return send(ws, {
-    type: "ack",
-    ref: "submitEntryCommit",
-    data: {
-      address: r.address,
-      block_height: r.block_height
-    },
-  });
-}
-
-case "newEntryReveal": {
-  const r = ingestEntry(d, msg.entry);
-
-  if (r.ok) {
-    peers.broadcast(msg);
-  }
-
-  break;
-}
+    case "submitEntryCommit": {
+      const r = ingestEntryCommit(d, msg.commit);
+      if (!r.ok) return send(ws, { type: "error", ref: "submitEntryCommit", message: r.error });
+      return send(ws, {
+        type: "ack", ref: "submitEntryCommit",
+        data: { address: r.address, block_height: r.block_height },
+      });
+    }
 
     case "submitEntryReveal": {
       const r = ingestEntryReveal(d, msg.reveal);
@@ -411,7 +366,7 @@ case "newEntryReveal": {
         },
       };
       gossip.broadcast(entryMsg);
-      peers.broadcast(entryMsg);
+      if (r.isNewBest) peers.broadcast(entryMsg);
       return send(ws, {
         type: "ack", ref: "submitEntryReveal",
         data: { score: r.score, verified: true },

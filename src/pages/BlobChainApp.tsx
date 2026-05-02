@@ -15,6 +15,7 @@ import { useBlockchain } from "@/hooks/useBlockchain";
 import { useWalletVault } from "@/hooks/useWalletVault";
 import { calcBalance } from "@/lib/blob/chain";
 import { shortAddress } from "@/lib/blob/explorer";
+import { getNodeHealth } from "@/lib/blobRelay";
 
 import BlobRunGame from "@/components/blob/BlobRunGame";
 import MineHero from "@/components/blob/MineHero";
@@ -45,8 +46,8 @@ export default function BlobChainApp({ disableBridge = false }: { disableBridge?
 
 useEffect(() => {
   const update = () => {
-    const health = Relay.getNodeHealth();
-    const activeNodes = health.filter((n: any) => n.status === "ok").length;
+    const health = getNodeHealth();
+    const activeNodes = health.filter((n: any) => n.ok === true).length;
     if (activeNodes > 0) setNodeCount(activeNodes);
   };
   update();

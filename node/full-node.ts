@@ -345,8 +345,13 @@ async function handleMessage(ws: WebSocket, msg: ClientMsg) {
       });
     }
 
-  case "newEntryCommit": {
-  ingestEntryCommit(d, msg.commit);
+case "newEntryCommit": {
+  const r = ingestEntryCommit(d, msg.commit);
+
+  if (r.ok) {
+    peers.broadcast(msg);
+  }
+
   break;
 }
 
@@ -384,8 +389,13 @@ case "submitEntryCommit": {
   });
 }
 
-      case "newEntryReveal": {
-  ingestEntry(d, msg.entry);
+case "newEntryReveal": {
+  const r = ingestEntry(d, msg.entry);
+
+  if (r.ok) {
+    peers.broadcast(msg);
+  }
+
   break;
 }
 

@@ -41,7 +41,18 @@ export default function BlobChainApp({ disableBridge = false }: { disableBridge?
   // ── Local UI state ────────────────────────────────────────────────────────
   const [screen, setScreen] = useState("mine");
   const [gameLaunched, setGameLaunched] = useState(false);
-  const [nodeCount] = useState(1);
+  const [nodeCount, setNodeCount] = useState(1);
+
+useEffect(() => {
+  const update = () => {
+    const health = Relay.getNodeHealth();
+    const activeNodes = health.filter((n: any) => n.status === "ok").length;
+    if (activeNodes > 0) setNodeCount(activeNodes);
+  };
+  update();
+  const id = setInterval(update, 15_000);
+  return () => clearInterval(id);
+}, []);
 
   const [unlockOpen, setUnlockOpen] = useState(false);
   const [unlockPass, setUnlockPass] = useState("");

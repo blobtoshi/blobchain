@@ -114,6 +114,7 @@ export function openDb(path: string) {
     getBlocksFrom: db.prepare<[number, number], BlockRow>(
       `SELECT * FROM blocks WHERE height >= ? ORDER BY height ASC LIMIT ?`,
     ),
+    getEntriesForHeight: db.prepare(`SELECT address, score, block_height, block_seed, signature FROM entries WHERE block_height = ?`),
     getBlockByHeight: db.prepare<[number], BlockRow>(
       `SELECT * FROM blocks WHERE height = ?`,
     ),

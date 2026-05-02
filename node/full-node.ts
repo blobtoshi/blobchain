@@ -355,17 +355,36 @@ async function handleMessage(ws: WebSocket, msg: ClientMsg) {
       });
     }
 
-    case "submitEntryReveal": {
-      const r = ingestEntryReveal(d, msg.reveal);
-      if (!r.ok) return send(ws, { type: "error", ref: "submitEntryReveal", message: r.error });
-      const entryMsg: ServerMsg = {
-        type: "newEntry",
-        entry: {
-          address: r.address, score: r.score,
-          block_height: r.block_height, block_seed: r.block_seed,
-          signature: r.signature,
-        },
-      };
+case "submitEntryReveal": {
+  const r = ingestEntryReveal(d, msg.reveal);
+  if (!r.ok) return send(ws, { type: "error", ref: "submitEntryReveal", message: r.error });
+  const lightMsg: ServerMsg = {
+    type: "newEntry",
+    entry: {
+      address: r.address, score: r.score,
+      block_height: r.block_height, block_seed: r.block_seed,
+      signature: r.signature,
+    },
+  };
+  const fullMsg: ServerMsg = {
+    type: "newEntry",
+    entry: {
+      address: r.address, score: r.score,
+      block_height: r.block_height, block_seed: r.block_seed,
+      signature: r.signature,
+      inputs: msg.reveal.inputs,
+      inputs_hash: msg.reveal.inputs_hash,
+      frame_count: msg.reveal.frame_count,
+      engine_version: msg.reveal.engine_version,
+    },
+  };
+  gossip.broadcast(lightMsg);
+  if (r.isNewBest) peers.broadcast(fullMsg);
+  return send(ws, {
+    type: "ack", ref: "submitEntryReveal",
+    data: { score: r.score, verified: true },
+  });
+}
       gossip.broadcast(entryMsg);
       if (r.isNewBest) peers.broadcast(entryMsg);
       return send(ws, {

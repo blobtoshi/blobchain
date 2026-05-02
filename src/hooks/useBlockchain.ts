@@ -126,8 +126,13 @@ export function useBlockchain(walletRef: React.MutableRefObject<WalletLike>) {
         const nextInfo = getBlockInfo(newChain, false);
         lastFetchedKeyRef.current = `${nextInfo.height}:${nextInfo.seed}`;
         setEntries([]);
-        setMyEntry(null);
-      },
+// Only clear myEntry if it belongs to the previous block, not the new one
+setMyEntry(prev => {
+  if (!prev) return null;
+  const nextHeight = nextInfo.height;
+  if (Number(prev.block_height) < nextHeight) return null;
+  return prev;
+});
       onTx: (t) => {
         setMempool(prev => prev.find(x => x.id === t.id) ? prev : [...prev, t]);
       },

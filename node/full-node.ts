@@ -384,6 +384,11 @@ case "submitEntryCommit": {
   });
 }
 
+      case "newEntryReveal": {
+  ingestEntry(d, msg.entry);
+  break;
+}
+
     case "submitEntryReveal": {
       const r = ingestEntryReveal(d, msg.reveal);
       if (!r.ok) return send(ws, { type: "error", ref: "submitEntryReveal", message: r.error });
@@ -396,7 +401,7 @@ case "submitEntryCommit": {
         },
       };
       gossip.broadcast(entryMsg);
-      if (r.isNewBest) peers.broadcast(entryMsg);
+      peers.broadcast(entryMsg);
       return send(ws, {
         type: "ack", ref: "submitEntryReveal",
         data: { score: r.score, verified: true },

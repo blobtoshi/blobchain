@@ -62,10 +62,6 @@ export function openDb(path: string) {
     CREATE INDEX IF NOT EXISTS entries_height_idx ON entries(block_height);
 
     -- Phase 4: commit-reveal for mining entries.
-    -- Commits are accepted during the early part of a block window. Reveals
-    -- arrive in the last ENTRY_REVEAL_WINDOW_SECONDS and must match a prior
-    -- commit. Sealing only counts entries whose commit was received before
-    -- the reveal window opened.
     CREATE TABLE IF NOT EXISTS entry_commits (
       address       TEXT NOT NULL,
       block_height  INTEGER NOT NULL,
@@ -86,8 +82,6 @@ export function openDb(path: string) {
       last_active INTEGER NOT NULL DEFAULT (strftime('%s','now')*1000)
     );
 
-    -- Materialized balance index. Updated atomically inside ingestBlock.
-    -- Avoids the O(n) full chain scan that calcBalance used to do per tx.
     CREATE TABLE IF NOT EXISTS balances (
       address TEXT PRIMARY KEY,
       balance REAL NOT NULL DEFAULT 0
@@ -114,7 +108,6 @@ export function openDb(path: string) {
     getBlocksFrom: db.prepare<[number, number], BlockRow>(
       `SELECT * FROM blocks WHERE height >= ? ORDER BY height ASC LIMIT ?`,
     ),
-    getEntriesForHeight: db.prepare(`SELECT address, score, block_height, block_seed, signature FROM entries WHERE block_height = ?`),
     getBlockByHeight: db.prepare<[number], BlockRow>(
       `SELECT * FROM blocks WHERE height = ?`,
     ),
@@ -185,7 +178,6 @@ export function openDb(path: string) {
         last_active = excluded.last_active
     `),
 
-    // Balance index statements.
     getBalance: db.prepare<[string], { balance: number }>(
       `SELECT balance FROM balances WHERE address = ?`,
     ),

@@ -174,12 +174,13 @@ app.get("/entries", (req, res) => {
   if (!Number.isFinite(h) || h < 0) { res.status(400).json({ error: "invalid height" }); return; }
   const rows = d.stmts.getEntriesForHeight.all(h);
   res.setHeader("Cache-Control", "no-store");
-  res.json(rows.map((r) => ({
+res.json(rows.map((r) => ({
     address: r.address,
     score: r.score,
     block_height: r.block_height,
     block_seed: r.block_seed,
     signature: r.signature,
+    pending: false,
   })));
 });
 

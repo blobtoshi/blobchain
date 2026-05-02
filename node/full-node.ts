@@ -345,6 +345,11 @@ async function handleMessage(ws: WebSocket, msg: ClientMsg) {
       });
     }
 
+  case "newEntryCommit": {
+  ingestEntryCommit(d, msg.commit);
+  break;
+}
+
 case "submitEntryCommit": {
   const r = ingestEntryCommit(d, msg.commit);
 

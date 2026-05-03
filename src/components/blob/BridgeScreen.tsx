@@ -16,7 +16,7 @@ import bridgeCoinsImg from "@/assets/bridge-coins.png";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { Transaction } from "@solana/web3.js";
-import bridgeCoinsImg_ from "@/assets/bridge-coins.png";
+
 
 const SolanaProvider = lazy(() => import("./SolanaProvider"));
 const RedeemPanel = lazy(() => import("./RedeemPanel"));

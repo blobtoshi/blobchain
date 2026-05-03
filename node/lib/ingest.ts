@@ -30,11 +30,11 @@ export type IngestCommitResult =
   | { ok: false; error: string };
 
 export type IngestEntryResult =
-  | { ok: true; isNewBest: boolean; address: string; score: number; block_height: number; block_seed: string; signature: string }
+  | { ok: true; isNewBest: boolean; address: string; score: number; block_height: number; block_seed: string; s>
   | { ok: false; error: string };
 
 export type IngestRevealResult =
-  | { ok: true; isNewBest: boolean; address: string; score: number; block_height: number; block_seed: string; signature: string }
+  | { ok: true; isNewBest: boolean; address: string; score: number; block_height: number; block_seed: string; s>
   | { ok: false; error: string };
 
 export type IngestBlockResult =
@@ -42,7 +42,7 @@ export type IngestBlockResult =
   | { ok: false; error: string; needsResync?: boolean };
 
 // ── TX ──────────────────────────────────────────────────────────────────
-export function ingestTx(d: DB, payload: SubmitTxPayload): IngestTxResult {
+  export function ingestTx(d: DB, payload: SubmitTxPayload): IngestTxResult {
   const r = validateTx(d, payload);
   if (!r.ok) return { ok: false, error: r.error };
   const t = r.value;
@@ -179,7 +179,7 @@ export function ingestBlock(d: DB, block: Block): IngestBlockResult {
   if (!Array.isArray(block.miningEntries)) return { ok: false, error: "bad entries" };
   if (typeof block.timestamp !== "number") return { ok: false, error: "bad ts" };
 
-  const tip = d.stmts.getTip.get();
+const tip = d.stmts.getTip.get();
   const tipHeight = tip?.height ?? 0;
   const tipHash = tip?.hash ?? GENESIS_HASH;
   const tipTs = tip?.timestamp ?? GENESIS_TIME_MS;
@@ -194,7 +194,7 @@ export function ingestBlock(d: DB, block: Block): IngestBlockResult {
   if (block.height > tipHeight + 1) return { ok: false, error: "ahead of tip", needsResync: true };
   if (block.height < tipHeight) return { ok: false, error: "below tip" };
 
-  // Validate consensus invariants. Same checks the sealer applies before insert.
+// Validate consensus invariants. Same checks the sealer applies before insert.
   const isReplace = block.height === tipHeight; // reorg candidate
   const prevBlockRow = isReplace
     ? d.stmts.getBlockByHeight.get(block.height - 1)
@@ -209,7 +209,7 @@ export function ingestBlock(d: DB, block: Block): IngestBlockResult {
   const expectedSeed = String(runtimeSeedForHeight(block.height, expectedPrev));
   if (block.seed !== expectedSeed) return { ok: false, error: "bad seed" };
 
-  // Compare timestamp against the *prev* block of this candidate, not our tip.
+// Compare timestamp against the *prev* block of this candidate, not our tip.
   const prevTsForCandidate = isReplace
     ? (prevBlockRow?.timestamp ?? GENESIS_TIME_MS)
     : tipTs;
@@ -226,7 +226,7 @@ export function ingestBlock(d: DB, block: Block): IngestBlockResult {
   const wall = currentHeight();
   if (block.height > wall) return { ok: false, error: "block height not yet open" };
 
-  // Re-derive the winner from the entries the proposer included.
+// Re-derive the winner from the entries the proposer included.
   const entriesForSelection = block.miningEntries.map((e) => ({
     address: String(e.address ?? ""),
     score: Number(e.score ?? 0),
@@ -240,10 +240,10 @@ export function ingestBlock(d: DB, block: Block): IngestBlockResult {
   } else {
     if (!expectedWinner) return { ok: false, error: "winner derivation failed" };
     if (block.winner !== expectedWinner.address) return { ok: false, error: "wrong winner" };
-    if (Number(block.winnerScore) !== Number(expectedWinner.score)) return { ok: false, error: "wrong winner score" };
+    if (Number(block.winnerScore) !== Number(expectedWinner.score)) return { ok: false, error: "wrong winner sc>
   }
 
-  // Reward = (capped coinbase) + sum(tx.fee). Block size cap.
+ // Reward = (capped coinbase) + sum(tx.fee). Block size cap.
   let txBytesUsed = 10_000;
   let feeTotal = 0;
   for (const t of block.transactions) {
@@ -253,7 +253,7 @@ export function ingestBlock(d: DB, block: Block): IngestBlockResult {
   }
   if (txBytesUsed > MAX_BLOCK_SIZE) return { ok: false, error: "block too large" };
 
-  const baseReward = getRewardForHeight(block.height);
+const baseReward = getRewardForHeight(block.height);
   const prevSupply = isReplace
     ? (prevBlockRow?.total_supply ?? 0)
     : (tip?.total_supply ?? 0);
@@ -268,7 +268,7 @@ export function ingestBlock(d: DB, block: Block): IngestBlockResult {
     return { ok: false, error: "bad totalSupply" };
   }
 
-  // Hash check.
+// Hash check.
   const computed = computeBlockHash({
     height: block.height,
     previousHash: block.previousHash,
@@ -281,7 +281,7 @@ export function ingestBlock(d: DB, block: Block): IngestBlockResult {
   });
   if (computed !== block.hash) return { ok: false, error: "hash mismatch" };
 
-  // ── Reorg path: same height as tip, different hash ────────────────────
+// ── Reorg path: same height as tip, different hash ────────────────────
   if (isReplace) {
     if (existingByHeight && existingByHeight.hash === block.hash) {
       return { ok: true, applied: "duplicate" };
@@ -289,7 +289,7 @@ export function ingestBlock(d: DB, block: Block): IngestBlockResult {
     // Deterministic, unforgeable tie-break: lower sha256(block||prev||seedHeight) wins.
     if (existingByHeight) {
       const incomingKey = tieBreakKey(block.hash, block.previousHash, block.height);
-      const haveKey = tieBreakKey(existingByHeight.hash, existingByHeight.previous_hash, existingByHeight.height);
+      const haveKey = tieBreakKey(existingByHeight.hash, existingByHeight.previous_hash, existingByHeight.heigh>
       if (haveKey <= incomingKey) return { ok: false, error: "lost tie-break" };
     }
     const apply = d.db.transaction(() => {
@@ -320,7 +320,7 @@ export function ingestBlock(d: DB, block: Block): IngestBlockResult {
     return { ok: true, applied: "replaced" };
   }
 
-  // ── Append path ───────────────────────────────────────────────────────
+// ── Append path ───────────────────────────────────────────────────────
   const apply = d.db.transaction(() => {
     d.stmts.insertBlock.run(blockToRow(block));
     applyBlockBalances(d, block);

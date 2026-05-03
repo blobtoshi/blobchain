@@ -1,21 +1,3 @@
-import { sha256hex } from "./crypto";
-import { to8 } from "./fees";
-import {
-  BLOCK_TIME, INITIAL_REWARD, HALVING_BLOCKS, GENESIS_TIME_MS, TX_FEE,
-} from "./constants";
-import { runtimeSeedForHeightSync } from "./runtimeSeed";
-
-// Mulberry32 PRNG
-export function mkPrng(seed) {
-  let s = (Math.abs(+seed) * 2654435761) >>> 0;
-  return () => {
-    s = (s + 0x6D2B79F5) | 0;
-    let t = Math.imul(s ^ (s >>> 15), 1 | s);
-    t = t + Math.imul(t ^ (t >>> 7), 61 | t) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
 export function getRewardForHeight(height) {
   const halvings = Math.floor(height / HALVING_BLOCKS);
   return Math.min(INITIAL_REWARD / Math.pow(2, halvings), INITIAL_REWARD);

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, useCallback, memo } from "react";
 import { Maximize2, Minimize2 } from "lucide-react";
 import * as Relay from "@/lib/blobRelay";
-import { signData } from "@/lib/blob/crypto";
 import { CW, CH, GY, PX } from "@/lib/blob/constants";
 import {
   drawBG, drawBlob, drawFork, drawLowBar, drawToken,
@@ -17,23 +16,19 @@ type SimState = ReturnType<typeof initialState>;
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; col: string; sz: number };
 type Trail = { x: number; y: number; action: string };
 
-const TRAIL_LEN = 4;          // was 8 — cuts ~4 per-frame drawImage calls
-const MAX_PARTICLES = 96;     // hard cap to bound worst-case allocations
+const TRAIL_LEN = 4;
+const MAX_PARTICLES = 96;
 
 function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
-  // Mirror blockTime into a ref so the canvas/death overlay can read the
-  // freshest countdown value without forcing a React re-render every second.
-  // The component itself only re-renders when blockInfo identity changes.
   const blockTimeRef = useRef(blockTime);
   blockTimeRef.current = blockTime;
   const cvs = useRef<HTMLCanvasElement | null>(null);
   const raf = useRef<number | null>(null);
   const stateRef = useRef<SimState | null>(null);
-  const inputsRef = useRef<InputEv[]>([]); // recorded events for verifiable replay
+  const inputsRef = useRef<InputEv[]>([]);
   const jRef = useRef(false);
   const dRef = useRef(false);
   const stRef = useRef("idle");
-  // Render-only scratch (NOT part of deterministic simulator state).
   const renderRef = useRef<{ lastCombo: number }>({ lastCombo: 0 });
   const [gs, setGs] = useState({ status: "idle", score: 0, combo: 0 });
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -46,9 +41,6 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
   }, []);
 
   const toggleFullscreen = useCallback(() => {
-    // Must run synchronously inside the user gesture — iOS Safari and some
-    // Android browsers drop the gesture token across an `await`, which
-    // silently rejects the fullscreen request on mobile.
     try {
       if (!document.fullscreenElement) {
         const el = wrapRef.current as (HTMLDivElement & {
@@ -79,11 +71,9 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
     level.current = generateLevelPure(blockInfo.seed);
   }, [blockInfo.seed]);
 
-  // Helper: record a key state change as an input event for the *next* tick.
   const recordEvent = useCallback((type) => {
     const s = stateRef.current;
     if (!s || s.dead) return;
-    // Event applies at the tick that's about to run (frame becomes s.frame+1).
     inputsRef.current.push({ f: s.frame + 1, t: type });
   }, []);
 
@@ -107,7 +97,6 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
         if (dRef.current) { dRef.current = false; recordEvent(3); }
       }
     };
-    // Explicit non-passive so preventDefault works without warnings.
     window.addEventListener("keydown", kd, { passive: false });
     window.addEventListener("keyup", ku, { passive: false });
     return () => {
@@ -116,12 +105,10 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
     };
   }, [recordEvent]);
 
-  // Async submission path — split out so the rAF loop stays synchronous.
-  // Phase 4: the relay handles PoW + commit-reveal internally.
   const submitRun = useCallback(async (state: SimState) => {
     const finalScore = state.score;
     const frameCount = state.frame;
-    if (finalScore <= 0) return; // anti-Sybil: must clear first obstacle
+    if (finalScore <= 0) return;
     const canonical = encodeInputs(inputsRef.current);
     const inputsHash = await hashInputs(canonical);
     const entry = {
@@ -133,20 +120,19 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
       inputs: canonical,
       inputs_hash: inputsHash,
       engine_version: ENGINE_VERSION,
-      // Legacy signature field — unused by the new commit-reveal path but
-      // kept on the local entry record so the UI can dedupe / display it.
       signature: "",
       submitted_at: new Date().toISOString(),
     };
-onEntrySubmit(entry);
-const result = await Relay.pushEntry({
-  ...entry,
-  publicKey: wallet.publicKey,
-  privateKey: wallet.privateKey,
-});
-if (!result.ok) {
-  console.error("[submitRun] entry failed:", result.error, "phase:", result.phase);
-}
+    onEntrySubmit(entry);
+    const result = await Relay.pushEntry({
+      ...entry,
+      publicKey: wallet.publicKey,
+      privateKey: wallet.privateKey,
+    });
+    if (!result.ok) {
+      console.error("[submitRun] entry failed:", result.error, "phase:", result.phase);
+    }
+  }, [blockInfo, wallet, onEntrySubmit]);
 
   const startRun = useCallback(() => {
     if (raf.current != null) cancelAnimationFrame(raf.current);
@@ -162,12 +148,8 @@ if (!result.ok) {
     const canvas = cvs.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d", { alpha: false })!;
-    // Set once per run instead of every frame.
     ctx.imageSmoothingEnabled = false;
 
-    // ---- Particle pool ----
-    // Pre-allocate fixed-size pool; never splice, never push at runtime.
-    // life <= 0 means slot is free for reuse.
     const parts: Particle[] = new Array(MAX_PARTICLES);
     for (let i = 0; i < MAX_PARTICLES; i++) {
       parts[i] = { x: 0, y: 0, vx: 0, vy: 0, life: 0, col: "", sz: 0 };
@@ -199,10 +181,6 @@ if (!result.ok) {
       c.closePath();
     }
 
-    // ---- HUD chrome cache ----
-    // The static parts of the HUD (rounded panel, "SCORE"/"BLOCK"/"SPEED"
-    // labels, the block #) don't change frame-to-frame. Bake them once into
-    // an offscreen canvas and blit each frame instead of redrawing all paths.
     const FNT = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, sans-serif';
     const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
     const hudCache = document.createElement("canvas");
@@ -225,23 +203,19 @@ if (!result.ok) {
       h.textAlign = "center"; h.fillText(`#${blockInfo.height}`, CW / 2, 42);
     }
 
-    // Cache score string allocations: only re-format when score changes.
     let lastScore = -1;
     let scoreStr = "0";
 
     function drawHUD() {
       ctx.drawImage(hudCache, 0, 0);
-
       if (state.score !== lastScore) {
         lastScore = state.score;
         scoreStr = state.score.toLocaleString();
       }
-
       ctx.fillStyle = "#e7fff8";
       ctx.font = `600 18px ${MONO}`;
       ctx.textAlign = "left";
       ctx.fillText(scoreStr, 26, 42);
-
       ctx.textAlign = "right";
       ctx.fillStyle = "rgba(180, 220, 230, 0.45)";
       ctx.font = `9px ${FNT}`;
@@ -249,10 +223,8 @@ if (!result.ok) {
       ctx.fillStyle = "#e7fff8";
       ctx.font = `600 14px ${MONO}`;
       ctx.fillText(`${blockInfo.reward} BLOB`, CW - 26, 42);
-
       if (state.combo > 1) {
         ctx.textAlign = "left";
-        // No shadowBlur — keep glow effect via additive overdraw.
         ctx.fillStyle = "#ffd166";
         ctx.font = `700 ${Math.min(13 + state.combo * 2, 26)}px ${FNT}`;
         ctx.fillText(`×${state.combo} combo`, 26, CH - 24);
@@ -268,18 +240,16 @@ if (!result.ok) {
       }
     }
 
-    // Pre-allocated trail ring buffer — reused, never re-created.
     const trailBuf: Trail[] = new Array(TRAIL_LEN);
     for (let i = 0; i < TRAIL_LEN; i++) trailBuf[i] = { x: 0, y: 0, action: "" };
-    let trailHead = 0;     // index of newest entry
-    let trailCount = 0;    // 0..TRAIL_LEN
+    let trailHead = 0;
+    let trailCount = 0;
 
     function drawTrailAndBlob() {
       const p = state.player;
       if (!state.locked && p.action !== "dead" && _blobImg && _blobImg.complete && _blobImg.naturalWidth > 0) {
         const tT = p.wob * 0.08;
         const trailFloatY = p.action === "duck" ? 0 : Math.sin(tT) * 5;
-        // Advance head, mutate slot in place.
         trailHead = (trailHead + TRAIL_LEN - 1) % TRAIL_LEN;
         const slot = trailBuf[trailHead];
         slot.x = PX;
@@ -289,7 +259,6 @@ if (!result.ok) {
         const duck = p.action === "duck";
         const baseW = duck ? 78 : 64;
         const baseH = duck ? 46 : 72;
-        // Single save/restore around the whole trail; no per-step composite changes.
         ctx.save();
         for (let i = trailCount - 1; i >= 1; i--) {
           const tr = trailBuf[(trailHead + i) % TRAIL_LEN];
@@ -314,9 +283,7 @@ if (!result.ok) {
         if (n.x < -15) n.x = CW + 15;
       }
       drawBG(ctx, state.frame, nodes);
-
       drawTrailAndBlob();
-
       const obs = state.obstacles;
       for (let i = 0; i < obs.length; i++) {
         const o = obs[i];
@@ -327,9 +294,6 @@ if (!result.ok) {
         const t = tks[i];
         if (t.alive) drawToken(ctx, t.x, t.y, state.frame);
       }
-
-      // Particles — pre-baked sprite, no per-particle shadowBlur.
-      // Pool: iterate full fixed-size array, skip dead slots (life <= 0).
       if (particleSprite) {
         ctx.save();
         ctx.globalCompositeOperation = "lighter";
@@ -342,65 +306,44 @@ if (!result.ok) {
         }
         ctx.restore();
       }
-
       if (!state.dead) drawBlob(ctx, PX, p.y, p.action, p.wob, p.sq, false);
       drawHUD();
     }
 
     function loop() {
       if (stRef.current !== "playing") return;
-      // Collect events queued for the upcoming tick (recordEvent appends with
-      // f = state.frame + 1, so they live at the tail of inputsRef).
       const targetFrame = state.frame + 1;
       const queuedAtFrame: InputEv[] = [];
       for (let i = inputsRef.current.length - 1; i >= 0 && inputsRef.current[i].f === targetFrame; i--) {
         queuedAtFrame.unshift(inputsRef.current[i]);
       }
-
       const alive = tick(state, lev, queuedAtFrame);
-
-      // Visual-only: pickup particles based on the simulator's per-frame counter
-      // (no array .filter() allocations).
       const pickedThisFrame = state.tokensPickedThisFrame;
       if (pickedThisFrame > 0) {
         spawnParts(PX, state.player.y, "#00aaff", 8 * pickedThisFrame);
       }
-
       if (!alive) {
         spawnParts(PX, state.player.y, "#ff2244", 18);
         spawnParts(PX, state.player.y, "#00ffcc", 8);
         stRef.current = "dead";
         const finalScore = state.score;
-        // Coalesced state update.
         setGs({ status: "dead", score: finalScore, combo: 0 });
         renderRef.current.lastCombo = 0;
-        // Update particles one last time for the fade-out frame (pool, no splice).
         for (let i = 0; i < MAX_PARTICLES; i++) {
           const pt = parts[i];
           if (pt.life <= 0) continue;
           pt.x += pt.vx; pt.y += pt.vy; pt.vy += .18; pt.life -= .028;
         }
         draw();
-        // Fire-and-forget submission — keeps loop sync.
         void submitRun(state);
         return;
       }
-
-      // Particle physics — pool, never splice. Dead slots are reusable.
       for (let i = 0; i < MAX_PARTICLES; i++) {
         const pt = parts[i];
         if (pt.life <= 0) continue;
         pt.x += pt.vx; pt.y += pt.vy; pt.vy += .18; pt.life -= .028;
       }
-
       draw();
-      // Combo only changes on token pickup (up) or simulator-side reset (which
-      // happens at obstacle hit = death, handled above). Skip the per-frame
-      // compare; only check when a pickup just occurred.
-      // Combo only changes meaningfully in two cases:
-      //   1) token pickup (increment) → pickedThisFrame > 0
-      //   2) timer expiry resets to 0  → cheap zero-check vs cached lastCombo
-      // Both are O(1) and avoid the per-frame compare-on-every-tick we had.
       const lastCombo = renderRef.current.lastCombo;
       if (
         (pickedThisFrame > 0 && state.combo !== lastCombo) ||
@@ -421,7 +364,6 @@ if (!result.ok) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Tap = press jump. Release happens on touch end (variable-height jump).
   const onTapStart = (e: React.TouchEvent | React.MouseEvent) => {
     e.preventDefault();
     if (gs.status === "idle" || gs.status === "dead") { startRun(); return; }
@@ -433,9 +375,6 @@ if (!result.ok) {
 
   return (
     <div className="space-y-2">
-      {/* Toolbar above the canvas — keeps the fullscreen control out of the
-          play area so it never obstructs the running blob. Hidden while
-          actually in fullscreen (the wrapper itself fills the screen). */}
       {!isFullscreen && (
         <div className="flex justify-end">
           <button
@@ -443,8 +382,6 @@ if (!result.ok) {
             aria-label="Enter fullscreen"
             onClick={toggleFullscreen}
             onTouchEnd={(e) => {
-              // Backup path for iOS Safari, which sometimes synthesizes
-              // click too late to count as a user gesture for fullscreen.
               e.preventDefault();
               toggleFullscreen();
             }}
@@ -539,10 +476,6 @@ if (!result.ok) {
   );
 }
 
-// Custom equality: ignore blockTime prop changes (the per-second countdown).
-// The canvas drives itself via rAF, the dead overlay reads blockTime through
-// a ref, and React shouldn't reconcile this subtree once a second just to
-// update a value the running game doesn't display.
 export default memo(BlobRunGame, (prev, next) =>
   prev.wallet === next.wallet &&
   prev.blockInfo === next.blockInfo &&

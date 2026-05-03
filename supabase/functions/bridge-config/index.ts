@@ -9,7 +9,7 @@ const corsHeaders = {
 };
 
 // MUST match BRIDGE_ADDRESS in src/lib/blob/constants.ts.
-const BRIDGE_ADDRESS = "13yfvVYknMVa6xoKhVSrFHrshBBQv6rbvm";
+const BRIDGE_ADDRESS = "1E4QWFYb5Pqj8iAV2be8Ee88yEbvhU9iTs";
 
 Deno.serve((req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });

@@ -192,60 +192,20 @@ async function findPendingBridgeTx(
   return { id: tx.id, from_address: tx.from, to_address: tx.to, amount: tx.amount, memo: tx.memo };
 }
 
-// Delegate the heavy SPL mint to a dedicated function so each step gets its
-// own per-request CPU budget. Returns the Solana tx signature.
-async function mintSpl(recipient: string, amount: number): Promise<string> {
-  if (!SUPABASE_URL || !SERVICE_KEY) throw new Error("supabase env missing");
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/bridge-execute-mint`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${SERVICE_KEY}`,
-      "apikey": SERVICE_KEY,
-    },
-    body: JSON.stringify({ recipient, amount }),
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok || !json?.signature) {
-    throw new Error(json?.error || `bridge-execute-mint failed (${res.status})`);
-  }
-  return json.signature as string;
-}
-
-async function backgroundMint(
-  supa: Supa, blob_tx_id: string, sol_address: string, amount: number,
-) {
-  try {
-    const sig = await mintSpl(sol_address, amount);
-    await supa.from("bridge_requests").update({
-      status: "minted",
-      sol_signature: sig,
-      minted_at: new Date().toISOString(),
-      error: null,
-    }).eq("blob_tx_id", blob_tx_id);
-  } catch (e) {
-    const msg = String((e as Error)?.message ?? e).slice(0, 500);
-    console.error("[bridge-mint] mint failed", blob_tx_id, msg);
-    await supa.from("bridge_requests")
-      .update({ status: "confirmed", error: msg })
-      .eq("blob_tx_id", blob_tx_id);
-  }
-}
-
-// Process a bridge request: confirm originating tx, then dispatch the mint as
-// a background task. Idempotent. If `nodeUrl` is null we skip the chain
-// re-check (used by GET poll when client didn't pass a node_url) — minting
-// still proceeds for rows already marked confirmed.
+// Process a bridge request: only update confirmation depth.
+// The actual mint is now CO-SIGNED by the user's Solana wallet, so we no longer
+// dispatch a background task here. Once `confirmations >= REQUIRED_CONFIRMATIONS`
+// and status is "confirmed", the client must call POST /prepare to fetch a
+// partially-signed tx, sign it with their wallet, submit it to Solana, then
+// POST /submit with the resulting signature.
 async function processRequest(supa: Supa, row: any, nodeUrl: string | null) {
   if (row.status === "minted" || row.status === "failed" || row.status === "minting") return row;
 
-  // Re-check chain on every poll so the confirmation count keeps climbing
-  // until we reach REQUIRED_CONFIRMATIONS — that's what the UI displays.
   if ((row.status === "pending" || row.status === "confirmed") && nodeUrl) {
     const found = await findConfirmedBridgeTx(
       nodeUrl, row.blob_tx_id, row.from_address, Number(row.amount),
     );
-    if (!found) return row; // still in mempool / not yet sealed
+    if (!found) return row;
     const confs = found.confirmations;
     const patch: Record<string, unknown> = { confirmations: confs };
     if (row.status === "pending") {
@@ -255,28 +215,65 @@ async function processRequest(supa: Supa, row: any, nodeUrl: string | null) {
     }
     await supa.from("bridge_requests").update(patch).eq("blob_tx_id", row.blob_tx_id);
     row.confirmations = confs;
-    if (confs < REQUIRED_CONFIRMATIONS) return row; // wait
+  }
+  return row;
+}
+
+// Verify a Solana mint tx really credited the expected amount of wBLOB to the
+// expected recipient ATA, signed by our mint authority. Used by /submit to
+// avoid trusting the client's claimed signature.
+async function verifyMintTx(
+  signature: string, expectedRecipient: string, expectedAmount: number,
+): Promise<{ ok: boolean; error?: string }> {
+  const SOLANA_RPC_URL = Deno.env.get("SOLANA_RPC_URL") ?? "";
+  const SPL_MINT       = Deno.env.get("SOLANA_SPL_MINT_ADDRESS") ?? "";
+  if (!SOLANA_RPC_URL || !SPL_MINT) return { ok: false, error: "solana env missing" };
+
+  const r = await fetch(SOLANA_RPC_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0", id: 1, method: "getTransaction",
+      params: [signature, { encoding: "jsonParsed", maxSupportedTransactionVersion: 0, commitment: "confirmed" }],
+    }),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (j?.error) return { ok: false, error: `rpc: ${JSON.stringify(j.error)}` };
+  const tx = j?.result;
+  if (!tx) return { ok: false, error: "tx not found yet" };
+  if (tx.meta?.err) return { ok: false, error: `tx failed on chain: ${JSON.stringify(tx.meta.err)}` };
+
+  // Find a MintTo (or mintToChecked) ix targeting our mint, owned by our authority.
+  const ixs = tx.transaction?.message?.instructions ?? [];
+  const inner = (tx.meta?.innerInstructions ?? []).flatMap((g: any) => g?.instructions ?? []);
+  const all = [...ixs, ...inner];
+  let credited = 0;
+  for (const ix of all) {
+    if (ix?.program !== "spl-token") continue;
+    const t = ix?.parsed?.type;
+    if (t !== "mintTo" && t !== "mintToChecked") continue;
+    const info = ix.parsed.info ?? {};
+    if (info.mint !== SPL_MINT) continue;
+    const amtRaw = t === "mintToChecked" ? info.tokenAmount?.amount : info.amount;
+    const decimals = t === "mintToChecked" ? Number(info.tokenAmount?.decimals ?? 8) : 8;
+    const amtUi = Number(amtRaw) / 10 ** decimals;
+    credited += amtUi;
+  }
+  if (credited <= 0) return { ok: false, error: "no mintTo to our mint found in tx" };
+
+  // Sanity-check recipient appears as an account key.
+  const keys: string[] = (tx.transaction?.message?.accountKeys ?? []).map(
+    (k: any) => typeof k === "string" ? k : k?.pubkey,
+  );
+  if (!keys.includes(expectedRecipient)) {
+    return { ok: false, error: "recipient not in tx account keys" };
   }
 
-  if (row.status !== "confirmed") return row;
-  if (Number(row.confirmations ?? 0) < REQUIRED_CONFIRMATIONS) return row;
-
-  const { data: claimed } = await supa.from("bridge_requests")
-    .update({ status: "minting" })
-    .eq("blob_tx_id", row.blob_tx_id)
-    .eq("status", "confirmed")
-    .gte("confirmations", REQUIRED_CONFIRMATIONS)
-    .select().maybeSingle();
-  if (!claimed) {
-    const { data: latest } = await supa.from("bridge_requests")
-      .select("*").eq("blob_tx_id", row.blob_tx_id).maybeSingle();
-    return latest ?? row;
+  // Allow tiny float-rounding slack.
+  if (Math.abs(credited - expectedAmount) > 1e-8) {
+    return { ok: false, error: `amount mismatch: credited ${credited}, expected ${expectedAmount}` };
   }
-
-  await backgroundMint(supa, row.blob_tx_id, row.sol_address, Number(row.amount));
-  const { data: latest } = await supa.from("bridge_requests")
-    .select("*").eq("blob_tx_id", row.blob_tx_id).maybeSingle();
-  return latest ?? claimed;
+  return { ok: true };
 }
 
 Deno.serve(async (req) => {
@@ -305,6 +302,93 @@ Deno.serve(async (req) => {
       total_locked_blob: 0, total_minted_blob: 0,
       unreconciled_blob: 0, unreconciled_count: 0, total_bridge_txs: 0,
     });
+  }
+
+  // ── /prepare ────────────────────────────────────────────────────────
+  // Client requests a partially-signed (mint-authority co-signed) Solana tx
+  // for a confirmed bridge request. Recipient (= sol_address on the row) is
+  // the fee payer and pays ATA rent, so the mint authority can never be
+  // drained by rent-harvesting fan-out attacks.
+  if (req.method === "POST" && url.pathname.endsWith("/prepare")) {
+    try {
+      const body = (await req.json()) ?? {};
+      const { blob_tx_id } = body;
+      if (typeof blob_tx_id !== "string" || !TX_ID_RE.test(blob_tx_id)) {
+        return bad("invalid blob_tx_id");
+      }
+      const { data: row } = await supa.from("bridge_requests")
+        .select("*").eq("blob_tx_id", blob_tx_id).maybeSingle();
+      if (!row) return bad("not found", 404);
+      if (row.status === "minted") return bad("already minted");
+      if (row.status === "failed") return bad("request failed");
+      if (row.status !== "confirmed" && row.status !== "minting") {
+        return bad(`not ready to mint (status=${row.status})`);
+      }
+      if (Number(row.confirmations ?? 0) < REQUIRED_CONFIRMATIONS) {
+        return bad(`waiting for confirmations (${row.confirmations}/${REQUIRED_CONFIRMATIONS})`);
+      }
+
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/bridge-execute-mint`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${SERVICE_KEY}`,
+          "apikey": SERVICE_KEY,
+        },
+        body: JSON.stringify({ recipient: row.sol_address, amount: Number(row.amount) }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.wire_b64) {
+        return bad(json?.error || `prepare failed (${res.status})`, 500);
+      }
+
+      await supa.from("bridge_requests")
+        .update({ status: "minting", error: null })
+        .eq("blob_tx_id", blob_tx_id);
+
+      return ok_(json);
+    } catch (e) {
+      console.error("[bridge-mint/prepare] error", e);
+      return bad("internal error", 500);
+    }
+  }
+
+  // ── /submit ────────────────────────────────────────────────────────
+  // Client posts the Solana signature after broadcasting the fully-signed tx.
+  // We verify on-chain that it really credits the right amount of wBLOB to
+  // the right recipient before marking minted.
+  if (req.method === "POST" && url.pathname.endsWith("/submit")) {
+    try {
+      const body = (await req.json()) ?? {};
+      const { blob_tx_id, sol_signature } = body;
+      if (typeof blob_tx_id !== "string" || !TX_ID_RE.test(blob_tx_id)) {
+        return bad("invalid blob_tx_id");
+      }
+      if (typeof sol_signature !== "string" || !/^[1-9A-HJ-NP-Za-km-z]{64,128}$/.test(sol_signature)) {
+        return bad("invalid sol_signature");
+      }
+      const { data: row } = await supa.from("bridge_requests")
+        .select("*").eq("blob_tx_id", blob_tx_id).maybeSingle();
+      if (!row) return bad("not found", 404);
+      if (row.status === "minted") return ok_(row);
+      if (row.status === "failed") return bad("request failed");
+
+      const ver = await verifyMintTx(sol_signature, row.sol_address, Number(row.amount));
+      if (!ver.ok) return bad(ver.error || "verification failed", 400);
+
+      const { data: upd } = await supa.from("bridge_requests")
+        .update({
+          status: "minted",
+          sol_signature,
+          minted_at: new Date().toISOString(),
+          error: null,
+        })
+        .eq("blob_tx_id", blob_tx_id).select().single();
+      return ok_(upd ?? row);
+    } catch (e) {
+      console.error("[bridge-mint/submit] error", e);
+      return bad("internal error", 500);
+    }
   }
 
   // Recovery: rebuild a bridge_requests row from on-chain data alone.

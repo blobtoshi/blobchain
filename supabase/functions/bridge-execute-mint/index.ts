@@ -1,9 +1,19 @@
-// Dedicated SPL mint executor — hand-built, NO Solana SDKs.
-// Uses raw JSON-RPC + @noble/ed25519 + @noble/hashes + bs58.
-// This eliminates the WORKER_RESOURCE_LIMIT cold-start CPU issue caused by
-// @solana/web3.js + @solana/spl-token, and aligns with the long-term goal of
-// zero vendor-SDK lock-in (so this same code can run inside a future BlobChain
-// full node without modification).
+// Partial-mint TX BUILDER (not sender).
+//
+// Co-signed flow: the connected user's Solana wallet pays the SOL fees AND
+// the ~0.002 SOL ATA rent, completely eliminating the rent-harvesting attack
+// where someone bridges dust to many fresh wallets and reclaims SOL from the
+// mint authority's pocket.
+//
+// We:
+//   1. Build a legacy Solana tx with the RECIPIENT as fee payer (account 0)
+//      and the mint authority as the second signer.
+//   2. Pre-sign the mint authority's slot.
+//   3. Return the partially-signed wire bytes (b64). The recipient signs
+//      slot 0 client-side (Phantom/Solflare) and submits via their wallet.
+//
+// We do NOT touch the chain here — no sendTransaction, no polling. That moves
+// to the client. This also keeps cold-start CPU way under budget.
 
 import * as ed from "https://esm.sh/@noble/ed25519@2.1.0";
 import { sha256 } from "https://esm.sh/@noble/hashes@1.4.0/sha256";
@@ -23,10 +33,9 @@ const SERVICE_KEY             = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
 const SOL_ADDR_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
-// ---- Solana program IDs ----
 const TOKEN_PROGRAM_ID            = bs58.decode("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 const ASSOCIATED_TOKEN_PROGRAM_ID = bs58.decode("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
-const SYSTEM_PROGRAM_ID           = new Uint8Array(32); // all zeros = 11111111111111111111111111111111
+const SYSTEM_PROGRAM_ID           = new Uint8Array(32);
 
 function bad(msg: string, status = 400) {
   return new Response(JSON.stringify({ error: msg }), {
@@ -34,8 +43,7 @@ function bad(msg: string, status = 400) {
   });
 }
 
-// ---- JSON-RPC helper ----
-async function rpc<T = any>(method: string, params: unknown[]): Promise<T> {
+async function rpc<T = unknown>(method: string, params: unknown[]): Promise<T> {
   const r = await fetch(SOLANA_RPC_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -46,80 +54,54 @@ async function rpc<T = any>(method: string, params: unknown[]): Promise<T> {
   return j.result;
 }
 
-// ---- PDA derivation (find_program_address) ----
-// Implements the Solana PDA algorithm: hash(seeds || bump || program_id || "ProgramDerivedAddress")
-// until the result is OFF the ed25519 curve.
+// PDA helpers (unchanged from previous implementation) -------------------
 function isOnCurve(pub: Uint8Array): boolean {
-  try {
-    // Decompress; throws if not a valid curve point.
-    ed.ExtendedPoint.fromHex(pub);
-    return true;
-  } catch {
-    return false;
-  }
+  try { ed.ExtendedPoint.fromHex(pub); return true; } catch { return false; }
 }
-
 function createProgramAddress(seeds: Uint8Array[], programId: Uint8Array): Uint8Array | null {
   const PDA_MARKER = new TextEncoder().encode("ProgramDerivedAddress");
-  let total = 0;
-  for (const s of seeds) total += s.length;
+  let total = 0; for (const s of seeds) total += s.length;
   const buf = new Uint8Array(total + programId.length + PDA_MARKER.length);
   let o = 0;
   for (const s of seeds) { buf.set(s, o); o += s.length; }
   buf.set(programId, o); o += programId.length;
   buf.set(PDA_MARKER, o);
   const h = sha256(buf);
-  if (isOnCurve(h)) return null;
-  return h;
+  return isOnCurve(h) ? null : h;
 }
-
-function findProgramAddress(seeds: Uint8Array[], programId: Uint8Array): { address: Uint8Array; bump: number } {
+function findProgramAddress(seeds: Uint8Array[], programId: Uint8Array) {
   for (let bump = 255; bump >= 0; bump--) {
-    const seedsWithBump = [...seeds, new Uint8Array([bump])];
-    const addr = createProgramAddress(seedsWithBump, programId);
+    const addr = createProgramAddress([...seeds, new Uint8Array([bump])], programId);
     if (addr) return { address: addr, bump };
   }
   throw new Error("unable to find PDA");
 }
-
 function getATA(owner: Uint8Array, mint: Uint8Array): Uint8Array {
-  return findProgramAddress(
-    [owner, TOKEN_PROGRAM_ID, mint],
-    ASSOCIATED_TOKEN_PROGRAM_ID,
-  ).address;
+  return findProgramAddress([owner, TOKEN_PROGRAM_ID, mint], ASSOCIATED_TOKEN_PROGRAM_ID).address;
 }
 
-// ---- Compact-u16 (Solana shortvec) ----
+// Wire helpers -----------------------------------------------------------
 function encodeShortVec(n: number): Uint8Array {
-  const out: number[] = [];
-  let v = n;
+  const out: number[] = []; let v = n;
   while (true) {
-    let b = v & 0x7f;
-    v >>>= 7;
+    let b = v & 0x7f; v >>>= 7;
     if (v === 0) { out.push(b); break; }
-    b |= 0x80;
-    out.push(b);
+    b |= 0x80; out.push(b);
   }
   return new Uint8Array(out);
 }
-
 function concat(...arrs: Uint8Array[]): Uint8Array {
-  let total = 0;
-  for (const a of arrs) total += a.length;
+  let total = 0; for (const a of arrs) total += a.length;
   const out = new Uint8Array(total);
-  let o = 0;
-  for (const a of arrs) { out.set(a, o); o += a.length; }
+  let o = 0; for (const a of arrs) { out.set(a, o); o += a.length; }
   return out;
 }
-
 function u64le(n: bigint): Uint8Array {
   const out = new Uint8Array(8);
-  const view = new DataView(out.buffer);
-  view.setBigUint64(0, n, true);
+  new DataView(out.buffer).setBigUint64(0, n, true);
   return out;
 }
 
-// ---- Transaction builder ----
 type AccountMeta = { pubkey: Uint8Array; isSigner: boolean; isWritable: boolean };
 type Instruction = { programId: Uint8Array; keys: AccountMeta[]; data: Uint8Array };
 
@@ -128,74 +110,48 @@ function buildMessage(
   recentBlockhash: Uint8Array,
   instructions: Instruction[],
 ): { message: Uint8Array; accountKeys: Uint8Array[] } {
-  // Collect unique account keys with metadata. Fee payer always first, signer & writable.
   const metas = new Map<string, AccountMeta>();
   const key = (p: Uint8Array) => bs58.encode(p);
-
   const upsert = (m: AccountMeta) => {
     const k = key(m.pubkey);
     const ex = metas.get(k);
     if (!ex) metas.set(k, { ...m });
-    else {
-      ex.isSigner ||= m.isSigner;
-      ex.isWritable ||= m.isWritable;
-    }
+    else { ex.isSigner ||= m.isSigner; ex.isWritable ||= m.isWritable; }
   };
-
   upsert({ pubkey: feePayer, isSigner: true, isWritable: true });
   for (const ix of instructions) {
     for (const k of ix.keys) upsert(k);
     upsert({ pubkey: ix.programId, isSigner: false, isWritable: false });
   }
-
-  // Order: signers-writable, signers-readonly, non-signers-writable, non-signers-readonly.
-  // Fee payer must be index 0.
   const all = [...metas.values()];
   const feePayerKey = key(feePayer);
   all.sort((a, b) => {
     if (key(a.pubkey) === feePayerKey) return -1;
     if (key(b.pubkey) === feePayerKey) return 1;
-    const rank = (m: AccountMeta) =>
-      (m.isSigner ? 0 : 2) + (m.isWritable ? 0 : 1);
+    const rank = (m: AccountMeta) => (m.isSigner ? 0 : 2) + (m.isWritable ? 0 : 1);
     return rank(a) - rank(b);
   });
-
   let numSigners = 0, numReadonlySigners = 0, numReadonlyNonSigners = 0;
   for (const m of all) {
-    if (m.isSigner) {
-      numSigners++;
-      if (!m.isWritable) numReadonlySigners++;
-    } else if (!m.isWritable) numReadonlyNonSigners++;
+    if (m.isSigner) { numSigners++; if (!m.isWritable) numReadonlySigners++; }
+    else if (!m.isWritable) numReadonlyNonSigners++;
   }
-
   const accountKeys = all.map(m => m.pubkey);
   const indexOf = (p: Uint8Array) => accountKeys.findIndex(a => bs58.encode(a) === bs58.encode(p));
-
-  // Compile instructions
   const compiled: Uint8Array[] = [];
   for (const ix of instructions) {
     const programIdIndex = indexOf(ix.programId);
     const accountIndices = new Uint8Array(ix.keys.map(k => indexOf(k.pubkey)));
     compiled.push(concat(
       new Uint8Array([programIdIndex]),
-      encodeShortVec(accountIndices.length),
-      accountIndices,
-      encodeShortVec(ix.data.length),
-      ix.data,
+      encodeShortVec(accountIndices.length), accountIndices,
+      encodeShortVec(ix.data.length), ix.data,
     ));
   }
-
-  // Header
   const header = new Uint8Array([numSigners, numReadonlySigners, numReadonlyNonSigners]);
-
-  // Account keys array
   const keysBlob = concat(encodeShortVec(accountKeys.length), ...accountKeys);
-
-  // Instructions array
   const ixBlob = concat(encodeShortVec(compiled.length), ...compiled);
-
-  const message = concat(header, keysBlob, recentBlockhash, ixBlob);
-  return { message, accountKeys };
+  return { message: concat(header, keysBlob, recentBlockhash, ixBlob), accountKeys };
 }
 
 Deno.serve(async (req) => {
@@ -215,105 +171,91 @@ Deno.serve(async (req) => {
       return bad("solana env missing", 500);
     }
 
-    // ---- Load authority keypair ----
     const raw = SOLANA_MINT_AUTHORITY.trim();
-    let secretKey: Uint8Array;
-    if (raw.startsWith("[")) {
-      secretKey = Uint8Array.from(JSON.parse(raw));
-    } else {
-      secretKey = bs58.decode(raw);
-    }
+    const secretKey: Uint8Array = raw.startsWith("[")
+      ? Uint8Array.from(JSON.parse(raw))
+      : bs58.decode(raw);
     if (secretKey.length !== 64) return bad("authority secret key must be 64 bytes");
-    const privKey = secretKey.slice(0, 32);
-    const authorityPub = secretKey.slice(32, 64); // public key is last 32 bytes of solana keypair format
+    const authPriv = secretKey.slice(0, 32);
+    const authPub  = secretKey.slice(32, 64);
 
-    const mintPub = bs58.decode(SOLANA_SPL_MINT_ADDRESS);
+    const mintPub      = bs58.decode(SOLANA_SPL_MINT_ADDRESS);
     const recipientPub = bs58.decode(recipient);
     if (mintPub.length !== 32 || recipientPub.length !== 32) return bad("invalid pubkey length");
 
-    // ---- Fetch mint decimals ----
+    // Decimals
     const mintAcct = await rpc<any>("getAccountInfo", [
-      SOLANA_SPL_MINT_ADDRESS,
-      { encoding: "base64", commitment: "confirmed" },
+      SOLANA_SPL_MINT_ADDRESS, { encoding: "base64", commitment: "confirmed" },
     ]);
     if (!mintAcct?.value?.data?.[0]) return bad("mint account not found", 500);
     const mintData = Uint8Array.from(atob(mintAcct.value.data[0]), c => c.charCodeAt(0));
-    // SPL Mint layout: decimals at offset 44 (after mint_authority_option(4) + mint_authority(32) + supply(8))
     const decimals = mintData[44];
     const baseUnits = BigInt(Math.round(amt * 10 ** decimals));
     if (baseUnits <= 0n) return bad("amount rounds to zero base units");
 
-    // ---- Derive ATA ----
     const ata = getATA(recipientPub, mintPub);
 
-    // ---- Build instructions ----
-    // 1) ATA-create-idempotent (instruction discriminator = 1)
+    // ── Instructions: recipient pays rent for their OWN ATA ──
+    // CreateIdempotent ATA: funder=recipient (was authority before)
     const createAtaIx: Instruction = {
       programId: ASSOCIATED_TOKEN_PROGRAM_ID,
       keys: [
-        { pubkey: authorityPub, isSigner: true,  isWritable: true  }, // funding
-        { pubkey: ata,          isSigner: false, isWritable: true  }, // ata
+        { pubkey: recipientPub, isSigner: true,  isWritable: true  }, // funder + payer
+        { pubkey: ata,          isSigner: false, isWritable: true  },
         { pubkey: recipientPub, isSigner: false, isWritable: false }, // owner
-        { pubkey: mintPub,      isSigner: false, isWritable: false }, // mint
-        { pubkey: SYSTEM_PROGRAM_ID,  isSigner: false, isWritable: false },
-        { pubkey: TOKEN_PROGRAM_ID,   isSigner: false, isWritable: false },
+        { pubkey: mintPub,      isSigner: false, isWritable: false },
+        { pubkey: SYSTEM_PROGRAM_ID, isSigner: false, isWritable: false },
+        { pubkey: TOKEN_PROGRAM_ID,  isSigner: false, isWritable: false },
       ],
-      data: new Uint8Array([1]), // CreateIdempotent
+      data: new Uint8Array([1]),
     };
-
-    // 2) MintTo (Token instruction tag = 7, then u64 amount LE)
     const mintToIx: Instruction = {
       programId: TOKEN_PROGRAM_ID,
       keys: [
-        { pubkey: mintPub,       isSigner: false, isWritable: true  },
-        { pubkey: ata,           isSigner: false, isWritable: true  },
-        { pubkey: authorityPub,  isSigner: true,  isWritable: false },
+        { pubkey: mintPub, isSigner: false, isWritable: true  },
+        { pubkey: ata,     isSigner: false, isWritable: true  },
+        { pubkey: authPub, isSigner: true,  isWritable: false },
       ],
       data: concat(new Uint8Array([7]), u64le(baseUnits)),
     };
 
-    // ---- Get recent blockhash ----
     const bh = await rpc<any>("getLatestBlockhash", [{ commitment: "finalized" }]);
     const blockhashB58: string = bh.value.blockhash;
+    const lastValidBlockHeight: number = bh.value.lastValidBlockHeight;
     const recentBlockhash = bs58.decode(blockhashB58);
 
-    // ---- Build & sign message ----
-    const { message } = buildMessage(authorityPub, recentBlockhash, [createAtaIx, mintToIx]);
-    const signature = await ed.signAsync(message, privKey);
+    // Recipient = fee payer = account[0] = signature slot 0.
+    const { message, accountKeys } = buildMessage(recipientPub, recentBlockhash, [createAtaIx, mintToIx]);
 
-    // ---- Encode wire transaction ----
-    // [shortvec(numSigs)][sig0..sigN-1][message]
-    const wire = concat(encodeShortVec(1), signature, message);
+    // Find authority's signature slot (must be inside the signer prefix).
+    const authPubB58 = bs58.encode(authPub);
+    const authSigSlot = accountKeys.findIndex(k => bs58.encode(k) === authPubB58);
+    if (authSigSlot < 0) return bad("authority not in account keys", 500);
+
+    // Authority signs the message bytes.
+    const authoritySig = await ed.signAsync(message, authPriv);
+
+    // numSigners = header byte 0
+    const numSigners = message[0];
+    if (authSigSlot >= numSigners) return bad("authority slot is not a signer", 500);
+
+    // Build wire with recipient slot blank (64 zeros) and authority slot filled.
+    const sigBlobs: Uint8Array[] = [];
+    for (let i = 0; i < numSigners; i++) {
+      if (i === authSigSlot) sigBlobs.push(authoritySig);
+      else sigBlobs.push(new Uint8Array(64)); // recipient fills this client-side
+    }
+    const wire = concat(encodeShortVec(numSigners), ...sigBlobs, message);
     const wireB64 = btoa(String.fromCharCode(...wire));
 
-    // ---- Send ----
-    const sigStr = await rpc<string>("sendTransaction", [
-      wireB64,
-      { encoding: "base64", skipPreflight: false, preflightCommitment: "confirmed", maxRetries: 5 },
-    ]);
-
-    // ---- Poll for confirmation (up to ~30s) ----
-    let confirmed = false;
-    for (let i = 0; i < 30; i++) {
-      await new Promise(r => setTimeout(r, 1000));
-      const st = await rpc<any>("getSignatureStatuses", [[sigStr], { searchTransactionHistory: false }]);
-      const s = st?.value?.[0];
-      if (s && (s.confirmationStatus === "confirmed" || s.confirmationStatus === "finalized")) {
-        if (s.err) throw new Error(`tx failed on-chain: ${JSON.stringify(s.err)}`);
-        confirmed = true;
-        break;
-      }
-    }
-    if (!confirmed) {
-      // Return signature anyway — caller can poll separately.
-      return new Response(JSON.stringify({ signature: sigStr, confirmed: false }), {
-        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    return new Response(JSON.stringify({ signature: sigStr, confirmed: true }), {
-      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(JSON.stringify({
+      wire_b64: wireB64,
+      blockhash: blockhashB58,
+      last_valid_block_height: lastValidBlockHeight,
+      ata: bs58.encode(ata),
+      recipient,
+      amount: amt,
+    }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     const msg = String((e as Error)?.message ?? e).slice(0, 500);
     console.error("[bridge-execute-mint] error", msg);

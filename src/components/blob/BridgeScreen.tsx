@@ -1,21 +1,23 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import * as Relay from "@/lib/blobRelay";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  TrendingUpDown, ExternalLink, Loader2, CheckCircle2, AlertCircle, Copy,
+  TrendingUpDown, ExternalLink, Loader2, CheckCircle2, AlertCircle, Copy, Wallet,
 } from "lucide-react";
 import { sha256hex, signData } from "@/lib/blob/crypto";
 import { calcBalance } from "@/lib/blob/chain";
 import { canonicalTxBytes, estimateTxBytes, feeFromRate, memoBytes, to8 } from "@/lib/blob/fees";
 import {
-  BASE_FEE_RATE, MIN_FEE_RATE, MAX_MEMO_BYTES, BLOB_DECIMALS, SOL_ADDR_RE,
+  BASE_FEE_RATE, MIN_FEE_RATE, MAX_MEMO_BYTES, BLOB_DECIMALS,
 } from "@/lib/blob/constants";
 import bridgeCoinsImg from "@/assets/bridge-coins.png";
+import { useWallet, useConnection } from "@solana/wallet-adapter-react";
+import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
+import { Transaction } from "@solana/web3.js";
 
-// Lazy-load the Solana wallet adapter + redeem panel — keeps the heavy
-// @solana/web3.js + wallet-adapter modules out of the initial bridge bundle.
+
 const SolanaProvider = lazy(() => import("./SolanaProvider"));
 const RedeemPanel = lazy(() => import("./RedeemPanel"));
 
@@ -67,59 +69,58 @@ export default function BridgeScreen(props: any) {
         </div>
       </div>
 
-      <Tabs defaultValue="forward" className="space-y-4">
-        <TabsList className="grid grid-cols-2 max-w-md">
-          <TabsTrigger value="forward">BLOB → WBLOB</TabsTrigger>
-          <TabsTrigger value="reverse">WBLOB → BLOB</TabsTrigger>
-        </TabsList>
+      <Suspense fallback={
+        <div className="glass-hi p-10 flex items-center justify-center text-sm text-muted-foreground gap-2">
+          <Loader2 className="w-4 h-4 animate-spin" /> Loading Solana wallet…
+        </div>
+      }>
+        <SolanaProvider endpoint={config?.solanaRpcUrl ?? null}>
+          <Tabs defaultValue="forward" className="space-y-4">
+            <TabsList className="grid grid-cols-2 max-w-md">
+              <TabsTrigger value="forward">BLOB → WBLOB</TabsTrigger>
+              <TabsTrigger value="reverse">WBLOB → BLOB</TabsTrigger>
+            </TabsList>
 
-        <TabsContent value="forward" className="mt-0">
-          <ForwardBridge {...props} config={config} />
-        </TabsContent>
+            <TabsContent value="forward" className="mt-0">
+              <ForwardBridge {...props} config={config} />
+            </TabsContent>
 
-        {/* forceMount keeps RedeemPanel + its polling alive across tab switches,
-            so in-flight redemptions don't get orphaned mid-verification. */}
-        <TabsContent value="reverse" className="mt-0 data-[state=inactive]:hidden" forceMount>
-          <Suspense fallback={
-            <div className="glass-hi p-10 flex items-center justify-center text-sm text-muted-foreground gap-2">
-              <Loader2 className="w-4 h-4 animate-spin" /> Loading Solana wallet…
-            </div>
-          }>
-            <SolanaProvider endpoint={config?.solanaRpcUrl ?? null}>
+            <TabsContent value="reverse" className="mt-0 data-[state=inactive]:hidden" forceMount>
               <RedeemPanel
                 splMintAddress={config?.splMintAddress ?? null}
                 defaultBlobAddress={wallet.address}
               />
-            </SolanaProvider>
-          </Suspense>
-        </TabsContent>
-      </Tabs>
+            </TabsContent>
+          </Tabs>
+        </SolanaProvider>
+      </Suspense>
     </div>
   );
 }
 
-function ForwardBridge({ wallet, chain, mempool, onBroadcast }: any) {
-  const [config, setConfig] = useState<{ bridgeAddress: string; splMintAddress: string | null } | null>(null);
-  const [solAddr, setSolAddr] = useState("");
+function ForwardBridge({ wallet, chain, mempool, onBroadcast, config: cfgProp }: any) {
+  const [config, setConfig] = useState(cfgProp ?? null);
+  useEffect(() => { if (cfgProp) setConfig(cfgProp); }, [cfgProp]);
+
+  const { connection } = useConnection();
+  const solWallet = useWallet();
+  const solPubkey = solWallet.publicKey?.toBase58() ?? "";
+
   const [amt, setAmt] = useState("");
-  const [st, setSt] = useState<"idle" | "signing" | "broadcasting" | "registering" | "waiting" | "minting" | "minted" | "failed">("idle");
+  const [st, setSt] = useState<"idle" | "signing" | "broadcasting" | "registering" | "waiting" | "preparing" | "wallet" | "submitting" | "minted" | "failed">("idle");
   const [err, setErr] = useState("");
   const [feeInfo, setFeeInfo] = useState<{ recommendedFeeRate: number; minFeeRate: number; baseFeeRate: number } | null>(null);
   const [activeRequest, setActiveRequest] = useState<Relay.BridgeRequest | null>(null);
   const [history, setHistory] = useState<Relay.BridgeRequest[]>([]);
   const [copied, setCopied] = useState(false);
+  // Track which blob_tx_ids we've already attempted client-mint on, so the
+  // poll loop doesn't repeatedly re-pop the wallet popup.
+  const [mintAttempted, setMintAttempted] = useState<Set<string>>(new Set());
 
   const balance = calcBalance(wallet.address, chain, mempool);
 
   useEffect(() => {
     let cancelled = false;
-    let cfgTimer: any = null;
-    const loadConfig = async () => {
-      const cfg = await Relay.fetchBridgeConfig();
-      if (cancelled) return;
-      if (cfg) setConfig(cfg);
-      else cfgTimer = setTimeout(loadConfig, 2000);
-    };
     (async () => {
       const [fi, hist] = await Promise.all([
         Relay.fetchFeeInfo(),
@@ -129,12 +130,11 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast }: any) {
       if (fi) setFeeInfo(fi);
       setHistory(hist);
     })();
-    loadConfig();
     const id = setInterval(async () => {
       const hist = await Relay.fetchBridgeHistory(wallet.address);
       if (!cancelled) setHistory(hist);
     }, 15_000);
-    return () => { cancelled = true; clearInterval(id); if (cfgTimer) clearTimeout(cfgTimer); };
+    return () => { cancelled = true; clearInterval(id); };
   }, [wallet.address]);
 
   useEffect(() => {
@@ -143,9 +143,11 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast }: any) {
     const inflight = history.find((h) => h.status === "pending" || h.status === "confirmed" || h.status === "minting");
     if (!inflight) return;
     setActiveRequest(inflight);
-    setSt(inflight.status === "minting" || inflight.status === "confirmed" ? "minting" : "waiting");
+    setSt(inflight.status === "minting" ? "wallet" : "waiting");
   }, [history, activeRequest]);
 
+  // Poll status, and once confirmations reach the threshold, auto-trigger the
+  // co-signed mint. The user only sees one wallet popup.
   useEffect(() => {
     if (!activeRequest) return;
     if (activeRequest.status === "minted" || activeRequest.status === "failed") return;
@@ -159,38 +161,107 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast }: any) {
         const next = prev.filter((item) => item.blob_tx_id !== r.blob_tx_id);
         return [r, ...next];
       });
-      if (r.status === "minted") setSt("minted");
-      else if (r.status === "failed") { setSt("failed"); setErr(r.error || "Mint failed"); }
-      else if (r.status === "minting") setSt("minting");
-      else if (r.status === "confirmed") setSt("minting");
-      else setSt("waiting");
+      if (r.status === "minted") { setSt("minted"); return; }
+      if (r.status === "failed") { setSt("failed"); setErr(r.error || "Mint failed"); return; }
+
+      const ready =
+        (r.status === "confirmed" || r.status === "minting") &&
+        Number(r.confirmations ?? 0) >= Relay.BRIDGE_REQUIRED_CONFIRMATIONS;
+
+      if (ready && !mintAttempted.has(r.blob_tx_id) && solWallet.connected && solWallet.signTransaction) {
+        setMintAttempted((s) => new Set(s).add(r.blob_tx_id));
+        await runClientMint(r);
+      } else if (r.status === "minting") {
+        setSt("wallet");
+      } else {
+        setSt("waiting");
+      }
     };
 
     poll();
     const id = setInterval(poll, 4000);
     return () => { cancelled = true; clearInterval(id); };
-  }, [activeRequest?.blob_tx_id, activeRequest?.status]);
+  }, [activeRequest?.blob_tx_id, activeRequest?.status, solWallet.connected, solWallet.publicKey?.toBase58()]);
+
+  async function runClientMint(r: Relay.BridgeRequest) {
+    setErr("");
+    if (!solWallet.signTransaction || !solWallet.publicKey) {
+      setErr("Connect a Solana wallet to complete the mint");
+      setSt("failed");
+      return;
+    }
+    if (solWallet.publicKey.toBase58() !== r.sol_address) {
+      setErr(`Connect the wallet for ${r.sol_address.slice(0, 8)}…${r.sol_address.slice(-6)} to complete the mint`);
+      setSt("failed");
+      return;
+    }
+
+    try {
+      setSt("preparing");
+      const prep = await Relay.prepareBridgeMint(r.blob_tx_id);
+      if (!prep.ok) { setErr(prep.error); setSt("failed"); return; }
+
+      // Decode partial-signed wire bytes into a Transaction.
+      const wire = Uint8Array.from(atob(prep.data.wire_b64), c => c.charCodeAt(0));
+      const tx = Transaction.from(wire);
+
+      setSt("wallet");
+      const signed = await solWallet.signTransaction(tx);
+
+      setSt("submitting");
+      const sig = await connection.sendRawTransaction(signed.serialize(), {
+        skipPreflight: false,
+        preflightCommitment: "confirmed",
+        maxRetries: 5,
+      });
+
+      // Wait for confirmation, then notify backend.
+      try {
+        await connection.confirmTransaction({
+          signature: sig,
+          blockhash: prep.data.blockhash,
+          lastValidBlockHeight: prep.data.last_valid_block_height,
+        }, "confirmed");
+      } catch {
+        // Even if confirm times out, /submit will verify on chain itself.
+      }
+
+      const sub = await Relay.submitBridgeMint(r.blob_tx_id, sig);
+      if (!sub.ok) { setErr(sub.error); setSt("failed"); return; }
+      setActiveRequest(sub.data);
+      setSt("minted");
+    } catch (e: any) {
+      const msg = e?.message ?? String(e);
+      // User rejection is recoverable — let them retry.
+      setErr(msg);
+      setSt("failed");
+      setMintAttempted((s) => {
+        const next = new Set(s);
+        next.delete(r.blob_tx_id);
+        return next;
+      });
+    }
+  }
 
   const recRate = feeInfo?.recommendedFeeRate ?? BASE_FEE_RATE;
   const activeFeeRate = Math.max(MIN_FEE_RATE, recRate);
   const parsedAmt = (() => { const n = parseFloat(amt); return Number.isFinite(n) && n > 0 ? to8(n) : 0; })();
-  const memoStr = solAddr.trim() ? `sol:${solAddr.trim()}` : "";
+  const memoStr = solPubkey ? `sol:${solPubkey}` : "";
   const memoLen = memoBytes(memoStr);
   const memoOver = memoLen > MAX_MEMO_BYTES;
-  const previewBytes = config && parsedAmt > 0 && !memoOver
+  const previewBytes = config && parsedAmt > 0 && !memoOver && solPubkey
     ? estimateTxBytes(wallet.address, config.bridgeAddress, parsedAmt, Date.now(), activeFeeRate, memoStr)
     : 0;
   const previewFee = previewBytes ? feeFromRate(activeFeeRate, previewBytes) : 0;
   const previewTotal = parsedAmt + previewFee;
 
-  const validSol = SOL_ADDR_RE.test(solAddr.trim());
   const canSubmit =
-    !!config && st === "idle" && validSol && parsedAmt > 0 && !memoOver && previewTotal <= balance;
+    !!config && st === "idle" && !!solPubkey && parsedAmt > 0 && !memoOver && previewTotal <= balance;
 
   async function bridge() {
     setErr("");
     if (!config) { setErr("Bridge not configured"); return; }
-    if (!validSol) { setErr("Invalid Solana address"); return; }
+    if (!solPubkey) { setErr("Connect a Solana wallet first"); return; }
     if (parsedAmt <= 0) { setErr("Invalid amount"); return; }
     if (memoOver) { setErr(`Memo too long (${memoLen}/${MAX_MEMO_BYTES})`); return; }
     if (previewTotal > balance) { setErr("Insufficient balance"); return; }
@@ -223,18 +294,16 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast }: any) {
       setSt("registering");
       const reg = await Relay.registerBridgeRequest({
         blob_tx_id: txid,
-        sol_address: solAddr.trim(),
+        sol_address: solPubkey,
         amount: parsedAmt,
         from_address: wallet.address,
-        
       });
       if (!reg.ok || !reg.data) { setErr(reg.error || "Bridge registration failed"); setSt("failed"); return; }
       setActiveRequest(reg.data);
       setSt(reg.data.status === "minted" ? "minted"
-         : reg.data.status === "minting" ? "minting"
-         : reg.data.status === "confirmed" ? "minting"
+         : reg.data.status === "minting" ? "wallet"
          : "waiting");
-      setAmt(""); setSolAddr("");
+      setAmt("");
     } catch (e) { setErr(String(e)); setSt("failed"); }
   }
 
@@ -257,7 +326,7 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast }: any) {
     const map = {
       pending:   { text: "Waiting for block",                       cls: "text-muted-foreground border-border" },
       confirmed: { text: `Awaiting confirmations (${confs}/${N})`,  cls: "text-primary border-primary/40" },
-      minting:   { text: "Minting on Solana",                       cls: "text-primary border-primary/40" },
+      minting:   { text: "Awaiting wallet",                         cls: "text-primary border-primary/40" },
       minted:    { text: "Minted",                                  cls: "text-[hsl(var(--success,142_70%_45%))] border-[hsl(var(--success,142_70%_45%))]/40" },
       failed:    { text: "Failed",                                  cls: "text-destructive border-destructive/40" },
     } as const;
@@ -275,10 +344,39 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast }: any) {
   return (
     <>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Form */}
         <div className="lg:col-span-2 space-y-4">
           <div className="glass-hi p-5 sm:p-6 space-y-4">
             <div className="label-eyebrow">Bridge BLOB → WBLOB</div>
+
+            {/* Solana wallet connect: required up-front so we can lock the
+                recipient address to the connected wallet. This is what makes
+                the rent-harvesting attack uneconomical — the user's own
+                wallet pays the ATA rent. */}
+            <div className="space-y-1.5">
+              <Label className="text-[10px] tracking-widest uppercase text-muted-foreground font-normal">
+                Solana wallet (recipient)
+              </Label>
+              <div className="flex items-center gap-2 flex-wrap">
+                <WalletMultiButton style={{
+                  background: "hsl(var(--card) / 0.6)",
+                  border: "1px solid hsl(var(--border))",
+                  borderRadius: "0.5rem",
+                  height: "36px",
+                  fontSize: "12px",
+                  padding: "0 12px",
+                  color: "hsl(var(--foreground))",
+                }} />
+                {solPubkey && (
+                  <span className="num text-[10px] text-muted-foreground truncate flex-1">
+                    {solPubkey}
+                  </span>
+                )}
+              </div>
+              <div className="text-[10px] text-muted-foreground flex items-start gap-1.5">
+                <Wallet className="w-3 h-3 mt-0.5 shrink-0" />
+                <span>You will sign the SPL mint with this wallet (covers ~0.002 SOL ATA rent on first use).</span>
+              </div>
+            </div>
 
             <div className="space-y-1.5">
               <Label className="text-[10px] tracking-widest uppercase text-muted-foreground font-normal">
@@ -297,27 +395,6 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast }: any) {
                   {copied ? "Copied" : <><Copy className="w-3 h-3 inline -mt-0.5" /> Copy</>}
                 </button>
               </div>
-              <div className="text-[10px] text-muted-foreground">
-                Funds sent here are bridged automatically — never send manually from another wallet.
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-[10px] tracking-widest uppercase text-muted-foreground font-normal">
-                Solana recipient address
-              </Label>
-              <Input
-                value={solAddr}
-                onChange={(e) => setSolAddr(e.target.value)}
-                placeholder="e.g. 7xKXtg2C…  (base58, 32-44 chars)"
-                className="num text-xs"
-                spellCheck={false}
-                autoComplete="off"
-                disabled={st !== "idle" && st !== "failed" && st !== "minted"}
-              />
-              {solAddr.trim() && !validSol && (
-                <div className="text-[10px] text-destructive">Not a valid Solana address</div>
-              )}
             </div>
 
             <div className="space-y-1.5">
@@ -328,16 +405,9 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast }: any) {
                 <button
                   type="button"
                   onClick={() => {
-                    // Recompute fee at click time so a fee-rate change between
-                    // renders can't make the Max amount slightly off.
-                    const rate = Math.max(
-                      MIN_FEE_RATE,
-                      feeInfo?.recommendedFeeRate ?? BASE_FEE_RATE,
-                    );
-                    const memoNow = solAddr.trim() ? `sol:${solAddr.trim()}` : "";
+                    const rate = Math.max(MIN_FEE_RATE, feeInfo?.recommendedFeeRate ?? BASE_FEE_RATE);
+                    const memoNow = solPubkey ? `sol:${solPubkey}` : "";
                     const bridgeAddr = config?.bridgeAddress ?? wallet.address;
-                    // Try to leave room for the fee on the *max* amount itself.
-                    // Iterate twice since fee depends on the encoded amount.
                     let candidate = balance;
                     for (let i = 0; i < 2; i++) {
                       const bytes = estimateTxBytes(
@@ -411,11 +481,30 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast }: any) {
               ) : st === "registering" ? (
                 <><Loader2 className="w-4 h-4 animate-spin" /> Registering bridge…</>
               ) : st === "waiting" ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Waiting for block…</>
+                <><Loader2 className="w-4 h-4 animate-spin" /> Waiting for confirmations…</>
+              ) : st === "preparing" ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Preparing mint…</>
+              ) : st === "wallet" ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Awaiting wallet…</>
               ) : (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Minting on Solana…</>
+                <><Loader2 className="w-4 h-4 animate-spin" /> Submitting to Solana…</>
               )}
             </button>
+
+            {/* If the auto-trigger missed (user rejected popup, or wallet
+                disconnected), let them retry without re-bridging. */}
+            {activeRequest &&
+              (activeRequest.status === "confirmed" || activeRequest.status === "minting") &&
+              Number(activeRequest.confirmations ?? 0) >= Relay.BRIDGE_REQUIRED_CONFIRMATIONS &&
+              st !== "preparing" && st !== "wallet" && st !== "submitting" && (
+                <button
+                  type="button"
+                  onClick={() => activeRequest && runClientMint(activeRequest)}
+                  className="w-full text-xs px-4 py-2 rounded-full border border-primary/40 text-primary hover:bg-primary/10 transition"
+                >
+                  Complete mint on Solana
+                </button>
+              )}
           </div>
 
           {activeRequest && (
@@ -466,7 +555,6 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast }: any) {
           )}
         </div>
 
-        {/* History */}
         <div className="lg:col-span-1 space-y-2">
           <div className="label-eyebrow px-1">Your bridge history</div>
           {history.length === 0 ? (

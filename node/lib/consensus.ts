@@ -1,5 +1,5 @@
 // Consensus rules. These constants and functions MUST stay byte-for-byte in
-// sync with `supabase/functions/seal-block` and `src/lib/blob/chain.ts`,
+// sync with `src/lib/blob/chain.ts`,
 // otherwise full nodes will produce different block hashes than the rest of
 // the network and fork the chain.
 

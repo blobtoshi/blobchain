@@ -1,3 +1,22 @@
+import { sha256hex } from "./crypto";
+import { to8 } from "./fees";
+import {
+  BLOCK_TIME, INITIAL_REWARD, HALVING_BLOCKS, GENESIS_TIME_MS, TX_FEE,
+} from "./constants";
+import { runtimeSeedForHeightSync } from "./runtimeSeed";
+import { scoreWeight } from "./lottery";
+
+// Mulberry32 PRNG
+export function mkPrng(seed) {
+  let s = (Math.abs(+seed) * 2654435761) >>> 0;
+  return () => {
+    s = (s + 0x6D2B79F5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = t + Math.imul(t ^ (t >>> 7), 61 | t) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 export function getRewardForHeight(height) {
   const halvings = Math.floor(height / HALVING_BLOCKS);
   return Math.min(INITIAL_REWARD / Math.pow(2, halvings), INITIAL_REWARD);
@@ -57,12 +76,18 @@ export function calcTotalSupply(chain) {
   return chain.reduce((s, b) => s + (b.reward || 0), 0);
 }
 
+// Weighted lottery winner selection. Sorted by address for determinism.
+// Uses the shared `scoreWeight()` curve — heavily biased toward high
+// scores, with sub-200 entries crushed to ~zero to neutralise script
+// bots that die after the first obstacle.
+//
+// MUST stay in sync with node/lib/consensus.ts pickWinner.
 export function pickWinner(entries, blockSeed) {
   if (!entries || entries.length === 0) return null;
   const sorted = [...entries].sort((a, b) => a.address < b.address ? -1 : 1);
-  const weighted = sorted.map(e => Math.pow(Number(e.score || 0), 2.5));
+  const weighted = sorted.map(e => scoreWeight(Number(e.score || 0)));
   const total = weighted.reduce((s, w) => s + w, 0);
-  if (total === 0) return sorted[0];
+  if (total <= 0) return sorted[0];
   const rng = mkPrng(blockSeed);
   let target = rng() * total;
   for (let i = 0; i < sorted.length; i++) {
@@ -73,7 +98,8 @@ export function pickWinner(entries, blockSeed) {
 }
 
 export function winProbability(score, allEntries) {
-  const total = allEntries.reduce((s, e) => s + Math.pow(Number(e.score || 0), 2.5), 0);
-  if (total === 0) return 0;
-  return +((Math.pow(Number(score), 2.5) / total) * 100).toFixed(1);
+  const total = allEntries.reduce((s, e) => s + scoreWeight(Number(e.score || 0)), 0);
+  if (total <= 0) return 0;
+  const myW = scoreWeight(Number(score));
+  return +((myW / total) * 100).toFixed(1);
 }

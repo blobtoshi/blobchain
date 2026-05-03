@@ -49,7 +49,7 @@ export function getBlockInfo(chain?: any[], hasEntry?: boolean) {
 export async function computeBlockHash(b) {
   const header = [
     b.height, b.previousHash, b.timestamp,
-    b.winner || "null", b.winnerScore, b.reward, b.seed,
+    b.winner ?? "null", b.winnerScore, b.reward, b.seed,
     b.transactions.length,
   ].join("|");
   return sha256hex(header);

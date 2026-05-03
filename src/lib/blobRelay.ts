@@ -427,6 +427,45 @@ export async function pollBridgeRequest(blob_tx_id: string): Promise<BridgeReque
   } catch { return null; }
 }
 
+export async function prepareBridgeMint(blob_tx_id: string): Promise<
+  { ok: true; data: { wire_b64: string; blockhash: string; last_valid_block_height: number; ata: string; recipient: string; amount: number } }
+  | { ok: false; error: string }
+> {
+  try {
+    const url = `${(import.meta as any).env.VITE_SUPABASE_URL}/functions/v1/bridge-mint/prepare`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: (import.meta as any).env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      },
+      body: JSON.stringify({ blob_tx_id }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok || !j?.wire_b64) return { ok: false, error: j?.error || `prepare failed (${res.status})` };
+    return { ok: true, data: j };
+  } catch (e) { return { ok: false, error: String(e) }; }
+}
+
+export async function submitBridgeMint(blob_tx_id: string, sol_signature: string): Promise<
+  { ok: true; data: BridgeRequest } | { ok: false; error: string }
+> {
+  try {
+    const url = `${(import.meta as any).env.VITE_SUPABASE_URL}/functions/v1/bridge-mint/submit`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: (import.meta as any).env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      },
+      body: JSON.stringify({ blob_tx_id, sol_signature }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, error: j?.error || `submit failed (${res.status})` };
+    return { ok: true, data: j as BridgeRequest };
+  } catch (e) { return { ok: false, error: String(e) }; }
+}
+
 export async function fetchBridgeHistory(address?: string): Promise<BridgeRequest[]> {
   let q = supabase.from("bridge_requests").select("*").order("created_at", { ascending: false }).limit(50);
   if (address) q = q.eq("from_address", address);

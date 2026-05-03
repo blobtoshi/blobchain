@@ -41,7 +41,7 @@ export const MEMO_PROGRAM_ID = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
 // BRIDGE_BLOB_PRIVATE_KEY secret on the bridge edge functions, which
 // self-check that their loaded private key derives this exact address on
 // every redeem call.
-export const BRIDGE_ADDRESS = "13yfvVYknMVa6xoKhVSrFHrshBBQv6rbvm";
+export const BRIDGE_ADDRESS = "1E4QWFYb5Pqj8iAV2be8Ee88yEbvhU9iTs";
 
 export const GENESIS = {
   height: 0,

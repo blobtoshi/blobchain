@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, memo } from "react";
-import { Maximize2, Minimize2 } from "lucide-react";
+import { Maximize2, Minimize2, RotateCw } from "lucide-react";
 import * as Relay from "@/lib/blobRelay";
 import { CW, CH, GY, PX } from "@/lib/blob/constants";
 import {
@@ -10,6 +10,7 @@ import {
   generateLevelPure, initialState, tick,
   encodeInputs, hashInputs, ENGINE_VERSION,
 } from "@/lib/blob/simulator";
+import { ENTRY_REVEAL_WINDOW_SECONDS } from "@/lib/blob/entryPow";
 
 type InputEv = { f: number; t: number };
 type SimState = ReturnType<typeof initialState>;
@@ -19,9 +20,46 @@ type Trail = { x: number; y: number; action: string };
 const TRAIL_LEN = 4;
 const MAX_PARTICLES = 96;
 
+// Game world is a fixed 780×360 because the consensus simulator hard-codes
+// those numbers (see node/lib/simulator.ts and src/lib/blob/simulator.ts —
+// `780 + 8` literals). We render that world at the device's actual display
+// size with a properly-sized backing buffer so it stays crisp at any aspect
+// ratio. The DPR cap keeps the GPU load reasonable on cheap phones.
+const MAX_DPR = 2;
+
+// Fixed simulation timestep — independent of display refresh rate. The old
+// loop ticked once per requestAnimationFrame, so the game ran 2× speed on
+// 120 Hz screens and slow-mo on a 30 fps phone. With this we run a stable
+// 60 sim-ticks/sec everywhere, regardless of how often the screen renders.
+const SIM_HZ = 60;
+const FRAME_MS = 1000 / SIM_HZ;
+const MAX_FRAME_DT = 250; // clamp on tab-switch / long jank, prevent spiral
+
+function isIOS(): boolean {
+  if (typeof navigator === "undefined") return false;
+  if (/iP(hone|ad|od)/.test(navigator.userAgent)) return true;
+  // iPad on iOS 13+ reports as Mac; sniff via touch support.
+  return navigator.userAgent.includes("Mac") && "ontouchend" in document;
+}
+
+type FsState =
+  | { mode: "off" }
+  | { mode: "native" }       // document.fullscreenElement is set
+  | { mode: "ios-pseudo" };  // CSS pseudo-fullscreen on iOS Safari
+
 function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
   const blockTimeRef = useRef(blockTime);
   blockTimeRef.current = blockTime;
+
+  // Commit phase has closed once we're inside the last
+  // ENTRY_REVEAL_WINDOW_SECONDS of the block window. Past that point the
+  // node rejects new commits, so we refuse to start (or restart) a run —
+  // the player would just burn a run for nothing. In-progress runs are
+  // unaffected: they finish naturally and submit through the normal path,
+  // which the protocol decides to accept or reject.
+  const remaining = blockTime?.remaining ?? blockInfo.remaining ?? Infinity;
+  const commitClosed = remaining <= ENTRY_REVEAL_WINDOW_SECONDS;
+
   const cvs = useRef<HTMLCanvasElement | null>(null);
   const raf = useRef<number | null>(null);
   const stateRef = useRef<SimState | null>(null);
@@ -32,33 +70,105 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
   const renderRef = useRef<{ lastCombo: number }>({ lastCombo: 0 });
   const [gs, setGs] = useState({ status: "idle", score: 0, combo: 0 });
   const wrapRef = useRef<HTMLDivElement | null>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
 
+  const [fs, setFs] = useState<FsState>({ mode: "off" });
+  const [isPortrait, setIsPortrait] = useState(false);
+
+  // Track native fullscreen exits triggered by Esc / browser chrome so our
+  // state stays in sync.
   useEffect(() => {
-    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    const onChange = () => {
+      const native = !!(document.fullscreenElement
+        || (document as any).webkitFullscreenElement);
+      setFs(prev => {
+        if (native) return { mode: "native" };
+        if (prev.mode === "native") return { mode: "off" };
+        return prev;
+      });
+    };
     document.addEventListener("fullscreenchange", onChange);
-    return () => document.removeEventListener("fullscreenchange", onChange);
+    document.addEventListener("webkitfullscreenchange", onChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange);
+      document.removeEventListener("webkitfullscreenchange", onChange);
+    };
   }, []);
 
-  const toggleFullscreen = useCallback(() => {
+  // Track orientation while in fullscreen so we can show the rotate-prompt
+  // / apply iOS CSS rotation.
+  useEffect(() => {
+    const update = () => {
+      if (typeof window === "undefined") return;
+      setIsPortrait(window.matchMedia("(orientation: portrait)").matches);
+    };
+    update();
+    const mq = window.matchMedia("(orientation: portrait)");
+    const onChange = () => update();
+    mq.addEventListener?.("change", onChange);
+    window.addEventListener("orientationchange", onChange);
+    window.addEventListener("resize", onChange);
+    return () => {
+      mq.removeEventListener?.("change", onChange);
+      window.removeEventListener("orientationchange", onChange);
+      window.removeEventListener("resize", onChange);
+    };
+  }, []);
+
+  const enterFullscreen = useCallback(async () => {
+    const el = wrapRef.current as (HTMLDivElement & {
+      webkitRequestFullscreen?: () => Promise<void>;
+    }) | null;
+    if (!el) return;
+    // iOS Safari can't fullscreen non-video elements — go straight to pseudo.
+    if (isIOS()) {
+      setFs({ mode: "ios-pseudo" });
+      return;
+    }
+    const req = el.requestFullscreen?.bind(el) ?? el.webkitRequestFullscreen?.bind(el);
+    if (!req) {
+      setFs({ mode: "ios-pseudo" });
+      return;
+    }
     try {
-      if (!document.fullscreenElement) {
-        const el = wrapRef.current as (HTMLDivElement & {
-          webkitRequestFullscreen?: () => Promise<void>;
-        }) | null;
-        if (!el) return;
-        const req = el.requestFullscreen?.bind(el) ?? el.webkitRequestFullscreen?.bind(el);
-        const p = req?.();
-        if (p && typeof p.catch === "function") p.catch(() => { /* ignore */ });
-      } else {
+      await req();
+      setFs({ mode: "native" });
+      // Lock to landscape on devices that support it (Android Chrome). The
+      // call only resolves while we're inside fullscreen, and it rejects
+      // silently on desktop / iOS — fine, we just ignore the rejection.
+      try {
+        await (screen.orientation as any)?.lock?.("landscape");
+      } catch { /* orientation lock not supported here */ }
+    } catch {
+      // Some browsers reject requestFullscreen if not called from a true
+      // user-gesture; fall back to pseudo so we still fill the screen.
+      setFs({ mode: "ios-pseudo" });
+    }
+  }, []);
+
+  const exitFullscreen = useCallback(async () => {
+    try {
+      if (document.fullscreenElement || (document as any).webkitFullscreenElement) {
         const exit = (document as Document & {
           webkitExitFullscreen?: () => Promise<void>;
         });
-        const p = exit.exitFullscreen?.() ?? exit.webkitExitFullscreen?.();
-        if (p && typeof p.catch === "function") p.catch(() => { /* ignore */ });
+        await (exit.exitFullscreen?.() ?? exit.webkitExitFullscreen?.());
       }
     } catch { /* ignore */ }
+    try { (screen.orientation as any)?.unlock?.(); } catch { /* ignore */ }
+    setFs({ mode: "off" });
   }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    if (fs.mode === "off") void enterFullscreen();
+    else void exitFullscreen();
+  }, [fs.mode, enterFullscreen, exitFullscreen]);
+
+  const isFullscreen = fs.mode !== "off";
+  const iosFs = fs.mode === "ios-pseudo";
+  // Apply iOS CSS rotation only when we're in iOS pseudo-fullscreen and
+  // the device is held in portrait. Once the user rotates physically, the
+  // `isPortrait` flag flips and the rotation is removed.
+  const applyIosRotate = iosFs && isPortrait;
 
   const level = useRef(generateLevelPure(blockInfo.seed));
   const bgNodes = useRef(Array.from({ length: 12 }, () => ({
@@ -134,7 +244,67 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
     }
   }, [blockInfo, wallet, onEntrySubmit]);
 
+  // ── Canvas sizing ──────────────────────────────────────────────────────
+  // The visible canvas size is whatever the parent box gives us, preserving
+  // the 780/360 aspect ratio (letterboxed if the container doesn't match).
+  // The backing buffer is sized at displaySize × DPR (capped) so the canvas
+  // is sharp at any zoom / fullscreen / device pixel density without the
+  // browser bilinear-blurring a fixed 780×360 buffer up to 1080p.
+  const fitCanvas = useCallback(() => {
+    const canvas = cvs.current;
+    const wrap = wrapRef.current;
+    if (!canvas || !wrap) return;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
+    // For natural-flow (non-fullscreen) the wrap defines width via aspect-ratio.
+    // For fullscreen the wrap fills the screen and we fit-contain inside.
+    const rect = canvas.getBoundingClientRect();
+    let cssW = rect.width;
+    let cssH = rect.height;
+    if (cssW <= 0 || cssH <= 0) return;
+
+    // Re-fit to preserve aspect ratio strictly (some flex+rotate combinations
+    // can briefly hand us a non-conforming box).
+    const worldAspect = CW / CH;
+    const have = cssW / cssH;
+    if (have > worldAspect) cssW = cssH * worldAspect;
+    else                    cssH = cssW / worldAspect;
+
+    const bufW = Math.max(1, Math.round(cssW * dpr));
+    const bufH = Math.max(1, Math.round(cssH * dpr));
+    if (canvas.width !== bufW)  canvas.width  = bufW;
+    if (canvas.height !== bufH) canvas.height = bufH;
+  }, []);
+
+  // Re-fit on mount, on resize, on orientation change, on fullscreen toggle,
+  // and whenever the iOS-rotate flag flips.
+  useEffect(() => {
+    fitCanvas();
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const ro = new ResizeObserver(() => fitCanvas());
+    ro.observe(wrap);
+    const onResize = () => fitCanvas();
+    window.addEventListener("orientationchange", onResize);
+    window.addEventListener("resize", onResize);
+    document.addEventListener("fullscreenchange", onResize);
+    document.addEventListener("webkitfullscreenchange", onResize);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("orientationchange", onResize);
+      window.removeEventListener("resize", onResize);
+      document.removeEventListener("fullscreenchange", onResize);
+      document.removeEventListener("webkitfullscreenchange", onResize);
+    };
+  }, [fitCanvas, isFullscreen, applyIosRotate]);
+
   const startRun = useCallback(() => {
+    // Hard gate: refuse to start a new run once the commit phase has
+    // ended. Covers the in-game "Run again" / "Start run" buttons and the
+    // canvas tap-to-start handler. The MineHero LAUNCH button has its own
+    // gate; this is the second line of defence for users who are already
+    // inside the game when the window closes.
+    if (commitClosed) return;
     if (raf.current != null) cancelAnimationFrame(raf.current);
     jRef.current = false; dRef.current = false;
     stRef.current = "playing";
@@ -147,6 +317,7 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
 
     const canvas = cvs.current;
     if (!canvas) return;
+    fitCanvas();
     const ctx = canvas.getContext("2d", { alpha: false })!;
     ctx.imageSmoothingEnabled = false;
 
@@ -259,15 +430,18 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
         const duck = p.action === "duck";
         const baseW = duck ? 78 : 64;
         const baseH = duck ? 46 : 72;
+        // Use save+translate+scale (NOT setTransform) so the outer DPR/world
+        // scale set up at the top of draw() is preserved.
         ctx.save();
         for (let i = trailCount - 1; i >= 1; i--) {
           const tr = trailBuf[(trailHead + i) % TRAIL_LEN];
           ctx.globalAlpha = (1 - i / trailCount) * 0.28;
-          ctx.setTransform(1, 0, 0, p.sq, tr.x - i * 6, tr.y);
+          ctx.save();
+          ctx.translate(tr.x - i * 6, tr.y);
+          ctx.scale(1, p.sq);
           ctx.drawImage(_blobImg, -baseW / 2, -baseH / 2, baseW, baseH);
+          ctx.restore();
         }
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.globalAlpha = 1;
         ctx.restore();
       } else {
         trailCount = 0;
@@ -275,6 +449,17 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
     }
 
     function draw() {
+      // Map world coords (CW × CH) → backing buffer (canvas.width × canvas.height).
+      // Reset transform first, then apply DPR/world scale. Letterbox bands are
+      // the canvas background colour — `alpha:false` plus the wrap's bg fills
+      // them naturally.
+      const sx = canvas.width / CW;
+      const sy = canvas.height / CH;
+      // fitCanvas() already locked the aspect ratio so sx ≈ sy. Use the
+      // smaller to be safe against rounding and avoid clipping.
+      const s = Math.min(sx, sy);
+      ctx.setTransform(s, 0, 0, s, 0, 0);
+
       const p = state.player;
       const nodes = bgNodes.current;
       for (let i = 0; i < nodes.length; i++) {
@@ -301,8 +486,8 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
           const pt = parts[i];
           if (pt.life <= 0) continue;
           ctx.globalAlpha = pt.life;
-          const s = pt.sz * 2;
-          ctx.drawImage(particleSprite, pt.x - s, pt.y - s, s * 2, s * 2);
+          const sz = pt.sz * 2;
+          ctx.drawImage(particleSprite, pt.x - sz, pt.y - sz, sz * 2, sz * 2);
         }
         ctx.restore();
       }
@@ -310,8 +495,11 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
       drawHUD();
     }
 
-    function loop() {
-      if (stRef.current !== "playing") return;
+    let acc = 0;
+    let last = performance.now();
+    let comboChanged = false;
+
+    function stepOneTick(): boolean {
       const targetFrame = state.frame + 1;
       const queuedAtFrame: InputEv[] = [];
       for (let i = inputsRef.current.length - 1; i >= 0 && inputsRef.current[i].f === targetFrame; i--) {
@@ -325,10 +513,47 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
       if (!alive) {
         spawnParts(PX, state.player.y, "#ff2244", 18);
         spawnParts(PX, state.player.y, "#00ffcc", 8);
+        return false;
+      }
+      for (let i = 0; i < MAX_PARTICLES; i++) {
+        const pt = parts[i];
+        if (pt.life <= 0) continue;
+        pt.x += pt.vx; pt.y += pt.vy; pt.vy += .18; pt.life -= .028;
+      }
+      const lastCombo = renderRef.current.lastCombo;
+      if (
+        (pickedThisFrame > 0 && state.combo !== lastCombo) ||
+        (lastCombo > 0 && state.combo === 0)
+      ) {
+        renderRef.current.lastCombo = state.combo;
+        // Defer the React state update outside the inner sim loop so combos
+        // crossed in a single render frame only flush one setGs call.
+        comboChanged = true;
+      }
+      return true;
+    }
+
+    function loop(now: number) {
+      if (stRef.current !== "playing") return;
+      const dt = Math.min(now - last, MAX_FRAME_DT);
+      last = now;
+      acc += dt;
+      let died = false;
+      // Run as many fixed-timestep ticks as the elapsed time covers. Cap the
+      // catch-up to 4 ticks/render so a hitch doesn't spiral into a 100ms
+      // simulation burst that compounds into more lag.
+      let ticksThisRender = 0;
+      while (acc >= FRAME_MS && ticksThisRender < 4) {
+        acc -= FRAME_MS;
+        ticksThisRender++;
+        if (!stepOneTick()) { died = true; break; }
+      }
+      if (died) {
         stRef.current = "dead";
         const finalScore = state.score;
         setGs({ status: "dead", score: finalScore, combo: 0 });
         renderRef.current.lastCombo = 0;
+        // One final draw so the death frame includes the explosion particles.
         for (let i = 0; i < MAX_PARTICLES; i++) {
           const pt = parts[i];
           if (pt.life <= 0) continue;
@@ -338,25 +563,16 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
         void submitRun(state);
         return;
       }
-      for (let i = 0; i < MAX_PARTICLES; i++) {
-        const pt = parts[i];
-        if (pt.life <= 0) continue;
-        pt.x += pt.vx; pt.y += pt.vy; pt.vy += .18; pt.life -= .028;
-      }
       draw();
-      const lastCombo = renderRef.current.lastCombo;
-      if (
-        (pickedThisFrame > 0 && state.combo !== lastCombo) ||
-        (lastCombo > 0 && state.combo === 0)
-      ) {
-        renderRef.current.lastCombo = state.combo;
+      if (comboChanged) {
+        comboChanged = false;
         setGs(prev => ({ ...prev, score: state.score, combo: state.combo }));
       }
       raf.current = requestAnimationFrame(loop);
     }
 
     raf.current = requestAnimationFrame(loop);
-  }, [blockInfo, submitRun]);
+  }, [blockInfo, submitRun, fitCanvas, commitClosed]);
 
   useEffect(() => {
     startRun();
@@ -366,12 +582,57 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
 
   const onTapStart = (e: React.TouchEvent | React.MouseEvent) => {
     e.preventDefault();
-    if (gs.status === "idle" || gs.status === "dead") { startRun(); return; }
+    if (gs.status === "idle" || gs.status === "dead") {
+      // Same gate as the buttons — don't let a tap restart a run after
+      // the commit window closes.
+      if (commitClosed) return;
+      startRun();
+      return;
+    }
     if (!jRef.current) { jRef.current = true; recordEvent(0); }
   };
   const onTapEnd = () => {
     if (jRef.current) { jRef.current = false; recordEvent(1); }
   };
+
+  // Wrapper layout. Three layouts share most styles:
+  //  • normal     — inline, 100% wide, aspect-locked at 780/360
+  //  • fullscreen — fixed inset-0, flex-centred frame that fits the screen
+  //                 while preserving the 780/360 aspect (letterboxing if
+  //                 the screen aspect doesn't match)
+  //  • iOS rotate — same as fullscreen but the inner frame is rotated 90°
+  //                 so iPhone users in portrait still get a landscape view.
+  const wrapClass = isFullscreen
+    ? "fixed inset-0 z-50 bg-background flex items-center justify-center overflow-hidden"
+    : "relative overflow-hidden border border-border/50 rounded-2xl";
+  const wrapStyle: React.CSSProperties = isFullscreen
+    ? { lineHeight: 0 }
+    : { lineHeight: 0, boxShadow: "0 20px 60px hsl(220 50% 2% / 0.6)" };
+
+  // Inner game frame — this is what the canvas actually fills. In normal
+  // and standard-fullscreen modes it's just the full available space with
+  // aspect locked. On iOS in portrait we rotate it 90° and swap the
+  // dimensions (100dvh × matched-aspect height) to fake landscape.
+  const frameStyle: React.CSSProperties = (() => {
+    if (!isFullscreen) {
+      return { width: "100%", aspectRatio: `${CW} / ${CH}` };
+    }
+    if (applyIosRotate) {
+      // 100dvh = the longer screen dim (since we're in portrait) → becomes
+      // the rotated frame's "width". Height follows from the world aspect.
+      return {
+        width: "100dvh",
+        height: `calc(100dvh * ${CH} / ${CW})`,
+        transform: "rotate(90deg)",
+        transformOrigin: "center",
+      };
+    }
+    // Standard fullscreen: fit the screen, preserve aspect.
+    return {
+      width: "min(100vw, calc(100dvh * 780 / 360))",
+      height: "min(100dvh, calc(100vw * 360 / 780))",
+    };
+  })();
 
   return (
     <div className="space-y-2">
@@ -381,10 +642,7 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
             type="button"
             aria-label="Enter fullscreen"
             onClick={toggleFullscreen}
-            onTouchEnd={(e) => {
-              e.preventDefault();
-              toggleFullscreen();
-            }}
+            onTouchEnd={(e) => { e.preventDefault(); toggleFullscreen(); }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-background/60 backdrop-blur-sm border border-accent/40 text-accent text-[10px] tracking-[0.2em] uppercase hover:bg-accent/20 active:scale-95 transition shadow-[0_0_18px_hsl(var(--accent)/0.25)]"
           >
             <Maximize2 className="w-3.5 h-3.5" />
@@ -392,92 +650,134 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
           </button>
         </div>
       )}
-      <div
-        ref={wrapRef}
-        className={`relative overflow-hidden border border-border/50 ${isFullscreen ? "rounded-none w-screen h-screen flex items-center justify-center bg-background" : "rounded-2xl"}`}
-        style={{ lineHeight: 0, boxShadow: isFullscreen ? "none" : "0 20px 60px hsl(220 50% 2% / 0.6)" }}
-      >
-        <canvas ref={cvs} width={CW} height={CH}
-          style={{
-            display: "block",
-            width: isFullscreen ? "auto" : "100%",
-            height: isFullscreen ? "100%" : "auto",
-            maxWidth: "100%",
-            maxHeight: "100%",
-            touchAction: "none",
-          }}
-          onTouchStart={onTapStart}
-          onTouchEnd={onTapEnd}
-          onTouchCancel={onTapEnd}
-        />
+      <div ref={wrapRef} className={wrapClass} style={wrapStyle}>
+        <div style={{ position: "relative", ...frameStyle }}>
+          <canvas
+            ref={cvs}
+            style={{
+              display: "block",
+              width: "100%",
+              height: "100%",
+              touchAction: "none",
+              imageRendering: "auto",
+            }}
+            onTouchStart={onTapStart}
+            onTouchEnd={onTapEnd}
+            onTouchCancel={onTapEnd}
+            onMouseDown={onTapStart}
+            onMouseUp={onTapEnd}
+          />
+          {gs.status === "playing" && (
+            <button
+              type="button"
+              aria-label="Duck"
+              onTouchStart={(e) => { e.preventDefault(); if (!dRef.current) { dRef.current = true; recordEvent(2); } }}
+              onTouchEnd={(e) => { e.preventDefault(); if (dRef.current) { dRef.current = false; recordEvent(3); } }}
+              onTouchCancel={() => { if (dRef.current) { dRef.current = false; recordEvent(3); } }}
+              onMouseDown={(e) => { e.preventDefault(); if (!dRef.current) { dRef.current = true; recordEvent(2); } }}
+              onMouseUp={() => { if (dRef.current) { dRef.current = false; recordEvent(3); } }}
+              onMouseLeave={() => { if (dRef.current) { dRef.current = false; recordEvent(3); } }}
+              onContextMenu={(e) => e.preventDefault()}
+              className="absolute bottom-3 right-3 select-none px-4 py-2 rounded-full bg-background/60 backdrop-blur-sm border border-accent/40 text-accent text-xs font-semibold tracking-[0.2em] shadow-[0_0_18px_hsl(var(--accent)/0.25)] active:bg-accent/30 active:scale-95 transition"
+              style={{ touchAction: "none" }}
+            >
+              ↓ DUCK
+            </button>
+          )}
+          {gs.status === "idle" && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
+              <div className="text-xs tracking-[0.3em] text-muted-foreground mb-2">READY</div>
+              <div className="text-2xl font-semibold text-foreground mb-1">Tap to start running</div>
+              <div className="text-xs text-muted-foreground mb-6">SPACE / ↑ jump · ↓ duck · Ƀ +50 pts</div>
+              {commitClosed ? (
+                <div className="flex flex-col items-center gap-2">
+                  <button
+                    type="button"
+                    disabled
+                    aria-disabled="true"
+                    className="px-8 py-3 rounded-full bg-muted/20 border border-border/40 text-muted-foreground/70 text-sm font-semibold tracking-wide opacity-70 cursor-not-allowed"
+                  >
+                    COMMIT PHASE ENDED
+                  </button>
+                  <div className="text-[10px] tracking-[0.2em] text-muted-foreground/60 uppercase">
+                    Wait for block #{blockInfo.height + 1}
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={startRun}
+                  className="px-8 py-3 rounded-full bg-primary text-primary-foreground text-sm font-semibold tracking-wide hover:scale-[1.02] transition-transform shadow-[0_0_30px_hsl(var(--primary)/0.4)]"
+                >
+                  Start run
+                </button>
+              )}
+            </div>
+          )}
+          {gs.status === "dead" && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/85 backdrop-blur-sm">
+              <div className="text-[10px] tracking-[0.3em] text-destructive/80 mb-2">FORKED</div>
+              <div className="num text-4xl sm:text-6xl font-semibold leading-none drop-shadow-[0_0_24px_hsl(var(--primary)/0.4)] text-cyan-100">
+                {gs.score.toLocaleString()}
+              </div>
+              <div className="text-xs text-muted-foreground mb-6">Block closes in {blockTimeRef.current?.remaining ?? blockInfo.remaining ?? 0}s · Replay sealed for verification</div>
+              {commitClosed ? (
+                <div className="flex flex-col items-center gap-2">
+                  <button
+                    type="button"
+                    disabled
+                    aria-disabled="true"
+                    className="px-8 py-3 rounded-full bg-muted/20 border border-border/40 text-muted-foreground/70 text-sm font-semibold tracking-wide opacity-70 cursor-not-allowed"
+                  >
+                    COMMIT PHASE ENDED
+                  </button>
+                  <div className="text-[10px] tracking-[0.2em] text-muted-foreground/60 uppercase">
+                    New entries reopen for block #{blockInfo.height + 1}
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={startRun}
+                  className="px-8 py-3 rounded-full bg-primary text-primary-foreground text-sm font-semibold tracking-wide hover:scale-[1.02] transition-transform shadow-[0_0_30px_hsl(var(--primary)/0.4)]"
+                >
+                  Run again
+                </button>
+              )}
+            </div>
+          )}
+        </div>
         {isFullscreen && (
           <button
             type="button"
             aria-label="Exit fullscreen"
             onClick={toggleFullscreen}
             onTouchEnd={(e) => { e.preventDefault(); toggleFullscreen(); }}
-            className="absolute top-3 right-3 z-10 p-2 rounded-full bg-background/60 backdrop-blur-sm border border-accent/40 text-accent hover:bg-accent/20 active:scale-95 transition shadow-[0_0_18px_hsl(var(--accent)/0.25)]"
+            className="absolute top-3 right-3 z-20 p-2 rounded-full bg-background/60 backdrop-blur-sm border border-accent/40 text-accent hover:bg-accent/20 active:scale-95 transition shadow-[0_0_18px_hsl(var(--accent)/0.25)]"
           >
             <Minimize2 className="w-4 h-4" />
           </button>
         )}
-        {gs.status === "playing" && (
-          <button
-            type="button"
-            aria-label="Duck"
-            onTouchStart={(e) => { e.preventDefault(); if (!dRef.current) { dRef.current = true; recordEvent(2); } }}
-            onTouchEnd={(e) => { e.preventDefault(); if (dRef.current) { dRef.current = false; recordEvent(3); } }}
-            onTouchCancel={() => { if (dRef.current) { dRef.current = false; recordEvent(3); } }}
-            onMouseDown={(e) => { e.preventDefault(); if (!dRef.current) { dRef.current = true; recordEvent(2); } }}
-            onMouseUp={() => { if (dRef.current) { dRef.current = false; recordEvent(3); } }}
-            onMouseLeave={() => { if (dRef.current) { dRef.current = false; recordEvent(3); } }}
-            onContextMenu={(e) => e.preventDefault()}
-            className="absolute bottom-3 right-3 select-none px-4 py-2 rounded-full bg-background/60 backdrop-blur-sm border border-accent/40 text-accent text-xs font-semibold tracking-[0.2em] shadow-[0_0_18px_hsl(var(--accent)/0.25)] active:bg-accent/30 active:scale-95 transition"
-            style={{ touchAction: "none" }}
-          >
-            ↓ DUCK
-          </button>
-        )}
-        {gs.status === "idle" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
-            <div className="text-xs tracking-[0.3em] text-muted-foreground mb-2">READY</div>
-            <div className="text-2xl font-semibold text-foreground mb-1">Tap to start running</div>
-            <div className="text-xs text-muted-foreground mb-6">SPACE / ↑ jump · ↓ duck · Ƀ +50 pts</div>
-            <button
-              onClick={startRun}
-              className="px-8 py-3 rounded-full bg-primary text-primary-foreground text-sm font-semibold tracking-wide hover:scale-[1.02] transition-transform shadow-[0_0_30px_hsl(var(--primary)/0.4)]"
-            >
-              Start run
-            </button>
-          </div>
-        )}
-        {gs.status === "dead" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/85 backdrop-blur-sm">
-            <div className="text-[10px] tracking-[0.3em] text-destructive/80 mb-2">FORKED</div>
-            <div className="num text-4xl sm:text-6xl font-semibold leading-none drop-shadow-[0_0_24px_hsl(var(--primary)/0.4)] text-cyan-100">
-              {gs.score.toLocaleString()}
-            </div>
-            <div className="text-xs text-muted-foreground mb-6">Block closes in {blockTimeRef.current?.remaining ?? blockInfo.remaining ?? 0}s · Replay sealed for verification</div>
-            <button
-              onClick={startRun}
-              className="px-8 py-3 rounded-full bg-primary text-primary-foreground text-sm font-semibold tracking-wide hover:scale-[1.02] transition-transform shadow-[0_0_30px_hsl(var(--primary)/0.4)]"
-            >
-              Run again
-            </button>
-          </div>
-        )}
       </div>
-      <div className="flex justify-center gap-6 text-[10px] tracking-[0.2em] text-muted-foreground/70 uppercase">
-        <span>Space / ↑ Jump</span>
-        <span>↓ Duck</span>
-        <span>Ƀ +50 pts</span>
-      </div>
+      {!isFullscreen && (
+        <div className="flex justify-center gap-6 text-[10px] tracking-[0.2em] text-muted-foreground/70 uppercase">
+          <span>Space / ↑ Jump</span>
+          <span>↓ Duck</span>
+          <span>Ƀ +50 pts</span>
+        </div>
+      )}
     </div>
   );
 }
 
-export default memo(BlobRunGame, (prev, next) =>
-  prev.wallet === next.wallet &&
-  prev.blockInfo === next.blockInfo &&
-  prev.onEntrySubmit === next.onEntrySubmit
-);
+export default memo(BlobRunGame, (prev, next) => {
+  if (prev.wallet !== next.wallet) return false;
+  if (prev.blockInfo !== next.blockInfo) return false;
+  if (prev.onEntrySubmit !== next.onEntrySubmit) return false;
+  // Allow a re-render specifically when the commit-window state crosses
+  // the threshold, so the in-game restart buttons can swap to the
+  // disabled state. Per-second blockTime ticks otherwise keep getting
+  // ignored so the canvas frame budget stays clean.
+  const prevClosed = (prev.blockTime?.remaining ?? Infinity) <= ENTRY_REVEAL_WINDOW_SECONDS;
+  const nextClosed = (next.blockTime?.remaining ?? Infinity) <= ENTRY_REVEAL_WINDOW_SECONDS;
+  if (prevClosed !== nextClosed) return false;
+  return true;
+});

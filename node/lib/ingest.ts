@@ -1,6 +1,6 @@
 // Single chokepoint for "stuff arriving from outside this node":
-//   • txs and entries from local clients (wallets) over WS
-//   • txs, entries, AND full blocks from peer nodes over WS
+//   - txs and entries from local clients (wallets) over WS
+//   - txs, entries, AND full blocks from peer nodes over WS
 //
 // All pathways funnel through these pure functions so the rules can't drift
 // between the client-handler code path and the peer-handler code path.
@@ -23,27 +23,13 @@ import type {
 } from "../wsProtocol.js";
 
 
-export type IngestTxResult =
-  | { ok: true; isNew: boolean; tx: Tx; bytes: number }
-  | { ok: false; error: string };
+export type IngestTxResult = { ok: true; isNew: boolean; tx: Tx; bytes: number } | { ok: false; error: string };
+export type IngestCommitResult = { ok: true; address: string; block_height: number } | { ok: false; error: string };
+export type IngestEntryResult = { ok: true; isNewBest: boolean; address: string; score: number; block_height: number; block_seed: string; signature: string } | { ok: false; error: string };
+export type IngestRevealResult = { ok: true; isNewBest: boolean; address: string; score: number; block_height: number; block_seed: string; signature: string } | { ok: false; error: string };
+export type IngestBlockResult = { ok: true; applied: "appended" | "replaced" | "duplicate" } | { ok: false; error: string; needsResync?: boolean };
 
-export type IngestCommitResult =
-  | { ok: true; address: string; block_height: number }
-  | { ok: false; error: string };
-
-export type IngestEntryResult =
-  | { ok: true; isNewBest: boolean; address: string; score: number; block_height: number; block_seed: string; s>
-  | { ok: false; error: string };
-
-export type IngestRevealResult =
-  | { ok: true; isNewBest: boolean; address: string; score: number; block_height: number; block_seed: string; s>
-  | { ok: false; error: string };
-
-export type IngestBlockResult =
-  | { ok: true; applied: "appended" | "replaced" | "duplicate" }
-  | { ok: false; error: string; needsResync?: boolean };
-
-// ── TX ──────────────────────────────────────────────────────────────────
+// -- TX ------------------------------------------------------------------
   export function ingestTx(d: DB, payload: SubmitTxPayload): IngestTxResult {
   const r = validateTx(d, payload);
   if (!r.ok) return { ok: false, error: r.error };
@@ -67,7 +53,7 @@ export type IngestBlockResult =
   };
 }
 
-// ── ENTRY COMMIT ────────────────────────────────────────────────────────
+// -- ENTRY COMMIT --------------------------------------------------------
 export function ingestEntryCommit(d: DB, payload: SubmitEntryCommitPayload): IngestCommitResult {
   const r = validateEntryCommit(d, payload);
   if (!r.ok) return { ok: false, error: r.error };
@@ -87,7 +73,7 @@ export function ingestEntryCommit(d: DB, payload: SubmitEntryCommitPayload): Ing
   return { ok: true, address: c.address, block_height: c.block_height };
 }
 
-// ── ENTRY REVEAL ────────────────────────────────────────────────────────
+// -- ENTRY REVEAL --------------------------------------------------------
 export function ingestEntryReveal(d: DB, payload: SubmitEntryRevealPayload): IngestRevealResult {
   const r = validateEntryReveal(d, payload);
   if (!r.ok) return { ok: false, error: r.error };
@@ -120,7 +106,7 @@ export function ingestEntryReveal(d: DB, payload: SubmitEntryRevealPayload): Ing
   };
 }
 
-// ── ENTRY (peer gossip — already validated by originating node) ─────────────
+// -- ENTRY (peer gossip - already validated by originating node) -------------
 export function ingestEntry(d: DB, payload: {
   address: string; score: number;
   block_height: number; block_seed: string;
@@ -160,11 +146,11 @@ export function ingestEntry(d: DB, payload: {
   };
 }
 
-// ── BLOCK (peer or self) ────────────────────────────────────────────────
+// -- BLOCK (peer or self) ------------------------------------------------
 //
 // Two paths through this function:
-//   1. height = tip + 1 → straightforward append after full validation
-//   2. height = tip     → potential reorg vs. our just-sealed tip; keep the
+//   1. height = tip + 1 -> straightforward append after full validation
+//   2. height = tip     -> potential reorg vs. our just-sealed tip; keep the
 //                         block whose deterministic tieBreakKey is smaller.
 //                         Anything deeper than 1 is rejected with
 //                         needsResync=true so the peer manager triggers a
@@ -192,7 +178,7 @@ const tip = d.stmts.getTip.get();
     return { ok: true, applied: "duplicate" };
   }
 
-  // Anything more than one block past us is a deep reorg — out of scope.
+  // Anything more than one block past us is a deep reorg - out of scope.
   if (block.height > tipHeight + 1) return { ok: false, error: "ahead of tip", needsResync: true };
   if (block.height < tipHeight) return { ok: false, error: "below tip" };
 
@@ -242,7 +228,7 @@ const tip = d.stmts.getTip.get();
   } else {
     if (!expectedWinner) return { ok: false, error: "winner derivation failed" };
     if (block.winner !== expectedWinner.address) return { ok: false, error: "wrong winner" };
-    if (Number(block.winnerScore) !== Number(expectedWinner.score)) return { ok: false, error: "wrong winner sc>
+    if (Number(block.winnerScore) !== Number(expectedWinner.score)) return { ok: false, error: "wrong winner score" };
   }
 
  // Reward = (capped coinbase) + sum(tx.fee). Block size cap.
@@ -283,7 +269,7 @@ const baseReward = getRewardForHeight(block.height);
   });
   if (computed !== block.hash) return { ok: false, error: "hash mismatch" };
 
-// ── Reorg path: same height as tip, different hash ────────────────────
+// -- Reorg path: same height as tip, different hash --------------------
   if (isReplace) {
     if (existingByHeight && existingByHeight.hash === block.hash) {
       return { ok: true, applied: "duplicate" };
@@ -292,7 +278,7 @@ const baseReward = getRewardForHeight(block.height);
     //   1. Prefer the block whose winner has more *score-weight*. This makes
     //      the cross-node block-vs-block decision use the same heavy bias
     //      toward high scores (and crushing of sub-200 entries) that a single
-    //      node uses inside pickWinner — so a node that sealed a sybil block
+    //      node uses inside pickWinner - so a node that sealed a sybil block
     //      around its own bot's score 50 entry can never beat a competing
     //      block whose winner scored 1500.
     //   2. On exact weight equality (e.g. two blocks where the winner was
@@ -312,8 +298,7 @@ const baseReward = getRewardForHeight(block.height);
         if (haveKey <= incomingKey) return { ok: false, error: "lost tie-break" };
       }
     }
-    const apply = d.db.transaction(() => {
-      // Restore losing block's txs to the mempool AND undo its balance effects.
+    const reorgApply = d.db.transaction(() => {
       if (existingByHeight) {
         if (existingByHeight.winner) {
           applyBalanceDelta(d, existingByHeight.winner, -Number(existingByHeight.reward ?? 0));
@@ -336,20 +321,19 @@ const baseReward = getRewardForHeight(block.height);
       applyBlockBalances(d, block);
       for (const t of block.transactions) d.stmts.deleteTxs.run(t.id);
     });
-    apply();
-    return { ok: true, applied: "replaced" };
+    reorgApply();
   }
 
-// ── Append path ───────────────────────────────────────────────────────
-  const apply = d.db.transaction(() => {
+// -- Append path -------------------------------------------------------
+  const appendApply = d.db.transaction(() => {
     d.stmts.insertBlock.run(blockToRow(block));
     applyBlockBalances(d, block);
     for (const t of block.transactions) d.stmts.deleteTxs.run(t.id);
-    // Garbage-collect commits older than the new tip — they can no longer
+    // Garbage-collect commits older than the new tip - they can no longer
     // be revealed against. Keep one window of slack for late peers.
     d.stmts.deleteOldCommits.run(block.height - 1);
   });
-  apply();
+  appendApply();
   return { ok: true, applied: "appended" };
 }
 
@@ -377,4 +361,3 @@ function blockToRow(block: Block) {
     node_count: Number(block.nodeCount ?? 1),
   };
 }
-

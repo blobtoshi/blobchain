@@ -934,8 +934,6 @@ export function validateEntry(
   const duckTempoFlag = checkCadence(duckTempo, "ducks");
   if (duckTempoFlag) return err(duckTempoFlag);
 
-  }
-
 
 
   return ok({

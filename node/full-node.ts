@@ -20,6 +20,12 @@ import { WebSocketServer, type WebSocket } from "ws";
 
 import { randomUUID, createHash } from "node:crypto";
 
+import { readFileSync, existsSync } from "node:fs";
+
+import { createServer as createHttpServer } from "node:http";
+
+import { createServer as createHttpsServer } from "node:https";
+
 
 
 import { openDb, rowToBlock, rowToTx, type DB } from "./lib/db.js";
@@ -956,11 +962,29 @@ let addressCache: {
 
 // -- WebSocket API -------------------------------------------------------
 
-const httpServer = app.listen(PORT, () => {
+const TLS_CERT = process.env.TLS_CERT_PATH ?? "";
 
-  log("info", `full node listening on :${PORT}`, {
+const TLS_KEY = process.env.TLS_KEY_PATH ?? "";
 
-    dbPath: DB_PATH, nodeId: NODE_ID, peers: PEERS_RAW || "(none)",
+const useTls = !!(TLS_CERT && TLS_KEY && existsSync(TLS_CERT) && existsSync(TLS_KEY));
+
+const httpServer = useTls
+
+  ? createHttpsServer(
+
+      { cert: readFileSync(TLS_CERT), key: readFileSync(TLS_KEY) },
+
+      app
+
+    )
+
+  : createHttpServer(app);
+
+httpServer.listen(PORT, () => {
+
+  log("info", `full node listening on ${useTls ? "https" : "http"}://0.0.0.0:${PORT}`, {
+
+    dbPath: DB_PATH, nodeId: NODE_ID, peers: PEERS_RAW || "(none)", tls: useTls,
 
   });
 

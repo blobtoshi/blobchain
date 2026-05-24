@@ -874,39 +874,57 @@ export function validateEntry(
 
 
 
-  // Bot-cadence detection. Real players exhibit reaction-time variance
+  // Bot-cadence detection. Real players exhibit reaction-time variance in
 
-  // in their input timing - even when "tapping rhythmically", they hit
+  // their input timing - even when "tapping rhythmically", they hit different
 
-  // different frame intervals (41, 44, 38, 47, 42 around a ~43-frame
-
-  // target).
+  // frame intervals (41, 44, 38, 47, 42 around a ~43-frame target).
 
   //
 
-  // Bots that fire inputs at fixed delays produce exact-frame intervals
+  // Bots that fire inputs at fixed delays (setTimeout, setInterval, or a
 
-  // with zero variance. v3 narrows the surface: jumps are one-shot, so
+  // pre-recorded macro) produce exact-frame intervals with zero variance:
 
-  // there are no jump-holds to fingerprint - we only check inter-jump
-
-  // tempo, plus duck-hold duration and duck tempo.
+  // 43, 43, 43, 43, 43 ten times in a row.
 
   //
 
-  // Flag rule: 5+ exact-matching values, comprising >=80% of the +-2
+  // We measure the dominant inter-input interval among press<->release pairs
 
-  // tolerance band around the mode. A real human can hit the same
+  // (type 0 <-> type 1). If 5+ pairs share the EXACT same frame interval AND
 
-  // value 2-3 times by luck; 5+ is implausibly tight.
+  // that exact value comprises >=80% of the "tolerance band" (mode +- 2
 
-  function checkCadence(intervals: number[], label: string): string | null {
+  // frames), the timing is mechanical, not human.
 
-    if (intervals.length < 5) return null;
+  //
+
+  // Tuned against captured traces from confirmed bot addresses (4/5 detected,
+
+  // 1 inconclusive due to short trace).
+
+  const pairIntervals: number[] = [];
+
+  for (let i = 0; i < events.length - 1; i++) {
+
+    const a = events[i] as { f: number; t: number };
+
+    const b = events[i + 1] as { f: number; t: number };
+
+    if ((a.t === 0 && b.t === 1) || (a.t === 1 && b.t === 0)) {
+
+      pairIntervals.push(b.f - a.f);
+
+    }
+
+  }
+
+  if (pairIntervals.length >= 5) {
 
     const counts = new Map<number, number>();
 
-    for (const iv of intervals) counts.set(iv, (counts.get(iv) ?? 0) + 1);
+    for (const iv of pairIntervals) counts.set(iv, (counts.get(iv) ?? 0) + 1);
 
     let modeIv = 0, modeCount = 0;
 
@@ -928,69 +946,11 @@ export function validateEntry(
 
     if (modeCount >= 5 && exactShare >= 0.8) {
 
-      return `mechanical input pattern detected (${modeCount} ${label} exactly ${modeIv} frames apart)`;
+      return err(`mechanical input cadence detected (${modeCount} inputs at exactly ${modeIv} frames apart, ${Math.round(exactShare * 100)}% of band)`);
 
     }
 
-    return null;
-
   }
-
-
-
-  const typedEvents = events as { f: number; t: number }[];
-
-
-
-  // Duck press->release HOLD durations (v3: jumps no longer have a release).
-
-  const duckHolds: number[] = [];
-
-  for (let i = 0; i < typedEvents.length - 1; i++) {
-
-    const a = typedEvents[i];
-
-    const b = typedEvents[i + 1];
-
-    if (a.t === 2 && b.t === 3) duckHolds.push(b.f - a.f);
-
-  }
-
-  const duckHoldFlag = checkCadence(duckHolds, "duck holds");
-
-  if (duckHoldFlag) return err(duckHoldFlag);
-
-
-
-  // Press-press TEMPO intervals, per action.
-
-  const jumpPresses: number[] = [];
-
-  const duckPresses: number[] = [];
-
-  for (const e of typedEvents) {
-
-    if (e.t === 0) jumpPresses.push(e.f);
-
-    if (e.t === 2) duckPresses.push(e.f);
-
-  }
-
-  const jumpTempo: number[] = [];
-
-  for (let i = 1; i < jumpPresses.length; i++) jumpTempo.push(jumpPresses[i] - jumpPresses[i - 1]);
-
-  const duckTempo: number[] = [];
-
-  for (let i = 1; i < duckPresses.length; i++) duckTempo.push(duckPresses[i] - duckPresses[i - 1]);
-
-  const jumpTempoFlag = checkCadence(jumpTempo, "jumps");
-
-  if (jumpTempoFlag) return err(jumpTempoFlag);
-
-  const duckTempoFlag = checkCadence(duckTempo, "ducks");
-
-  if (duckTempoFlag) return err(duckTempoFlag);
 
 
 

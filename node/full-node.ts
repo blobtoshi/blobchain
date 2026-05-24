@@ -28,7 +28,7 @@ import { createServer as createHttpsServer } from "node:https";
 
 
 
-import { openDb, rowToBlock, rowToTx, type DB } from "./lib/db.js";
+import { openDb, rowToBlock, rowToTx, seedBalancesFromChain, type DB } from "./lib/db.js";
 
 import { feeInfo } from "./lib/validate.js";
 
@@ -91,6 +91,19 @@ const SELF_URL = process.env.SELF_URL ?? "";
 // -- Bootstrap -----------------------------------------------------------
 
 const d: DB = openDb(DB_PATH);
+
+// Boot-time recovery: if the balances table is empty but the chain has
+// blocks (e.g. fresh node, manually-restored DB, or balances wiped by
+// operator), replay every block's deltas to rebuild the balances table.
+// No-op when balances already has rows. This auto-heals balance drift
+// instead of requiring a manual SQL replay like we had to do during
+// the post-tie-break recovery.
+{
+  const seeded = seedBalancesFromChain(d);
+  if (seeded > 0) {
+    console.log(`[boot] seedBalancesFromChain replayed ${seeded} blocks`);
+  }
+}
 
 const gossip = new Gossip();
 

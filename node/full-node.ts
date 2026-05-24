@@ -915,7 +915,7 @@ app.get("/addresses", (req, res) => {
 
     out[i].gamesPlayed = Number(g?.games_played ?? 0);
 
-    if (Number(g?.best_entry ?? 0) > out[i].bestScore) out[i].bestScore = Number(g.best_entry);
+    if (g && Number(g.best_entry ?? 0) > out[i].bestScore) out[i].bestScore = Number(g.best_entry);
 
   }
 

@@ -556,6 +556,29 @@ export class PeerManager {
 
         p.remoteHeight = msg.tip.height;
 
+        // If the peer's reported tip is ahead of ours, kick off a sync.
+        // Without this, a node that missed a `newBlock` gossip event (e.g.
+        // brief network blip, message dropped, peer registered us after
+        // sealing) would silently stay behind forever - the only previous
+        // sync triggers were `hello` (connect-time) and `newBlock`
+        // (gossip with needsResync). Heartbeats give us a third trigger
+        // so any node-vs-peer height divergence gets healed at the next
+        // heartbeat tick.
+
+        const localTip = this.opts.db.stmts.getTip.get();
+
+        const localHeight = localTip?.height ?? 0;
+
+        if (p.remoteHeight > localHeight && p.state === "open") {
+
+          // syncFromPeer is async but we don't await - the message handler
+          // should return promptly. Sync runs in the background and the
+          // peer state machine handles `state = "syncing"` internally.
+
+          this.syncFromPeer(url, p.remoteHeight);
+
+        }
+
         return;
 
       }

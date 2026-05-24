@@ -490,7 +490,7 @@ export class PeerManager {
 
 
 
-  private async handleMessage(url: string, msg: ServerMsg) {
+   private async handleMessage(url: string, msg: ServerMsg | ClientMsg) {
 
     const p = this.peers.get(url);
 

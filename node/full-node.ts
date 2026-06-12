@@ -12,6 +12,19 @@
 
 //     reorg + validation logic is shared with peer-supplied blocks.
 
+<<<<<<< HEAD
+
+
+import express from "express";
+
+import { WebSocketServer, type WebSocket } from "ws";
+
+import { randomUUID, createHash } from "node:crypto";
+
+
+
+import { openDb, rowToBlock, rowToTx, type DB } from "./lib/db.js";
+=======
 
 
 import express from "express";
@@ -29,6 +42,7 @@ import { createServer as createHttpsServer } from "node:https";
 
 
 import { openDb, rowToBlock, rowToTx, seedBalancesFromChain, type DB } from "./lib/db.js";
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
 import { feeInfo } from "./lib/validate.js";
 
@@ -36,7 +50,11 @@ import {
 
   BLOCK_TIME_SECONDS, GENESIS_HASH, GENESIS_TIME_MS, MAX_BLOCK_SIZE, MAX_TX_SIZE,
 
+<<<<<<< HEAD
+  MAX_SUPPLY, computeBlockHash, computeTxRoot, computeEntryRoot, getRewardForHeight, pickWinner,
+=======
   MAX_SUPPLY, computeBlockHash, getRewardForHeight, pickWinner,
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
   runtimeSeedForHeight, to8, currentHeight,
 
@@ -45,8 +63,15 @@ import {
 import { Gossip, send } from "./lib/gossip.js";
 
 import { ingestTx, ingestEntry, ingestBlock } from "./lib/ingest.js";
+<<<<<<< HEAD
+import { ENGINE_VERSION } from "./lib/simulator.js";
 
 import { PeerManager } from "./lib/peers.js";
+import { parseAllowlist, makeAuth, verifyHandshake, hostAllowed } from "./lib/peerAuth.js";
+=======
+
+import { PeerManager } from "./lib/peers.js";
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
 import { startUpdateChecker } from "./lib/updateCheck.js";
 
@@ -86,12 +111,24 @@ const PEERS_RAW = process.env.PEERS ?? "";
 
 const SELF_URL = process.env.SELF_URL ?? "";
 
+<<<<<<< HEAD
+// H1: peer allowlist + shared handshake key (no hardcoded secrets — env only).
+// PEER_ALLOWLIST: comma/space-separated hosts or URLs this node may dial/trust.
+// NODE_KEY: shared HMAC secret across the operator's mesh; when set, a peer
+// must present a valid signed handshake before we ingest its blocks.
+const PEER_ALLOWLIST_RAW = process.env.PEER_ALLOWLIST ?? "";
+const NODE_KEY = process.env.NODE_KEY ?? "";
+
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
 
 // -- Bootstrap -----------------------------------------------------------
 
 const d: DB = openDb(DB_PATH);
 
+<<<<<<< HEAD
+=======
 // Boot-time recovery: if the balances table is empty but the chain has
 // blocks (e.g. fresh node, manually-restored DB, or balances wiped by
 // operator), replay every block's deltas to rebuild the balances table.
@@ -105,6 +142,7 @@ const d: DB = openDb(DB_PATH);
   }
 }
 
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 const gossip = new Gossip();
 
 
@@ -187,6 +225,13 @@ const peers = new PeerManager({
 
   nodeId: NODE_ID,
 
+<<<<<<< HEAD
+  allowlist: parseAllowlist(PEER_ALLOWLIST_RAW),
+
+  nodeKey: NODE_KEY || undefined,
+
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
   log,
 
   onAppliedBlock: (b) => {
@@ -915,7 +960,11 @@ app.get("/addresses", (req, res) => {
 
     out[i].gamesPlayed = Number(g?.games_played ?? 0);
 
+<<<<<<< HEAD
+    if (Number(g?.best_entry ?? 0) > out[i].bestScore) out[i].bestScore = Number(g?.best_entry ?? 0);
+=======
     if (g && Number(g.best_entry ?? 0) > out[i].bestScore) out[i].bestScore = Number(g.best_entry);
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
   }
 
@@ -975,6 +1024,13 @@ let addressCache: {
 
 // -- WebSocket API -------------------------------------------------------
 
+<<<<<<< HEAD
+const httpServer = app.listen(PORT, () => {
+
+  log("info", `full node listening on :${PORT}`, {
+
+    dbPath: DB_PATH, nodeId: NODE_ID, peers: PEERS_RAW || "(none)",
+=======
 const TLS_CERT = process.env.TLS_CERT_PATH ?? "";
 
 const TLS_KEY = process.env.TLS_KEY_PATH ?? "";
@@ -998,6 +1054,7 @@ httpServer.listen(PORT, () => {
   log("info", `full node listening on ${useTls ? "https" : "http"}://0.0.0.0:${PORT}`, {
 
     dbPath: DB_PATH, nodeId: NODE_ID, peers: PEERS_RAW || "(none)", tls: useTls,
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
   });
 
@@ -1021,7 +1078,16 @@ wss.on("connection", (ws) => {
 
   sockState.set(ws, { strikes: 0 });
 
+<<<<<<< HEAD
+  // H1: attach a signed handshake token to hello when NODE_KEY is configured,
+  // so a dialing peer can authenticate us before ingesting our blocks.
+  send(ws, { type: "hello", nodeId: NODE_ID, version: PROTOCOL_VERSION, chainTip: chainTip(),
+    auth: NODE_KEY ? makeAuth(NODE_KEY, NODE_ID) : undefined });
+
+
+=======
   send(ws, { type: "hello", nodeId: NODE_ID, version: PROTOCOL_VERSION, chainTip: chainTip() });
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
 
 
@@ -1111,7 +1177,21 @@ async function handleMessage(ws: WebSocket, msg: ClientMsg) {
 
       if (msg.peerUrl && msg.nodeId !== NODE_ID) {
 
+<<<<<<< HEAD
+        // H1: when a shared key is set, require a valid signed handshake before
+        // dialing back. addPeer additionally enforces the allowlist, private-IP
+        // blocking, and the peer cap — so an unauthenticated or off-allowlist
+        // peerIdentify can no longer make us dial an arbitrary/internal host.
+        const authOk = !NODE_KEY || verifyHandshake(NODE_KEY, (msg as any).auth);
+
+        if (authOk && hostAllowed(msg.peerUrl, peers.allowedHosts())) {
+          peers.addPeer(msg.peerUrl);
+        } else {
+          log("warn", "peerIdentify refused (auth/allowlist)", { peerUrl: msg.peerUrl });
+        }
+=======
         peers.addPeer(msg.peerUrl);
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
       }
 
@@ -1391,10 +1471,29 @@ function trySealNextBlock(): boolean {
 
 
 
+<<<<<<< HEAD
+  // C2: pack the FULL entry payload (inputs, inputs_hash, pow_nonce, publicKey,
+  // engine_version, …) so every peer can independently re-run validateBlockEntry
+  // — signature + PoW + simulator replay — and recompute the winner, rather than
+  // trusting the address/score/signature triple we used to ship.
+  const entries = d.stmts.getEntriesForHeight.all(target).map((r: any) => ({
+    address: r.address,
+    score: r.score,
+    block_height: target,
+    block_seed: r.block_seed,
+    inputs: r.inputs ?? "",
+    inputs_hash: r.inputs_hash ?? "",
+    frame_count: r.frame_count ?? 0,
+    pow_nonce: r.pow_nonce ?? "",
+    publicKey: r.public_key ?? "",
+    signature: r.signature,
+    engine_version: ENGINE_VERSION,
+=======
   const entries = d.stmts.getEntriesForHeight.all(target).map((r) => ({
 
     address: r.address, score: r.score, signature: r.signature,
 
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
   }));
 
   if (entries.length === 0) return false;
@@ -1472,6 +1571,10 @@ function trySealNextBlock(): boolean {
     winner: winner?.address ?? null, winnerScore,
 
     reward, seed: seedStr, txCount: txs.length,
+<<<<<<< HEAD
+    txRoot: computeTxRoot(txs), entryRoot: computeEntryRoot(entries),
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
   });
 

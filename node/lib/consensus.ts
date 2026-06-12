@@ -134,6 +134,75 @@ export function pickWinner<T extends EntryForSelection>(
   return sorted[sorted.length - 1] ?? null;
 }
 
+// ── Content commitments (C1) ────────────────────────────────────────────
+// The block hash must commit to the *contents* of the transactions and
+// mining entries, not just their count. Otherwise two blocks carrying
+// completely different payloads hash identically and the hash check provides
+// no integrity over what gets applied to balances.
+//
+// canonicalTxLeaf / canonicalEntryLeaf and the root functions below MUST stay
+// byte-for-byte in sync with src/lib/blob/chain.ts so the browser client and
+// the full node agree on every block hash.
+
+/**
+ * Canonical per-transaction leaf. Commits to every consensus-relevant field,
+ * including the client `id` and the per-sender `nonce` (H2). Amounts/fees are
+ * normalised through to8() so float representation can't change the leaf.
+ */
+export function canonicalTxLeaf(t: {
+  id: string; from: string; to: string; amount: number; fee: number;
+  feeRate: number; timestamp: number; nonce?: string; memo?: string;
+  publicKey: string; signature: string;
+}): string {
+  return [
+    String(t.id ?? "") + "\x1f",
+    String(t.from ?? "") + "\x1f",
+    String(t.to ?? "") + "\x1f",
+    to8(Number(t.amount ?? 0)) + "\x1f",
+    to8(Number(t.fee ?? 0)) + "\x1f",
+    Math.floor(Number(t.feeRate ?? 0)) + "\x1f",
+    Math.floor(Number(t.timestamp ?? 0)) + "\x1f",
+    String(t.nonce ?? "") + "\x1f",
+    String(t.memo ?? "") + "\x1f",
+    String(t.publicKey ?? "") + "\x1f",
+    String(t.signature ?? "") + "\x1f",
+  ].join(""); // USEP: cannot appear in any validated field [sep=0x1f]
+}
+
+/** sha256 over the ordered canonical tx leaves. Empty list -> sha256(""). */
+export function computeTxRoot(transactions: Array<any> | null | undefined): string {
+  if (!transactions || transactions.length === 0) return sha256hex("");
+  return sha256hex(transactions.map(canonicalTxLeaf).join(""));
+}
+
+/**
+ * Canonical per-entry leaf. Commits to the full mining-entry payload the
+ * sealer packed so every peer re-derives the identical entryRoot and can
+ * independently re-validate signature + PoW + simulator replay.
+ */
+export function canonicalEntryLeaf(e: {
+  address: string; score: number; block_seed?: string | null;
+  inputs_hash?: string | null; frame_count?: number | null;
+  pow_nonce?: string | null; publicKey?: string | null; signature?: string | null;
+}): string {
+  return [
+    String(e.address ?? "") + "\x1f",
+    Math.floor(Number(e.score ?? 0)) + "\x1f",
+    String(e.block_seed ?? "") + "\x1f",
+    String(e.inputs_hash ?? "") + "\x1f",
+    Math.floor(Number(e.frame_count ?? 0)) + "\x1f",
+    String(e.pow_nonce ?? "") + "\x1f",
+    String(e.publicKey ?? "") + "\x1f",
+    String(e.signature ?? "") + "\x1f",
+  ].join("");
+}
+
+/** sha256 over the ordered canonical entry leaves. Empty list -> sha256(""). */
+export function computeEntryRoot(entries: Array<any> | null | undefined): string {
+  if (!entries || entries.length === 0) return sha256hex("");
+  return sha256hex(entries.map(canonicalEntryLeaf).join(""));
+}
+
 /** Canonical block hash. Order of fields MUST match the edge sealer. */
 export function computeBlockHash(b: {
   height: number;
@@ -144,6 +213,8 @@ export function computeBlockHash(b: {
   reward: number;
   seed: string;
   txCount: number;
+  txRoot: string;
+  entryRoot: string;
 }): string {
   const header = [
     b.height,
@@ -154,6 +225,8 @@ export function computeBlockHash(b: {
     b.reward,
     b.seed,
     b.txCount,
+    b.txRoot,
+    b.entryRoot,
   ].join("|");
   return sha256hex(header);
 }

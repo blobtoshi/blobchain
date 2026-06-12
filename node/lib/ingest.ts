@@ -19,6 +19,10 @@ import { applyBalanceDelta } from "./db.js";
 import {
 
   validateTx, validateEntry, validateEntryCommit, validateEntryReveal,
+<<<<<<< HEAD
+  validateBlockTx, validateBlockEntry,
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
 } from "./validate.js";
 
@@ -26,7 +30,12 @@ import {
 
   BLOCK_TIME_SECONDS, GENESIS_HASH, GENESIS_TIME_MS, MAX_BLOCK_SIZE, MAX_SUPPLY,
 
+<<<<<<< HEAD
+  computeBlockHash, computeTxRoot, computeEntryRoot,
+  getRewardForHeight, pickWinner, runtimeSeedForHeight, to8,
+=======
   computeBlockHash, getRewardForHeight, pickWinner, runtimeSeedForHeight, to8,
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
   currentHeight, tieBreakKey,
 
@@ -102,7 +111,11 @@ export function ingestTx(d: DB, payload: SubmitTxPayload): IngestTxResult {
 
     amount: t.amount, fee: t.fee, fee_rate: t.feeRate,
 
+<<<<<<< HEAD
+    memo: t.memo || null, nonce: t.nonce ?? null, signature: t.signature, public_key: t.publicKey,
+=======
     memo: t.memo || null, signature: t.signature, public_key: t.publicKey,
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
     timestamp: t.timestamp,
 
@@ -122,7 +135,11 @@ export function ingestTx(d: DB, payload: SubmitTxPayload): IngestTxResult {
 
       id: t.id, from: t.from, to: t.to, amount: t.amount, fee: t.fee,
 
+<<<<<<< HEAD
+      feeRate: t.feeRate, memo: t.memo, nonce: t.nonce, signature: t.signature,
+=======
       feeRate: t.feeRate, memo: t.memo, signature: t.signature,
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
       publicKey: t.publicKey, timestamp: t.timestamp,
 
@@ -490,6 +507,46 @@ export function ingestBlock(d: DB, block: Block): IngestBlockResult {
 
   if (block.height > wall) return { ok: false, error: "block height not yet open" };
 
+<<<<<<< HEAD
+
+
+  // Re-derive the winner from the entries the proposer included.
+
+  // C2: re-validate EVERY mining entry (signature + PoW + deterministic
+  // simulator replay) and recompute the winner from the PROVEN (address, score)
+  // set. A forged high-score entry can no longer dictate the winner/reward, and
+  // duplicate addresses (weight inflation / replay) are rejected.
+  const entriesForSelection: { address: string; score: number; signature: string }[] = [];
+  const seenEntryAddrs = new Set<string>();
+  for (const e of block.miningEntries) {
+    const ev = validateBlockEntry(e, expectedSeed, block.height);
+    if (!ev.ok) return { ok: false, error: `invalid block entry: ${ev.error}` };
+    if (seenEntryAddrs.has(ev.value.address)) return { ok: false, error: "duplicate entry address in block" };
+    seenEntryAddrs.add(ev.value.address);
+    entriesForSelection.push({ address: ev.value.address, score: ev.value.score, signature: String((e as any).signature ?? "") });
+  }
+
+  const seedNum = Number(expectedSeed);
+
+  const expectedWinner = pickWinner(entriesForSelection, seedNum);
+
+
+
+  if (entriesForSelection.length === 0) {
+
+    if (block.winner !== null) return { ok: false, error: "winner without entries" };
+
+  } else {
+
+    if (!expectedWinner) return { ok: false, error: "winner derivation failed" };
+
+    if (block.winner !== expectedWinner.address) return { ok: false, error: "wrong winner" };
+
+    if (Number(block.winnerScore) !== Number(expectedWinner.score)) return { ok: false, error: "wrong winner score" };
+
+  }
+
+=======
 
 
   // Re-derive the winner from the entries the proposer included.
@@ -524,13 +581,46 @@ export function ingestBlock(d: DB, block: Block): IngestBlockResult {
 
   }
 
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
 
   // Reward = (capped coinbase) + sum(tx.fee). Block size cap.
 
+<<<<<<< HEAD
+  // C1: re-validate EVERY transaction (signature over id+nonce payload,
+  // pubkey→address derivation, amount/fee correctness) before applying.
+  // feeTotal is summed from the RE-VALIDATED fee, never the proposer's claim.
+  // Nonces must be unique within the block and unspent on-chain (replay guard).
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
   let txBytesUsed = 10_000;
 
   let feeTotal = 0;
+<<<<<<< HEAD
+  const validatedTxs: Array<{ from: string; to: string; amount: number; fee: number; nonce: string }> = [];
+  const blockNonces = new Set<string>();
+  // Nonces consumed by the block we're about to replace are freed on undo, so
+  // they must not trip the spent-nonce replay check for the replacement block.
+  const exemptNonces = new Set<string>();
+  if (isReplace && existingByHeight) {
+    let oldTxs: Tx[] = [];
+    try { oldTxs = JSON.parse(existingByHeight.transactions); } catch { /* ignore */ }
+    for (const t of oldTxs) if (t && t.from && (t as any).nonce) exemptNonces.add(`${t.from}\x1f${(t as any).nonce}`);
+  }
+  for (const t of block.transactions) {
+    const tv = validateBlockTx(t);
+    if (!tv.ok) return { ok: false, error: `invalid block tx: ${tv.error}` };
+    const vt = tv.value;
+    const key = `${vt.from}\x1f${vt.nonce}`;
+    if (blockNonces.has(key)) return { ok: false, error: "duplicate nonce in block" };
+    blockNonces.add(key);
+    if (!exemptNonces.has(key) && d.stmts.getSpentNonce.get(vt.from, vt.nonce)) {
+      return { ok: false, error: "tx nonce already spent (replay)" };
+    }
+    validatedTxs.push({ from: vt.from, to: vt.to, amount: vt.amount, fee: vt.fee, nonce: vt.nonce });
+    txBytesUsed += JSON.stringify(t).length;
+    feeTotal += vt.fee;
+=======
 
   for (const t of block.transactions) {
 
@@ -540,10 +630,39 @@ export function ingestBlock(d: DB, block: Block): IngestBlockResult {
 
     feeTotal += Number((t as Tx).fee ?? 0);
 
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
   }
 
   if (txBytesUsed > MAX_BLOCK_SIZE) return { ok: false, error: "block too large" };
 
+<<<<<<< HEAD
+  // C1: enforce no-negative balance at apply time. Baseline = current ledger,
+  // reversed for the to-be-replaced block on the reorg path so the check is
+  // against the height-1 state the replacement block builds on.
+  {
+    const bal = new Map<string, number>();
+    const getBal = (a: string) => bal.has(a) ? (bal.get(a) as number) : Number(d.stmts.getBalance.get(a)?.balance ?? 0);
+    if (isReplace && existingByHeight) {
+      if (existingByHeight.winner) bal.set(existingByHeight.winner, getBal(existingByHeight.winner) - Number(existingByHeight.reward ?? 0));
+      let oldTxs: Tx[] = [];
+      try { oldTxs = JSON.parse(existingByHeight.transactions); } catch { /* ignore */ }
+      for (const t of oldTxs) {
+        if (t.to)   bal.set(t.to,   getBal(t.to)   - Number(t.amount));
+        if (t.from) bal.set(t.from, getBal(t.from) + Number(t.amount) + Number(t.fee ?? 0));
+      }
+    }
+    for (const vt of validatedTxs) {
+      const fromBal = getBal(vt.from);
+      if (vt.amount + vt.fee > fromBal + 1e-9) {
+        return { ok: false, error: `insufficient balance for ${vt.from} in block` };
+      }
+      bal.set(vt.from, fromBal - (vt.amount + vt.fee));
+      bal.set(vt.to, getBal(vt.to) + vt.amount);
+    }
+  }
+
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
 
   const baseReward = getRewardForHeight(block.height);
@@ -595,6 +714,11 @@ export function ingestBlock(d: DB, block: Block): IngestBlockResult {
     seed: block.seed,
 
     txCount: block.transactions.length,
+<<<<<<< HEAD
+    txRoot: computeTxRoot(block.transactions),
+    entryRoot: computeEntryRoot(block.miningEntries),
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
   });
 
@@ -681,6 +805,10 @@ export function ingestBlock(d: DB, block: Block): IngestBlockResult {
           if (t.to)   applyBalanceDelta(d, t.to,   -Number(t.amount));
 
           if (t.from) applyBalanceDelta(d, t.from,  Number(t.amount) + Number(t.fee ?? 0));
+<<<<<<< HEAD
+          if (t.from && (t as any).nonce) d.stmts.deleteSpentNonce.run(t.from, (t as any).nonce);
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
           d.stmts.insertTx.run({
 
@@ -688,7 +816,11 @@ export function ingestBlock(d: DB, block: Block): IngestBlockResult {
 
             amount: t.amount, fee: t.fee, fee_rate: t.feeRate,
 
+<<<<<<< HEAD
+            memo: t.memo || null, nonce: t.nonce ?? null, signature: t.signature, public_key: t.publicKey,
+=======
             memo: t.memo || null, signature: t.signature, public_key: t.publicKey,
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
             timestamp: t.timestamp,
 
@@ -706,6 +838,13 @@ export function ingestBlock(d: DB, block: Block): IngestBlockResult {
 
       for (const t of block.transactions) d.stmts.deleteTxs.run(t.id);
 
+<<<<<<< HEAD
+      for (const t of block.transactions) {
+        if (t.from && (t as any).nonce) d.stmts.insertSpentNonce.run({ from_address: t.from, nonce: (t as any).nonce, block_height: block.height });
+      }
+
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
     });
 
     apply();
@@ -726,6 +865,13 @@ export function ingestBlock(d: DB, block: Block): IngestBlockResult {
 
     for (const t of block.transactions) d.stmts.deleteTxs.run(t.id);
 
+<<<<<<< HEAD
+    for (const t of block.transactions) {
+      if (t.from && (t as any).nonce) d.stmts.insertSpentNonce.run({ from_address: t.from, nonce: (t as any).nonce, block_height: block.height });
+    }
+
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
     // Garbage-collect commits older than the new tip - they can no longer
 
     // be revealed against. Keep one window of slack for late peers.

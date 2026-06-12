@@ -43,6 +43,9 @@ import type { DB } from "./db.js";
 import { ingestBlock, ingestEntry, ingestTx } from "./ingest.js";
 
 import type { ServerMsg, ClientMsg, Block } from "../wsProtocol.js";
+import { hostOf, hostAllowed, makeAuth, verifyHandshake } from "./peerAuth.js";
+
+
 
 
 
@@ -56,6 +59,12 @@ const MAX_BACKOFF_MS = 30_000;
 
 const SYNC_PAGE = 100;
 
+<<<<<<< HEAD
+// H1: hard cap on total peers to bound memory / FD growth from peerIdentify spam.
+const MAX_PEERS = 32;
+
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
 
 export type PeerInfo = {
@@ -91,6 +100,10 @@ type Peer = PeerInfo & {
   lastPingAt: number;
 
   closed: boolean;
+<<<<<<< HEAD
+  authenticated: boolean;
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
 };
 
@@ -100,6 +113,17 @@ export type PeerManagerOpts = {
 
   bootstrapUrls: string[];
 
+<<<<<<< HEAD
+  // H1: hosts permitted to be dialed / trusted (PEER_ALLOWLIST). Bootstrap
+  // peer hosts are auto-added. `nodeKey` is the shared secret for the signed
+  // peer handshake; when set, a peer must present a valid auth token before we
+  // ingest any of its blocks.
+  allowlist?: Set<string>;
+
+  nodeKey?: string;
+
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
   db: DB;
 
   // The public WebSocket URL other nodes can dial to reach us. Used for
@@ -168,6 +192,12 @@ export class PeerManager {
 
   private peers = new Map<string, Peer>();
 
+<<<<<<< HEAD
+  // H1: hosts we may dial / trust. Seeded from opts.allowlist + bootstrap hosts.
+  private allow = new Set<string>();
+
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
   private opts: PeerManagerOpts;
 
 
@@ -176,12 +206,25 @@ export class PeerManager {
 
     this.opts = opts;
 
+<<<<<<< HEAD
+    this.allow = new Set(opts.allowlist ?? []);
+
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
     for (const raw of opts.bootstrapUrls) {
 
       const url = normalize(raw);
 
       if (!url) continue;
 
+<<<<<<< HEAD
+      // Operator explicitly listed this bootstrap peer → trust its host.
+      const bh = hostOf(url);
+
+      if (bh) this.allow.add(bh);
+
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
       if (this.peers.has(url)) continue;
 
       this.peers.set(url, this.makePeer(url));
@@ -202,6 +245,65 @@ export class PeerManager {
 
     return n;
 
+<<<<<<< HEAD
+  }
+
+
+
+  /**
+
+   * Auto-mesh entry point. Called when a peer dials us and identifies itself
+
+   * via peerIdentify. We dial them back so gossip flows in both directions.
+
+   * Idempotent: ignores self-loops, duplicate URLs, and already-connected
+
+   * peers. Safe to call from a request handler.
+
+   */
+
+  addPeer(url: string): void {
+
+    const normalized = normalize(url);
+
+    if (!normalized) return;
+
+    // Don't dial ourselves.
+
+    if (this.opts.selfUrl && normalize(this.opts.selfUrl) === normalized) return;
+
+    // Don't dial duplicates.
+
+    if (this.peers.has(normalized)) return;
+
+    // H1: only dial allowlisted, non-private hosts, and cap total peers. This
+    // is what turns peerIdentify from an SSRF / eclipse primitive into a no-op
+    // for anything the operator hasn't explicitly trusted.
+    if (!hostAllowed(normalized, this.allow)) {
+      this.log("warn", `auto-mesh: refused non-allowlisted/private peer ${normalized}`);
+      return;
+    }
+
+    if (this.peers.size >= MAX_PEERS) {
+      this.log("warn", `auto-mesh: peer cap (${MAX_PEERS}) reached, refusing ${normalized}`);
+      return;
+    }
+
+    this.log("info", `auto-mesh: adding peer ${normalized}`);
+
+    this.peers.set(normalized, this.makePeer(normalized));
+
+    this.connect(normalized);
+
+  }
+
+
+
+  /** H1: hosts this node is permitted to dial / trust (for inbound gate checks). */
+  allowedHosts(): Set<string> {
+    return this.allow;
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
   }
 
 
@@ -324,7 +426,11 @@ export class PeerManager {
 
       ws: null, attempt: 0, pingTimer: null, reconnectTimer: null,
 
+<<<<<<< HEAD
+      lastPingAt: 0, closed: false, authenticated: false,
+=======
       lastPingAt: 0, closed: false,
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
     };
 
@@ -490,7 +596,11 @@ export class PeerManager {
 
 
 
+<<<<<<< HEAD
+  private async handleMessage(url: string, msg: ServerMsg) {
+=======
    private async handleMessage(url: string, msg: ServerMsg | ClientMsg) {
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
     const p = this.peers.get(url);
 
@@ -504,6 +614,19 @@ export class PeerManager {
 
         p.remoteHeight = msg.chainTip.height;
 
+<<<<<<< HEAD
+        // H1: authenticate the peer before we will ingest ANY of its blocks.
+        // With a shared NODE_KEY, require a valid signed handshake; without one,
+        // fall back to allowlist membership (operator-trusted hosts only).
+        p.authenticated = this.opts.nodeKey
+          ? verifyHandshake(this.opts.nodeKey, msg.auth)
+          : this.allow.has(hostOf(url) ?? "");
+        if (!p.authenticated) {
+          this.log("warn", `peer ${url} not authenticated — its blocks will be ignored`);
+        }
+
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
         // Auto-mesh: tell the peer who we are so they can dial us back. This
 
         // is what makes gossip propagate symmetrically without requiring
@@ -520,6 +643,11 @@ export class PeerManager {
 
             nodeId: this.opts.nodeId,
 
+<<<<<<< HEAD
+            auth: this.opts.nodeKey ? makeAuth(this.opts.nodeKey, this.opts.nodeId) : undefined,
+
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
           } as any);
 
         }
@@ -556,6 +684,8 @@ export class PeerManager {
 
         p.remoteHeight = msg.tip.height;
 
+<<<<<<< HEAD
+=======
         // If the peer's reported tip is ahead of ours, kick off a sync.
         // Without this, a node that missed a `newBlock` gossip event (e.g.
         // brief network blip, message dropped, peer registered us after
@@ -579,12 +709,18 @@ export class PeerManager {
 
         }
 
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
         return;
 
       }
 
       case "newBlock": {
 
+<<<<<<< HEAD
+        if (!p.authenticated) return; // H1: never ingest blocks from an unauthenticated peer
+
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
         const r = ingestBlock(this.opts.db, msg.block);
 
         if (r.ok && (r.applied === "appended" || r.applied === "replaced")) {
@@ -611,7 +747,11 @@ export class PeerManager {
 
         const r = ingestTx(this.opts.db, {
 
+<<<<<<< HEAD
+          id: tx.id, nonce: (tx as any).nonce, from: tx.from, to: tx.to, amount: tx.amount,
+=======
           id: tx.id, from: tx.from, to: tx.to, amount: tx.amount,
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
           feeRate: tx.feeRate, memo: tx.memo,
 
@@ -815,6 +955,11 @@ export class PeerManager {
 
       case "blocksRange": {
 
+<<<<<<< HEAD
+        if (!p.authenticated) return; // H1: never ingest blocks from an unauthenticated peer
+
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
         for (const b of msg.blocks) {
 
           const r = ingestBlock(this.opts.db, b);
@@ -845,6 +990,31 @@ export class PeerManager {
 
     p.state = "syncing";
 
+<<<<<<< HEAD
+    let safety = 200;
+
+    while (safety-- > 0) {
+
+      // Re-read local tip every iteration: ingest might have advanced it via
+
+      // the main message handler, or failed to advance it (every block rejected).
+
+      const localTip = this.opts.db.stmts.getTip.get();
+
+      const localHeight = localTip?.height ?? 0;
+
+      if (localHeight >= peerHeight) break;
+
+      const cursor = Math.max(1, localHeight - 5 + 1);
+
+      this.send(url, { type: "getBlocks", fromHeight: cursor, limit: SYNC_PAGE });
+
+      // Wait for the matching blocksRange to land, then check whether the tip
+
+      // actually advanced. If it didn't, we're stuck on a fork and bailing
+
+      // here is correct - logging shows why and the operator can intervene.
+=======
     const localTip = this.opts.db.stmts.getTip.get();
 
     const localHeight = localTip?.height ?? 0;
@@ -858,16 +1028,41 @@ export class PeerManager {
       this.send(url, { type: "getBlocks", fromHeight: cursor, limit: SYNC_PAGE });
 
       // Wait for the matching blocksRange to land, then continue.
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
       const got = await this.waitForBlocks(url, cursor);
 
       if (!got || got.length === 0) break;
 
+<<<<<<< HEAD
+      const newTip = this.opts.db.stmts.getTip.get();
+
+      const newHeight = newTip?.height ?? 0;
+
+      if (newHeight <= localHeight) {
+
+        this.log("warn", "sync stalled: ingest rejected every block in batch", {
+
+          url, requestedFrom: cursor, batchSize: got.length,
+
+          localHeight, peerHeight,
+
+          firstHash: got[0]?.hash?.slice(0, 12),
+
+          lastHash: got[got.length - 1]?.hash?.slice(0, 12),
+
+        });
+
+        break;
+
+      }
+=======
       const last = got[got.length - 1].height;
 
       if (last < cursor) break;
 
       cursor = last + 1;
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
     }
 

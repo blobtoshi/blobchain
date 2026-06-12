@@ -57,6 +57,11 @@ const SEED_RE = /^[0-9]+$/;
 const SALT_RE = /^[0-9a-fA-F]{32}$/;
 
 const NONCE_RE = /^[0-9a-fA-F]{1,32}$/;
+<<<<<<< HEAD
+// H2: per-transaction sender nonce (single-use). 16–32 random bytes as hex.
+const TX_NONCE_RE = /^[0-9a-fA-F]{16,64}$/;
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
 const MEMO_RE = /^[\x20-\x7E\u00A0-\uFFFF\n\t]*$/;
 
@@ -180,6 +185,11 @@ export type ValidatedTx = {
 
   memo: string;
 
+<<<<<<< HEAD
+  nonce: string;
+
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
   signature: string;
 
   publicKey: string;
@@ -206,13 +216,21 @@ export function validateTx(d: DB, body: SubmitTxPayload): ValidationResult<Valid
 
     id, from, to, amount, signature, publicKey, timestamp,
 
+<<<<<<< HEAD
+    feeRate: feeRateRaw, memo: memoRaw, nonce,
+=======
     feeRate: feeRateRaw, memo: memoRaw,
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
   } = body ?? ({} as SubmitTxPayload);
 
 
 
   if (typeof id !== "string" || !ID_RE.test(id)) return err("invalid id");
+<<<<<<< HEAD
+  if (typeof nonce !== "string" || !TX_NONCE_RE.test(nonce)) return err("invalid nonce");
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
   if (typeof from !== "string" || !ADDR_RE.test(from)) return err("invalid from");
 
@@ -268,9 +286,23 @@ export function validateTx(d: DB, body: SubmitTxPayload): ValidationResult<Valid
 
   if (derived !== from) return err("from does not match publicKey");
 
+<<<<<<< HEAD
+  // H2: single-use nonce across chain (durable) and mempool (pending).
+  if (d.stmts.getSpentNonce.get(from, nonce)) return err("nonce already used (replay)");
+  const dupMem = d.stmts.getMempoolNonce.get(from, nonce);
+  if (dupMem && dupMem.id !== id) return err("nonce already pending in mempool");
+
+
+
+  // H2: id + per-sender nonce are now part of the signed payload, so a tx can't
+  // be re-broadcast under a fresh id (malleability) and a given authorization
+  // is bound to exactly one nonce.
+  const payload = `${id}:${from}->${to}:${amt}@${ts}|fr=${feeRate}|m=${memo}|n=${nonce}`;
+=======
 
 
   const payload = `${from}->${to}:${amt}@${ts}|fr=${feeRate}|m=${memo}`;
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
   if (!verifySig(publicKey, signature, payload)) return err("bad signature");
 
@@ -308,7 +340,11 @@ export function validateTx(d: DB, body: SubmitTxPayload): ValidationResult<Valid
 
   return ok({
 
+<<<<<<< HEAD
+    id, from, to, amount: amt, fee, feeRate, memo, nonce,
+=======
     id, from, to, amount: amt, fee, feeRate, memo,
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
     signature, publicKey, timestamp: ts, bytes,
 
@@ -875,6 +911,123 @@ export function validateEntry(
 
 
   // Bot-cadence detection. Real players exhibit reaction-time variance
+<<<<<<< HEAD
+
+  // in their input timing - even when "tapping rhythmically", they hit
+
+  // different frame intervals (41, 44, 38, 47, 42 around a ~43-frame
+
+  // target).
+
+  //
+
+  // Bots that fire inputs at fixed delays produce exact-frame intervals
+
+  // with zero variance. v3 narrows the surface: jumps are one-shot, so
+
+  // there are no jump-holds to fingerprint - we only check inter-jump
+
+  // tempo, plus duck-hold duration and duck tempo.
+
+  //
+
+  // Flag rule: 5+ exact-matching values, comprising >=80% of the +-2
+
+  // tolerance band around the mode. A real human can hit the same
+
+  // value 2-3 times by luck; 5+ is implausibly tight.
+
+  function checkCadence(intervals: number[], label: string): string | null {
+
+    if (intervals.length < 5) return null;
+
+    const counts = new Map<number, number>();
+
+    for (const iv of intervals) counts.set(iv, (counts.get(iv) ?? 0) + 1);
+
+    let modeIv = 0, modeCount = 0;
+
+    for (const [iv, n] of counts) {
+
+      if (n > modeCount) { modeCount = n; modeIv = iv; }
+
+    }
+
+    let bandCount = 0;
+
+    for (const [iv, n] of counts) {
+
+      if (Math.abs(iv - modeIv) <= 2) bandCount += n;
+
+    }
+
+    const exactShare = bandCount > 0 ? modeCount / bandCount : 0;
+
+    if (modeCount >= 5 && exactShare >= 0.8) {
+
+      return `mechanical input pattern detected (${modeCount} ${label} exactly ${modeIv} frames apart)`;
+
+    }
+
+    return null;
+
+  }
+
+
+
+  const typedEvents = events as { f: number; t: number }[];
+
+
+
+  // Duck press->release HOLD durations (v3: jumps no longer have a release).
+
+  const duckHolds: number[] = [];
+
+  for (let i = 0; i < typedEvents.length - 1; i++) {
+
+    const a = typedEvents[i];
+
+    const b = typedEvents[i + 1];
+
+    if (a.t === 2 && b.t === 3) duckHolds.push(b.f - a.f);
+
+  }
+
+  const duckHoldFlag = checkCadence(duckHolds, "duck holds");
+
+  if (duckHoldFlag) return err(duckHoldFlag);
+
+
+
+  // Press-press TEMPO intervals, per action.
+
+  const jumpPresses: number[] = [];
+
+  const duckPresses: number[] = [];
+
+  for (const e of typedEvents) {
+
+    if (e.t === 0) jumpPresses.push(e.f);
+
+    if (e.t === 2) duckPresses.push(e.f);
+
+  }
+
+  const jumpTempo: number[] = [];
+
+  for (let i = 1; i < jumpPresses.length; i++) jumpTempo.push(jumpPresses[i] - jumpPresses[i - 1]);
+
+  const duckTempo: number[] = [];
+
+  for (let i = 1; i < duckPresses.length; i++) duckTempo.push(duckPresses[i] - duckPresses[i - 1]);
+
+  const jumpTempoFlag = checkCadence(jumpTempo, "jumps");
+
+  if (jumpTempoFlag) return err(jumpTempoFlag);
+
+  const duckTempoFlag = checkCadence(duckTempo, "ducks");
+
+=======
   // in their input timing - even when "tapping rhythmically", they hit
   // different frame intervals (41, 44, 38, 47, 42 around a ~43-frame
   // target).
@@ -932,6 +1085,7 @@ export function validateEntry(
   const jumpTempoFlag = checkCadence(jumpTempo, "jumps");
   if (jumpTempoFlag) return err(jumpTempoFlag);
   const duckTempoFlag = checkCadence(duckTempo, "ducks");
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
   if (duckTempoFlag) return err(duckTempoFlag);
 
 
@@ -950,6 +1104,119 @@ export function validateEntry(
 
 
 
+<<<<<<< HEAD
+// -- Block-context tx validation (C1) -----------------------------------
+// Re-validates a transaction carried inside an *ingested peer block*. Unlike
+// validateTx it does NOT consult the mempool, the live recommended-fee floor,
+// or the ±10min submit window (submission-time policies that don't apply to a
+// historical block). It DOES enforce everything that makes a tx cryptographically
+// valid and internally consistent: id/nonce/address/amount shape, pubkey→address
+// derivation, the signed payload (incl. id+nonce, H2), and that the carried fee
+// equals feeRate×bytes. Balance sufficiency and nonce single-use are enforced by
+// the caller (ingestBlock) with running state.
+export type ValidatedBlockTx = {
+  id: string; from: string; to: string; amount: number; fee: number;
+  feeRate: number; memo: string; nonce: string; signature: string;
+  publicKey: string; timestamp: number;
+};
+
+export function validateBlockTx(t: any): ValidationResult<ValidatedBlockTx> {
+  if (!t || typeof t !== "object") return err("block tx not an object");
+  const id = t.id, from = t.from, to = t.to;
+  const publicKey = t.publicKey, signature = t.signature, nonce = t.nonce;
+  if (typeof id !== "string" || !ID_RE.test(id)) return err("block tx invalid id");
+  if (typeof nonce !== "string" || !TX_NONCE_RE.test(nonce)) return err("block tx invalid nonce");
+  if (typeof from !== "string" || !ADDR_RE.test(from)) return err("block tx invalid from");
+  if (typeof to !== "string" || !ADDR_RE.test(to)) return err("block tx invalid to");
+  if (from === to) return err("block tx self-send");
+  if (typeof publicKey !== "string" || !PUB_RE.test(publicKey)) return err("block tx invalid publicKey");
+  if (typeof signature !== "string" || !SIG_RE.test(signature)) return err("block tx invalid signature");
+
+  const amtRaw = Number(t.amount);
+  if (!Number.isFinite(amtRaw) || amtRaw <= 0 || amtRaw > 1_000_000) return err("block tx invalid amount");
+  const units = Math.round(amtRaw * BLOB_UNIT);
+  if (Math.abs(amtRaw * BLOB_UNIT - units) > 1e-6) return err("block tx amount precision");
+  const amt = units / BLOB_UNIT;
+
+  const ts = Number(t.timestamp);
+  if (!Number.isFinite(ts)) return err("block tx invalid timestamp");
+
+  const memo = typeof t.memo === "string" ? t.memo : "";
+  if (memo.length > 0 && !MEMO_RE.test(memo)) return err("block tx memo invalid chars");
+  if (enc.encode(memo).length > MAX_MEMO_BYTES) return err("block tx memo too large");
+
+  const feeRate = Math.floor(Number(t.feeRate));
+  if (!Number.isFinite(feeRate) || feeRate < MIN_FEE_RATE || feeRate > MAX_FEE_RATE) return err("block tx invalid feeRate");
+
+  const derived = pubKeyToAddress(publicKey.toLowerCase());
+  if (derived !== from) return err("block tx from does not match publicKey");
+
+  const payload = `${id}:${from}->${to}:${amt}@${ts}|fr=${feeRate}|m=${memo}|n=${nonce}`;
+  if (!verifySig(publicKey, signature, payload)) return err("block tx bad signature");
+
+  const bytes = canonicalTxBytes({ from, to, amount: amt, timestamp: ts, feeRate, memo, publicKey, signature });
+  if (bytes > MAX_TX_SIZE) return err("block tx too large");
+  const expectedFee = feeFromRate(feeRate, bytes);
+  if (Math.round(Number(t.fee) * BLOB_UNIT) !== Math.round(expectedFee * BLOB_UNIT)) {
+    return err(`block tx fee mismatch (expected ${expectedFee}, got ${t.fee})`);
+  }
+
+  return ok({ id, from, to, amount: amt, fee: expectedFee, feeRate, memo, nonce, signature, publicKey, timestamp: ts });
+}
+
+// -- Block-context entry validation (C2) --------------------------------
+// Re-validates a mining entry carried inside an ingested block: signature, PoW,
+// and a full deterministic simulator replay proving the claimed score. Drops
+// only the live active-height/submission-window checks (irrelevant to a sealed
+// block). Returns the proven (address, score) used to recompute the winner.
+export function validateBlockEntry(
+  e: any, expectedSeed: string, block_height: number,
+): ValidationResult<{ address: string; score: number }> {
+  if (!e || typeof e !== "object") return err("block entry not an object");
+  const { address, publicKey, signature, block_seed, inputs, inputs_hash, pow_nonce } = e;
+  const score = Number(e.score);
+  const frame_count = Number(e.frame_count);
+  if (typeof address !== "string" || !ADDR_RE.test(address)) return err("block entry invalid address");
+  if (typeof publicKey !== "string" || !PUB_RE.test(publicKey)) return err("block entry invalid publicKey");
+  if (typeof signature !== "string" || !SIG_RE.test(signature)) return err("block entry invalid signature");
+  if (!Number.isFinite(score) || score < 0 || score > 10_000_000) return err("block entry invalid score");
+  if (typeof block_seed !== "string" || !SEED_RE.test(block_seed)) return err("block entry invalid block_seed");
+  if (!Number.isInteger(frame_count)) return err("block entry invalid frame_count");
+  if (typeof inputs !== "string" || inputs.length > MAX_INPUTS_STR) return err("block entry invalid inputs");
+  if (typeof inputs_hash !== "string" || !HASH_RE.test(inputs_hash)) return err("block entry invalid inputs_hash");
+  if (typeof pow_nonce !== "string" || pow_nonce.length === 0 || pow_nonce.length > 64) return err("block entry invalid pow_nonce");
+  if (e.engine_version !== ENGINE_VERSION) return err("block entry engine_version mismatch");
+
+  const derived = pubKeyToAddress(publicKey.toLowerCase());
+  if (derived !== address) return err("block entry address does not match publicKey");
+
+  if (block_seed !== expectedSeed) return err("block entry seed mismatch");
+  if (sha256hex(inputs) !== inputs_hash) return err("block entry inputs_hash mismatch");
+
+  if (!verifyEntryPow(block_height, address, inputs_hash, pow_nonce, ENTRY_POW_BITS)) {
+    return err("block entry PoW too weak");
+  }
+
+  const sc = Math.floor(score);
+  const payload = `entry:${block_height}:${address}:${sc}:${inputs_hash}`;
+  if (!verifySig(publicKey, signature, payload)) return err("block entry bad signature");
+
+  const events = inputs.length === 0 ? [] : parseCanonicalInputs(inputs);
+  const plaus = plausibilityCheck(events, frame_count, sc);
+  if (plaus) return err(`block entry replay rejected: ${plaus}`);
+  const seedNum = Number(block_seed);
+  if (!Number.isFinite(seedNum)) return err("block entry seed not numeric");
+  const result = simulate(seedNum, events, frame_count);
+  if (!result.dead) return err("block entry replay did not terminate");
+  if (result.frame !== frame_count) return err("block entry frame_count mismatch");
+  if (result.score !== sc) return err("block entry score mismatch");
+  if (result.score === 0) return err("block entry score zero");
+
+  return ok({ address, score: sc });
+}
+
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 // Re-export so full-node.ts can use them when packing blocks.
 
 export { rowToBlock, rowToTx };

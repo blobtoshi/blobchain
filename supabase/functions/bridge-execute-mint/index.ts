@@ -1,19 +1,5 @@
-// Partial-mint TX BUILDER (not sender).
-//
-// Co-signed flow: the connected user's Solana wallet pays the SOL fees AND
-// the ~0.002 SOL ATA rent, completely eliminating the rent-harvesting attack
-// where someone bridges dust to many fresh wallets and reclaims SOL from the
-// mint authority's pocket.
-//
-// We:
-//   1. Build a legacy Solana tx with the RECIPIENT as fee payer (account 0)
-//      and the mint authority as the second signer.
-//   2. Pre-sign the mint authority's slot.
-//   3. Return the partially-signed wire bytes (b64). The recipient signs
-//      slot 0 client-side (Phantom/Solflare) and submits via their wallet.
-//
-// We do NOT touch the chain here — no sendTransaction, no polling. That moves
-// to the client. This also keeps cold-start CPU way under budget.
+// Input:  { recipient: string, amount: number, blob_tx_id: string }
+// Output: { signature: string, ata: string, recipient: string, amount: number }
 
 import * as ed from "https://esm.sh/@noble/ed25519@2.1.0";
 import { sha256 } from "https://esm.sh/@noble/hashes@1.4.0/sha256";
@@ -54,7 +40,8 @@ async function rpc<T = unknown>(method: string, params: unknown[]): Promise<T> {
   return j.result;
 }
 
-// PDA helpers (unchanged from previous implementation) -------------------
+// ── PDA helpers ──────────────────────────────────────────────────────────────
+
 function isOnCurve(pub: Uint8Array): boolean {
   try { ed.ExtendedPoint.fromHex(pub); return true; } catch { return false; }
 }
@@ -80,7 +67,8 @@ function getATA(owner: Uint8Array, mint: Uint8Array): Uint8Array {
   return findProgramAddress([owner, TOKEN_PROGRAM_ID, mint], ASSOCIATED_TOKEN_PROGRAM_ID).address;
 }
 
-// Wire helpers -----------------------------------------------------------
+// ── Wire helpers ─────────────────────────────────────────────────────────────
+
 function encodeShortVec(n: number): Uint8Array {
   const out: number[] = []; let v = n;
   while (true) {
@@ -103,7 +91,7 @@ function u64le(n: bigint): Uint8Array {
 }
 
 type AccountMeta = { pubkey: Uint8Array; isSigner: boolean; isWritable: boolean };
-type Instruction = { programId: Uint8Array; keys: AccountMeta[]; data: Uint8Array };
+type Instruction  = { programId: Uint8Array; keys: AccountMeta[]; data: Uint8Array };
 
 function buildMessage(
   feePayer: Uint8Array,
@@ -148,11 +136,33 @@ function buildMessage(
       encodeShortVec(ix.data.length), ix.data,
     ));
   }
-  const header = new Uint8Array([numSigners, numReadonlySigners, numReadonlyNonSigners]);
+  const header  = new Uint8Array([numSigners, numReadonlySigners, numReadonlyNonSigners]);
   const keysBlob = concat(encodeShortVec(accountKeys.length), ...accountKeys);
-  const ixBlob = concat(encodeShortVec(compiled.length), ...compiled);
+  const ixBlob   = concat(encodeShortVec(compiled.length), ...compiled);
   return { message: concat(header, keysBlob, recentBlockhash, ixBlob), accountKeys };
 }
+
+// ── Confirmation polling ──────────────────────────────────────────────────────
+
+async function waitForConfirmation(signature: string, timeoutMs = 90_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const result = await rpc<any>("getSignatureStatuses", [
+      [signature], { searchTransactionHistory: true },
+    ]);
+    const s = result?.value?.[0];
+    if (s) {
+      if (s.err) throw new Error(`tx failed on chain: ${JSON.stringify(s.err)}`);
+      if (s.confirmationStatus === "confirmed" || s.confirmationStatus === "finalized") return;
+    }
+    await new Promise(r => setTimeout(r, 2_000));
+  }
+  // Timeout is non-fatal — the tx may still land. Callers should treat a
+  // missing confirmation as "pending", not "failed".
+  console.warn("[bridge-execute-mint] confirmation polling timed out for", signature);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -163,14 +173,15 @@ Deno.serve(async (req) => {
 
   try {
     const { recipient, amount } = (await req.json()) ?? {};
+
     if (typeof recipient !== "string" || !SOL_ADDR_RE.test(recipient)) return bad("invalid recipient");
     const amt = Number(amount);
     if (!Number.isFinite(amt) || amt <= 0 || amt > 1_000_000) return bad("invalid amount");
-
     if (!SOLANA_RPC_URL || !SOLANA_MINT_AUTHORITY || !SOLANA_SPL_MINT_ADDRESS) {
       return bad("solana env missing", 500);
     }
 
+    // Parse mint authority keypair (64-byte: [priv(32) | pub(32)] or base58)
     const raw = SOLANA_MINT_AUTHORITY.trim();
     const secretKey: Uint8Array = raw.startsWith("[")
       ? Uint8Array.from(JSON.parse(raw))
@@ -183,79 +194,83 @@ Deno.serve(async (req) => {
     const recipientPub = bs58.decode(recipient);
     if (mintPub.length !== 32 || recipientPub.length !== 32) return bad("invalid pubkey length");
 
-    // Decimals
+    // Get mint decimals
     const mintAcct = await rpc<any>("getAccountInfo", [
       SOLANA_SPL_MINT_ADDRESS, { encoding: "base64", commitment: "confirmed" },
     ]);
     if (!mintAcct?.value?.data?.[0]) return bad("mint account not found", 500);
-    const mintData = Uint8Array.from(atob(mintAcct.value.data[0]), c => c.charCodeAt(0));
-    const decimals = mintData[44];
+    const mintData  = Uint8Array.from(atob(mintAcct.value.data[0]), c => c.charCodeAt(0));
+    const decimals  = mintData[44];
     const baseUnits = BigInt(Math.round(amt * 10 ** decimals));
     if (baseUnits <= 0n) return bad("amount rounds to zero base units");
 
     const ata = getATA(recipientPub, mintPub);
 
-    // ── Instructions: recipient pays rent for their OWN ATA ──
-    // CreateIdempotent ATA: funder=recipient (was authority before)
+    // ── Build instructions ────────────────────────────────────────────────
+    //
+    // KEY CHANGE from co-signing flow:
+    //   feePayer = authPub (mint authority), NOT recipientPub.
+    //   This lets the backend mint fully autonomously after the BLOB deposit
+    //   confirms, with no wallet popup needed from the user.
+    //   The bridge operator absorbs the ~0.002 SOL ATA rent.
+
     const createAtaIx: Instruction = {
       programId: ASSOCIATED_TOKEN_PROGRAM_ID,
       keys: [
-        { pubkey: recipientPub, isSigner: true,  isWritable: true  }, // funder + payer
+        { pubkey: authPub,      isSigner: true,  isWritable: true  }, // funder = mint authority
         { pubkey: ata,          isSigner: false, isWritable: true  },
-        { pubkey: recipientPub, isSigner: false, isWritable: false }, // owner
+        { pubkey: recipientPub, isSigner: false, isWritable: false }, // ATA owner
         { pubkey: mintPub,      isSigner: false, isWritable: false },
         { pubkey: SYSTEM_PROGRAM_ID, isSigner: false, isWritable: false },
         { pubkey: TOKEN_PROGRAM_ID,  isSigner: false, isWritable: false },
       ],
-      data: new Uint8Array([1]),
+      data: new Uint8Array([1]), // CreateIdempotent
     };
+
     const mintToIx: Instruction = {
       programId: TOKEN_PROGRAM_ID,
       keys: [
         { pubkey: mintPub, isSigner: false, isWritable: true  },
         { pubkey: ata,     isSigner: false, isWritable: true  },
-        { pubkey: authPub, isSigner: true,  isWritable: false },
+        { pubkey: authPub, isSigner: true,  isWritable: false }, // mint authority
       ],
       data: concat(new Uint8Array([7]), u64le(baseUnits)),
     };
 
     const bh = await rpc<any>("getLatestBlockhash", [{ commitment: "finalized" }]);
-    const blockhashB58: string = bh.value.blockhash;
-    const lastValidBlockHeight: number = bh.value.lastValidBlockHeight;
-    const recentBlockhash = bs58.decode(blockhashB58);
+    const recentBlockhash = bs58.decode(bh.value.blockhash);
 
-    // Recipient = fee payer = account[0] = signature slot 0.
-    const { message, accountKeys } = buildMessage(recipientPub, recentBlockhash, [createAtaIx, mintToIx]);
+    // authPub is both fee payer AND mint authority → deduped to one account key,
+    // one signer slot. numSigners = 1.
+    const { message } = buildMessage(authPub, recentBlockhash, [createAtaIx, mintToIx]);
 
-    // Find authority's signature slot (must be inside the signer prefix).
-    const authPubB58 = bs58.encode(authPub);
-    const authSigSlot = accountKeys.findIndex(k => bs58.encode(k) === authPubB58);
-    if (authSigSlot < 0) return bad("authority not in account keys", 500);
+    const numSigners = message[0]; // should be 1
+    if (numSigners !== 1) return bad(`unexpected signer count ${numSigners}`, 500);
 
-    // Authority signs the message bytes.
     const authoritySig = await ed.signAsync(message, authPriv);
 
-    // numSigners = header byte 0
-    const numSigners = message[0];
-    if (authSigSlot >= numSigners) return bad("authority slot is not a signer", 500);
-
-    // Build wire with recipient slot blank (64 zeros) and authority slot filled.
-    const sigBlobs: Uint8Array[] = [];
-    for (let i = 0; i < numSigners; i++) {
-      if (i === authSigSlot) sigBlobs.push(authoritySig);
-      else sigBlobs.push(new Uint8Array(64)); // recipient fills this client-side
-    }
-    const wire = concat(encodeShortVec(numSigners), ...sigBlobs, message);
+    // Fully-signed wire transaction
+    const wire    = concat(encodeShortVec(1), authoritySig, message);
     const wireB64 = btoa(String.fromCharCode(...wire));
 
+    // Broadcast
+    const txSig = await rpc<string>("sendTransaction", [
+      wireB64,
+      { encoding: "base64", skipPreflight: false, preflightCommitment: "confirmed", maxRetries: 5 },
+    ]);
+
+    console.log("[bridge-execute-mint] broadcast", txSig, "for", recipient, amt);
+
+    // Wait for on-chain confirmation (non-fatal timeout)
+    await waitForConfirmation(txSig);
+
     return new Response(JSON.stringify({
-      wire_b64: wireB64,
-      blockhash: blockhashB58,
-      last_valid_block_height: lastValidBlockHeight,
-      ata: bs58.encode(ata),
+      signature: txSig,
+      ata:       bs58.encode(ata),
       recipient,
-      amount: amt,
+      amount:    amt,
     }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
   } catch (e) {
     const msg = String((e as Error)?.message ?? e).slice(0, 500);
     console.error("[bridge-execute-mint] error", msg);

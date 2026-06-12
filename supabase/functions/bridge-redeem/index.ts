@@ -31,7 +31,11 @@ const corsHeaders = {
 };
 
 // MUST match BRIDGE_ADDRESS in src/lib/blob/constants.ts.
+<<<<<<< HEAD
+const BRIDGE_ADDRESS = "19xGuoUEng3w4Y2DjP6te2LLTSKt7fKs27";
+=======
 const BRIDGE_ADDRESS = "1E4QWFYb5Pqj8iAV2be8Ee88yEbvhU9iTs";
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 const BRIDGE_FEE_BLOB = 0.0015;
 const MEMO_PROGRAM_ID = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
 const TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
@@ -210,7 +214,7 @@ async function signAndBroadcastCredit(
   const memo = `redeem:${solSig.slice(0, 16)}`;
   const amt = Math.round(creditAmount * BLOB_UNIT) / BLOB_UNIT;
 
-  const data = `${BRIDGE_ADDRESS}→${blobAddress}:${amt}@${ts}|fr=${feeRate}|m=${memo}`;
+  const data = `${BRIDGE_ADDRESS}->${blobAddress}:${amt}@${ts}|fr=${feeRate}|m=${memo}`;
   const msgHash = sha256(enc.encode(data));
   const sigObj = await secp.signAsync(msgHash, privBytes);
   const signature = sigObj.toCompactHex();
@@ -229,12 +233,23 @@ async function signAndBroadcastCredit(
     timestamp: ts,
   };
 
+  // Debug-log everything we're sending so a "bad signature" failure can be
+  // traced back to the exact payload that was signed. Remove once stable.
+  console.log("[bridge-redeem/sign] payload", {
+    signed_string: data,
+    signed_string_codepoints: Array.from(data).map(c => c.charCodeAt(0).toString(16)).join(" "),
+    body,
+    pubkey_len: pubHex.length,
+    sig_len: signature.length,
+  });
+
   const res = await fetch(`${supabaseUrl}/functions/v1/submit-tx`, {
     method: "POST",
     headers: { "Content-Type": "application/json", apikey: anonKey },
     body: JSON.stringify(body),
   });
   const j = await res.json().catch(() => ({}));
+  console.log("[bridge-redeem/sign] submit-tx response", { status: res.status, body: j });
   if (!res.ok || j.error) return { ok: false, error: j.error || `submit-tx ${res.status}` };
   return { ok: true, tx_id: txid };
 }

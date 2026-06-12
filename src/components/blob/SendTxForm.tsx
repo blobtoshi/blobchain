@@ -1,24 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
 import * as Relay from "@/lib/blobRelay";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Zap } from "lucide-react";
+import { Zap, ScanLine } from "lucide-react";
 import { sha256hex, signData } from "@/lib/blob/crypto";
-import { calcBalance } from "@/lib/blob/chain";
 import { canonicalTxBytes, estimateTxBytes, feeFromRate, memoBytes, to8 } from "@/lib/blob/fees";
 import {
   ADDR_RE, BASE_FEE_RATE, MIN_FEE_RATE, MAX_MEMO_BYTES, BLOB_DECIMALS, BLOB_UNIT,
 } from "@/lib/blob/constants";
+import { ScanQrDialog } from "./QrDialog";
 
-export default function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent }: any) {
+// balance is now passed as a prop from the parent (which fetches it from the node)
+// so this component no longer needs chain or calcBalance.
+export default function SendTxForm({ wallet, balance = 0, mempool, onBroadcast, onSent }: any) {
   const [to, setTo] = useState("");
   const [amt, setAmt] = useState("");
   const [memo, setMemo] = useState("");
   const [st, setSt] = useState("idle");
+  const [scanOpen, setScanOpen] = useState(false);
   const [err, setErr] = useState("");
   const [feeInfo, setFeeInfo] = useState<{ recommendedFeeRate: number; minFeeRate: number; baseFeeRate: number } | null>(null);
   const [preset, setPreset] = useState<"slow" | "normal" | "fast" | "custom">("normal");
   const [customRate, setCustomRate] = useState<string>("");
-  const balance = calcBalance(wallet.address, chain, mempool);
 
   useEffect(() => {
     let cancelled = false;
@@ -76,7 +78,13 @@ export default function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent
     try {
       const ts = Date.now();
       const txid = await sha256hex(`${wallet.address}${toAddress}${amount}${ts}${activeFeeRate}${memo}`);
-      const data = `${wallet.address}→${toAddress}:${amount}@${ts}|fr=${activeFeeRate}|m=${memo}`;
+      const id = txid.slice(0, 40);
+      // H2: per-send single-use nonce (16 random bytes, hex). Bound into the
+      // signed payload alongside id so this authorization can't be replayed and
+      // can't be re-broadcast under a different id.
+      const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+        .map(b => b.toString(16).padStart(2, "0")).join("");
+      const data = `${id}:${wallet.address}->${toAddress}:${amount}@${ts}|fr=${activeFeeRate}|m=${memo}|n=${nonce}`;
       const sig = await signData(wallet.privateKey, data);
       const bytes = canonicalTxBytes({
         from: wallet.address, to: toAddress, amount, timestamp: ts,
@@ -88,7 +96,8 @@ export default function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent
         setSt("idle"); return;
       }
       const tx = {
-        id: txid.slice(0, 40),
+        id,
+        nonce,
         from: wallet.address,
         to: toAddress, amount, fee,
         feeRate: activeFeeRate, memo,
@@ -122,13 +131,24 @@ export default function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent
         <span className="num text-primary">{balance.toFixed(BLOB_DECIMALS)} BLOB</span>
       </div>
       <div className="space-y-2">
-        <label className="label-eyebrow block">Recipient</label>
-        <input
-          value={to}
-          onChange={e => setTo(e.target.value)}
-          placeholder="Recipient address (1…)"
-          className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm num placeholder:text-muted-foreground/60 placeholder:font-sans"
-        />
+        <div className="flex items-center justify-between">
+          <label className="label-eyebrow block">Recipient</label>
+          <button
+            type="button"
+            onClick={() => setScanOpen(true)}
+            className="text-[11px] inline-flex items-center gap-1 px-2 py-1 rounded-md border border-border hover:border-primary/40 hover:text-primary transition"
+          >
+            <ScanLine className="w-3.5 h-3.5" /> Scan QR
+          </button>
+        </div>
+        <div className="relative">
+          <input
+            value={to}
+            onChange={e => setTo(e.target.value)}
+            placeholder="Recipient address (1…)"
+            className="w-full px-4 py-3 rounded-lg bg-secondary/60 border border-border focus:border-primary/60 focus:outline-none text-sm num placeholder:text-muted-foreground/60 placeholder:font-sans"
+          />
+        </div>
         {trimmed && (
           <div className="text-[11px] min-h-[14px]">
             {looksLikeAddr && (
@@ -140,6 +160,14 @@ export default function SendTxForm({ wallet, chain, mempool, onBroadcast, onSent
           </div>
         )}
       </div>
+      <ScanQrDialog
+        open={scanOpen}
+        onOpenChange={setScanOpen}
+        onResult={(text) => {
+          const cleaned = text.replace(/^blob:/i, "").split("?")[0].trim();
+          setTo(cleaned);
+        }}
+      />
       <div className="space-y-2">
         <label className="label-eyebrow block">Amount</label>
         <div className="relative">

@@ -7,7 +7,6 @@ import {
   TrendingUpDown, ExternalLink, Loader2, CheckCircle2, AlertCircle, Copy, Wallet,
 } from "lucide-react";
 import { sha256hex, signData } from "@/lib/blob/crypto";
-import { calcBalance } from "@/lib/blob/chain";
 import { canonicalTxBytes, estimateTxBytes, feeFromRate, memoBytes, to8 } from "@/lib/blob/fees";
 import {
   BASE_FEE_RATE, MIN_FEE_RATE, MAX_MEMO_BYTES, BLOB_DECIMALS,
@@ -15,7 +14,8 @@ import {
 import bridgeCoinsImg from "@/assets/bridge-coins.png";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
-import { Transaction } from "@solana/web3.js";
+import { Transaction, SystemProgram, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { getAssociatedTokenAddress } from "@solana/spl-token";
 
 
 const SolanaProvider = lazy(() => import("./SolanaProvider"));
@@ -23,7 +23,7 @@ const RedeemPanel = lazy(() => import("./RedeemPanel"));
 
 export default function BridgeScreen(props: any) {
   const { wallet } = props;
-  const [config, setConfig] = useState<{ bridgeAddress: string; splMintAddress: string | null; solanaRpcUrl?: string | null } | null>(null);
+  const [config, setConfig] = useState<{ bridgeAddress: string; splMintAddress: string | null; solanaRpcUrl?: string | null; mintAuthorityPubkey?: string | null } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,7 +98,7 @@ export default function BridgeScreen(props: any) {
   );
 }
 
-function ForwardBridge({ wallet, chain, mempool, onBroadcast, config: cfgProp }: any) {
+function ForwardBridge({ wallet, chain, mempool, onBroadcast, config: cfgProp, balance = 0 }: any) {
   const [config, setConfig] = useState(cfgProp ?? null);
   useEffect(() => { if (cfgProp) setConfig(cfgProp); }, [cfgProp]);
 
@@ -113,11 +113,6 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast, config: cfgProp }:
   const [activeRequest, setActiveRequest] = useState<Relay.BridgeRequest | null>(null);
   const [history, setHistory] = useState<Relay.BridgeRequest[]>([]);
   const [copied, setCopied] = useState(false);
-  // Track which blob_tx_ids we've already attempted client-mint on, so the
-  // poll loop doesn't repeatedly re-pop the wallet popup.
-  const [mintAttempted, setMintAttempted] = useState<Set<string>>(new Set());
-
-  const balance = calcBalance(wallet.address, chain, mempool);
 
   useEffect(() => {
     let cancelled = false;
@@ -147,7 +142,7 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast, config: cfgProp }:
   }, [history, activeRequest]);
 
   // Poll status, and once confirmations reach the threshold, auto-trigger the
-  // co-signed mint. The user only sees one wallet popup.
+  // Poll active bridge request and update status.
   useEffect(() => {
     if (!activeRequest) return;
     if (activeRequest.status === "minted" || activeRequest.status === "failed") return;
@@ -163,85 +158,15 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast, config: cfgProp }:
       });
       if (r.status === "minted") { setSt("minted"); return; }
       if (r.status === "failed") { setSt("failed"); setErr(r.error || "Mint failed"); return; }
-
-      const ready =
-        (r.status === "confirmed" || r.status === "minting") &&
-        Number(r.confirmations ?? 0) >= Relay.BRIDGE_REQUIRED_CONFIRMATIONS;
-
-      if (ready && !mintAttempted.has(r.blob_tx_id) && solWallet.connected && solWallet.signTransaction) {
-        setMintAttempted((s) => new Set(s).add(r.blob_tx_id));
-        await runClientMint(r);
-      } else if (r.status === "minting") {
-        setSt("wallet");
-      } else {
-        setSt("waiting");
-      }
+      // "minting" means bridge-execute-mint is running autonomously on the backend.
+      // Nothing the user needs to do — just keep polling.
+      setSt("waiting");
     };
 
     poll();
     const id = setInterval(poll, 4000);
     return () => { cancelled = true; clearInterval(id); };
-  }, [activeRequest?.blob_tx_id, activeRequest?.status, solWallet.connected, solWallet.publicKey?.toBase58()]);
-
-  async function runClientMint(r: Relay.BridgeRequest) {
-    setErr("");
-    if (!solWallet.signTransaction || !solWallet.publicKey) {
-      setErr("Connect a Solana wallet to complete the mint");
-      setSt("failed");
-      return;
-    }
-    if (solWallet.publicKey.toBase58() !== r.sol_address) {
-      setErr(`Connect the wallet for ${r.sol_address.slice(0, 8)}…${r.sol_address.slice(-6)} to complete the mint`);
-      setSt("failed");
-      return;
-    }
-
-    try {
-      setSt("preparing");
-      const prep = await Relay.prepareBridgeMint(r.blob_tx_id);
-      if (!prep.ok) { setErr(prep.error); setSt("failed"); return; }
-
-      // Decode partial-signed wire bytes into a Transaction.
-      const wire = Uint8Array.from(atob(prep.data.wire_b64), c => c.charCodeAt(0));
-      const tx = Transaction.from(wire);
-
-      setSt("wallet");
-      const signed = await solWallet.signTransaction(tx);
-
-      setSt("submitting");
-      const sig = await connection.sendRawTransaction(signed.serialize(), {
-        skipPreflight: false,
-        preflightCommitment: "confirmed",
-        maxRetries: 5,
-      });
-
-      // Wait for confirmation, then notify backend.
-      try {
-        await connection.confirmTransaction({
-          signature: sig,
-          blockhash: prep.data.blockhash,
-          lastValidBlockHeight: prep.data.last_valid_block_height,
-        }, "confirmed");
-      } catch {
-        // Even if confirm times out, /submit will verify on chain itself.
-      }
-
-      const sub = await Relay.submitBridgeMint(r.blob_tx_id, sig);
-      if (!sub.ok) { setErr(sub.error); setSt("failed"); return; }
-      setActiveRequest(sub.data);
-      setSt("minted");
-    } catch (e: any) {
-      const msg = e?.message ?? String(e);
-      // User rejection is recoverable — let them retry.
-      setErr(msg);
-      setSt("failed");
-      setMintAttempted((s) => {
-        const next = new Set(s);
-        next.delete(r.blob_tx_id);
-        return next;
-      });
-    }
-  }
+  }, [activeRequest?.blob_tx_id, activeRequest?.status]);
 
   const recRate = feeInfo?.recommendedFeeRate ?? BASE_FEE_RATE;
   const activeFeeRate = Math.max(MIN_FEE_RATE, recRate);
@@ -265,31 +190,129 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast, config: cfgProp }:
     if (parsedAmt <= 0) { setErr("Invalid amount"); return; }
     if (memoOver) { setErr(`Memo too long (${memoLen}/${MAX_MEMO_BYTES})`); return; }
     if (previewTotal > balance) { setErr("Insufficient balance"); return; }
+    const mintAuthority = config.mintAuthorityPubkey;
+    if (!mintAuthority) { setErr("Mint authority not available - bridge config error"); return; }
+    if (!solWallet.sendTransaction) { setErr("Solana wallet does not support sendTransaction"); return; }
+    if (!config.splMintAddress) { setErr("WBLOB mint address not available"); return; }
 
-    setSt("signing");
+    setSt("preparing");
     try {
+      // Front-load all async prep work IN PARALLEL so we get to
+      // sendTransaction as fast as possible. Phantom's popup is most
+      // reliable when the call happens within ~1s of the user click;
+      // sequential awaits stretch that out and the popup ends up needing
+      // a tab focus to show.
+      //
+      //   1. Build & sign the BLOB tx locally (we don't broadcast yet)
+      //   2. Fetch latest Solana blockhash
+      //   3. Check whether the user already has a WBLOB ATA - if yes, we
+      //      only need ~0.00001 SOL for the tx fee; if no, ~0.00204 for
+      //      ATA rent + fee. Saves users with an existing ATA from being
+      //      charged the full rent every time.
       const ts = Date.now();
+      const splMint = new PublicKey(config.splMintAddress);
+      const solOwnerPk = solWallet.publicKey!;
+
+      // H2: compute the tx id first, then bind id + a single-use nonce into the
+      // signed payload so the bridge deposit tx can't be replayed or
+      // re-broadcast under a different id.
       const txid = (await sha256hex(`${wallet.address}${config.bridgeAddress}${parsedAmt}${ts}${activeFeeRate}${memoStr}`)).slice(0, 40);
-      const data = `${wallet.address}→${config.bridgeAddress}:${parsedAmt}@${ts}|fr=${activeFeeRate}|m=${memoStr}`;
-      const sig = await signData(wallet.privateKey, data);
+      const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+        .map(b => b.toString(16).padStart(2, "0")).join("");
+      const data = `${txid}:${wallet.address}->${config.bridgeAddress}:${parsedAmt}@${ts}|fr=${activeFeeRate}|m=${memoStr}|n=${nonce}`;
+
+      const [
+        sigBlobLocal,
+        latestBlockhash,
+        ataInfo,
+      ] = await Promise.all([
+        signData(wallet.privateKey, data),
+        connection.getLatestBlockhash("confirmed"),
+        // ATA existence check. getAssociatedTokenAddress is sync (just key
+        // derivation); getAccountInfo on it tells us if it exists on chain.
+        getAssociatedTokenAddress(splMint, solOwnerPk).then(async (ata) => {
+          const info = await connection.getAccountInfo(ata, "confirmed");
+          return { ata, exists: info != null };
+        }),
+      ]);
+
       const bytes = canonicalTxBytes({
         from: wallet.address, to: config.bridgeAddress, amount: parsedAmt, timestamp: ts,
-        feeRate: activeFeeRate, memo: memoStr, publicKey: wallet.publicKey, signature: sig,
+        feeRate: activeFeeRate, memo: memoStr, publicKey: wallet.publicKey, signature: sigBlobLocal,
       });
       const fee = feeFromRate(activeFeeRate, bytes);
-      const tx = {
+      const blobTx = {
         id: txid,
+        nonce,
         from: wallet.address,
         to: config.bridgeAddress, amount: parsedAmt, fee,
         feeRate: activeFeeRate, memo: memoStr,
-        signature: sig, publicKey: wallet.publicKey,
+        signature: sigBlobLocal, publicKey: wallet.publicKey,
         timestamp: ts, status: "pending",
       };
 
+      // ── SOL fee payment ───────────────────────────────────────────────
+      // ATA rent is ~0.00204 SOL, charged once per token account. If the
+      // user already has a WBLOB ATA we only need to cover the tx fee.
+      // We add a small buffer for fluctuations in fee market / ATA rent.
+      const ATA_RENT_LAMPORTS = Math.ceil(0.00204 * LAMPORTS_PER_SOL);
+      const TX_FEE_BUFFER     = Math.ceil(0.0001  * LAMPORTS_PER_SOL); // generous, covers normal fees + buffer
+      const lamports = ataInfo.exists ? TX_FEE_BUFFER : (ATA_RENT_LAMPORTS + TX_FEE_BUFFER);
+
+      const solTx = new Transaction({
+        recentBlockhash: latestBlockhash.blockhash,
+        feePayer: solOwnerPk,
+      }).add(
+        SystemProgram.transfer({
+          fromPubkey: solOwnerPk,
+          toPubkey: new PublicKey(mintAuthority),
+          lamports,
+        })
+      );
+
+      // ── Phantom popup: call sendTransaction NOW ───────────────────────
+      // Everything above was prep; this is the single call that triggers
+      // the wallet popup. Keeping it close to the click event by avoiding
+      // intermediate await-and-rerender cycles makes the popup actually
+      // appear without needing tab focus.
+      setSt("wallet");
+      let solSignature: string;
+      try {
+        solSignature = await solWallet.sendTransaction(solTx, connection, {
+          maxRetries: 3,
+        });
+      } catch (e: any) {
+        setErr(e?.message?.includes("rejected") ? "SOL payment cancelled - no BLOB has been deducted" : `SOL payment failed: ${e?.message ?? String(e)}`);
+        setSt("failed");
+        return;
+      }
+
+      // Confirm before broadcasting BLOB.
+      setSt("registering");
+      try {
+        await connection.confirmTransaction({
+          signature: solSignature,
+          blockhash: latestBlockhash.blockhash,
+          lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+        }, "confirmed");
+      } catch (e: any) {
+        setErr(`SOL payment did not confirm: ${e?.message ?? String(e)}. Please contact support if SOL was deducted.`);
+        setSt("failed");
+        return;
+      }
+
+      // ── NOW broadcast the BLOB tx ─────────────────────────────────────
+      // SOL is paid and confirmed. If the BLOB broadcast fails here the
+      // user has paid the SOL fee for nothing; we surface that clearly so
+      // they can contact support (the SOL is recoverable by the operator).
       setSt("broadcasting");
-      const res = await Relay.pushTx(tx);
-      if (!res.ok) { setErr(res.error || "Broadcast failed"); setSt("failed"); return; }
-      onBroadcast(tx);
+      const res = await Relay.pushTx(blobTx);
+      if (!res.ok) {
+        setErr(`SOL paid (${solSignature.slice(0, 8)}...) but BLOB broadcast failed: ${res.error || "unknown"}. Contact support with the SOL signature for a refund.`);
+        setSt("failed");
+        return;
+      }
+      onBroadcast(blobTx);
 
       setSt("registering");
       const reg = await Relay.registerBridgeRequest({
@@ -297,6 +320,7 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast, config: cfgProp }:
         sol_address: solPubkey,
         amount: parsedAmt,
         from_address: wallet.address,
+        sol_signature: solSignature,
       });
       if (!reg.ok || !reg.data) { setErr(reg.error || "Bridge registration failed"); setSt("failed"); return; }
       setActiveRequest(reg.data);
@@ -374,7 +398,7 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast, config: cfgProp }:
               </div>
               <div className="text-[10px] text-muted-foreground flex items-start gap-1.5">
                 <Wallet className="w-3 h-3 mt-0.5 shrink-0" />
-                <span>You will sign the SPL mint with this wallet (covers ~0.002 SOL ATA rent on first use).</span>
+                <span>You will approve a ~0.0025 SOL payment to cover ATA rent + mint fee, then sign the BLOB tx.</span>
               </div>
             </div>
 
@@ -475,17 +499,17 @@ function ForwardBridge({ wallet, chain, mempool, onBroadcast, config: cfgProp }:
               {st === "idle" || st === "minted" || st === "failed" ? (
                 <><TrendingUpDown className="w-4 h-4" /> Bridge to Solana</>
               ) : st === "signing" ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Signing…</>
+                <><Loader2 className="w-4 h-4 animate-spin" /> Signing BLOB tx…</>
               ) : st === "broadcasting" ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Broadcasting…</>
+                <><Loader2 className="w-4 h-4 animate-spin" /> Broadcasting BLOB tx…</>
+              ) : st === "preparing" ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Preparing SOL payment…</>
+              ) : st === "wallet" ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Approve in Phantom…</>
               ) : st === "registering" ? (
                 <><Loader2 className="w-4 h-4 animate-spin" /> Registering bridge…</>
               ) : st === "waiting" ? (
                 <><Loader2 className="w-4 h-4 animate-spin" /> Waiting for confirmations…</>
-              ) : st === "preparing" ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Preparing mint…</>
-              ) : st === "wallet" ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Awaiting wallet…</>
               ) : (
                 <><Loader2 className="w-4 h-4 animate-spin" /> Submitting to Solana…</>
               )}

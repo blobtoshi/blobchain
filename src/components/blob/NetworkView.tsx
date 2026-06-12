@@ -1,34 +1,41 @@
 import { useEffect, useState } from "react";
 import * as Relay from "@/lib/blobRelay";
-import { calcTotalSupply } from "@/lib/blob/chain";
 import { memoBytes } from "@/lib/blob/fees";
 import {
   BLOCK_TIME, MAX_SUPPLY, MAX_BLOCK_SIZE, HALVING_BLOCKS, BASE_FEE_RATE, MIN_FEE_RATE,
-  BLOB_DECIMALS, MAX_MEMO_BYTES, BRIDGE_ADDRESS,
+  BLOB_DECIMALS, MAX_MEMO_BYTES,
 } from "@/lib/blob/constants";
 import blobCoin from "@/assets/blob-coin.png";
 import NodeConnectionCard from "@/components/blob/NodeConnectionCard";
 
-export default function NetworkView({ nodeCount, chain, blockInfo, blockTime, mempool = [] }: any) {
+export default function NetworkView({ nodeCount, chain, chainTip, blockInfo, blockTime, mempool = [] }: any) {
   const [feeInfo, setFeeInfo] = useState<{ recommendedFeeRate: number; minFeeRate: number; baseFeeRate: number } | null>(null);
+  const [stats, setStats] = useState<{ height: number; totalSupply: number; totalTxs: number } | null>(null);
   const [, setTick] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      const info = await Relay.fetchFeeInfo();
-      if (!cancelled && info) setFeeInfo(info);
+      const [info, s] = await Promise.all([Relay.fetchFeeInfo(), Relay.fetchStats()]);
+      if (!cancelled) {
+        if (info) setFeeInfo(info);
+        setStats(s);
+      }
     };
     load();
-    const id = setInterval(load, 15_000);
+    // Tx count requires the /stats endpoint which scans blocks server-side.
+    // Refetch periodically and on tip change so the count stays current.
+    const id = setInterval(load, 30_000);
     const t = setInterval(() => setTick((x) => x + 1), 1000);
     return () => { cancelled = true; clearInterval(id); clearInterval(t); };
-  }, []);
+  }, [chainTip?.height]);
 
-  const supply = calcTotalSupply(chain);
+  // Use real-time chainTip from WS for height + supply (instant updates).
+  // Fall back to /stats endpoint values (for totalTxs which isn't in chainTip).
+  const height = chainTip?.height ?? stats?.height ?? Math.max(0, blockInfo.height - 1);
+  const supply = chainTip?.totalSupply ?? stats?.totalSupply ?? 0;
+  const totalTxs = stats?.totalTxs ?? 0;
   const supplyPct = Math.min((supply / MAX_SUPPLY) * 100, 100);
-  const totalTxs = chain.reduce((s: number, b: any) => s + (b.transactions || []).length, 0);
-  const height = Math.max(0, chain.length - 1);
 
   const halvingsDone = Math.floor(height / HALVING_BLOCKS);
   const blocksToNextHalving = HALVING_BLOCKS - (height % HALVING_BLOCKS);
@@ -239,7 +246,6 @@ export default function NetworkView({ nodeCount, chain, blockInfo, blockTime, me
         <Row k="Score proof" v="ECDSA P-256" />
         <Row k="Tx fee model" v="drops/byte × tx size" />
         <Row k="Memo limit" v={`${MAX_MEMO_BYTES} bytes`} />
-        <Row k="🔒 Bridge address" v={BRIDGE_ADDRESS} tone="text-primary" />
       </div>
     </div>
   );

@@ -9,6 +9,7 @@ import {
 } from "@/lib/blob/explorer";
 import { PAGE_SIZE } from "@/lib/blob/constants";
 import MempoolView from "./MempoolView";
+import TxDetailView from "./TxDetailView";
 
 function ExplorerStat({ label, value, sub }: { label: string; value: React.ReactNode; sub?: React.ReactNode }) {
   return (
@@ -38,11 +39,11 @@ function ExplorerTabBtn({ active, onClick, children, count }: any) {
   );
 }
 
-function Pager({ page, setPage, total, label }: { page: number; setPage: (n: number) => void; total: number; label: string }) {
-  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  if (total <= PAGE_SIZE) return null;
-  const start = page * PAGE_SIZE + 1;
-  const end = Math.min((page + 1) * PAGE_SIZE, total);
+function Pager({ page, setPage, total, label, pageSize = PAGE_SIZE }: { page: number; setPage: (n: number) => void; total: number; label: string; pageSize?: number }) {
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  if (total <= pageSize) return null;
+  const start = page * pageSize + 1;
+  const end = Math.min((page + 1) * pageSize, total);
   return (
     <div className="glass flex items-center justify-between px-3 py-2 text-xs">
       <span className="text-muted-foreground num">{start}–{end} of {total} {label}</span>
@@ -108,18 +109,44 @@ function FilterPanel({ activeCount, onClear, defaultOpen = false, children }: { 
   );
 }
 
-export default function BlockExplorer({ chain, blockInfo, blockTime, mempool }: any) {
+export default function BlockExplorer({ chain: recentChain, chainTip, blockInfo, blockTime, mempool }: any) {
   const [tab, setTab] = useState<"overview" | "blocks" | "txs" | "mempool" | "addresses">("overview");
   const [query, setQuery] = useState("");
   const [selBlock, setSelBlock] = useState<number | null>(null);
   const [selTx, setSelTx] = useState<string | null>(null);
   const [selAddr, setSelAddr] = useState<string | null>(null);
+  // Per-address tx history fetched server-side. The in-memory chain is capped
+  // at 500 blocks so it cannot be the source of truth for any address whose
+  // activity precedes this session. Refetched whenever the selected address
+  // changes or a new block arrives that touches that address.
+  const [selAddrTxs, setSelAddrTxs] = useState<any[]>([]);
+  const [selAddrLoading, setSelAddrLoading] = useState(false);
   const [addresses, setAddresses] = useState<Relay.AddressRecord[]>([]);
+  const [stats, setStats] = useState<{ height: number; totalSupply: number; totalTxs: number } | null>(null);
+
+  // Server-side aggregates — height, totalSupply (from chainTip via WS),
+  // totalTxs (from /stats endpoint). Chain in memory stays capped at 500
+  // recent blocks for the "Blocks" tab and tx history scrolling.
+  useEffect(() => {
+    let cancelled = false;
+    Relay.fetchStats().then((s) => {
+      if (!cancelled && s) setStats(s);
+    });
+    return () => { cancelled = true; };
+  }, [chainTip?.height]);
+
+  // The chain list shown in the Blocks tab is just the recent 500 blocks.
+  // Aggregates (totalSupply, totalTxs) below come from chainTip + stats.
+  const chain = recentChain;
 
   const [pBlocks, setPBlocks] = useState(0);
   const [pTxs, setPTxs] = useState(0);
   const [pMem, setPMem] = useState(0);
   const [pAddr, setPAddr] = useState(0);
+  // Pagination for the per-address transaction list. Independent of pAddr
+  // (which paginates the address directory) - this one resets to 0 each
+  // time the selected address changes so navigation starts on page 1.
+  const [pAddrTxs, setPAddrTxs] = useState(0);
 
   const [txF, setTxF] = useState<TxFilters>(emptyTxFilters);
   const [memF, setMemF] = useState<TxFilters>(emptyTxFilters);
@@ -139,37 +166,72 @@ export default function BlockExplorer({ chain, blockInfo, blockTime, mempool }: 
       if (!cancelled) setAddresses(a);
     })();
     return () => { cancelled = true; };
-  }, [chain.length, mempool.length]);
+  }, [chainTip?.height, mempool.length]);
+
+  // Fetch full tx history for the currently-selected address. Refetches
+  // when the selection changes OR when a new block arrives (so a freshly
+  // mined tx involving this address appears without requiring a manual
+  // refresh).
+  useEffect(() => {
+    if (!selAddr) {
+      setSelAddrTxs([]);
+      setSelAddrLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setSelAddrLoading(true);
+    // Reset pagination to page 0 every time the selected address changes
+    // so the user always starts on the most recent tx, not whichever page
+    // they had open for the previous address.
+    setPAddrTxs(0);
+    (async () => {
+      const txs = await Relay.fetchAddressTxs(selAddr, 500);
+      if (!cancelled) {
+        setSelAddrTxs(txs);
+        setSelAddrLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selAddr, chainTip?.height]);
 
   const allTxs = useMemo(() => flattenChainTxs(chain), [chain]);
   const memTxs = useMemo(() => mempoolToTxs(mempool || []), [mempool]);
 
   const addressBook = useMemo(() => {
-    const m = new Map<string, { address: string; sent: number; received: number; mined: number; txCount: number; lastSeen: number }>();
+    // Use server-side aggregates from /addresses directly. The node computes
+    // these from the FULL chain history — frontend recomputation from the
+    // capped recent-500-block window would give stale numbers.
+    const m = new Map<string, { address: string; sent: number; received: number; mined: number; balance: number; txCount: number; lastSeen: number }>();
     for (const a of addresses) {
       m.set(a.address, {
         address: a.address,
-        sent: 0, received: 0, mined: 0, txCount: 0,
+        sent: 0,
+        received: 0,
+        mined: Number(a.totalMined ?? 0),
+        balance: Number((a as any).balance ?? 0),
+        txCount: 0,
         lastSeen: a.lastActive ? new Date(a.lastActive).getTime() : 0,
       });
     }
+    // Layer recent-window tx aggregation on top — this is for "sent/received
+    // in the visible 500 blocks" and tx counts for filtering. The numeric
+    // mined/balance columns shown in the UI come from the server.
     const touch = (addr: string) => {
       if (!addr || addr === "coinbase") return;
-      if (!m.has(addr)) m.set(addr, { address: addr, sent: 0, received: 0, mined: 0, txCount: 0, lastSeen: 0 });
+      if (!m.has(addr)) m.set(addr, { address: addr, sent: 0, received: 0, mined: 0, balance: 0, txCount: 0, lastSeen: 0 });
       return m.get(addr)!;
     };
     for (const tx of allTxs) {
       const ts = tx.timestamp;
-      if (tx.kind === "reward") {
-        const e = touch(tx.to); if (e) { e.mined += tx.amount; e.lastSeen = Math.max(e.lastSeen, ts); }
-      } else {
+      if (tx.kind !== "reward") {
         const f = touch(tx.from);
         const t = touch(tx.to);
         if (f) { f.sent += tx.amount + tx.fee; f.txCount++; f.lastSeen = Math.max(f.lastSeen, ts); }
         if (t) { t.received += tx.amount; t.txCount++; t.lastSeen = Math.max(t.lastSeen, ts); }
       }
     }
-    return Array.from(m.values()).sort((a, b) => (b.mined + b.received) - (a.mined + a.received));
+    // Sort by balance descending (top wallets first).
+    return Array.from(m.values()).sort((a, b) => b.balance - a.balance || b.mined - a.mined);
   }, [allTxs, addresses]);
 
   const txsAll = useMemo(() => [...memTxs, ...allTxs], [memTxs, allTxs]);
@@ -209,7 +271,7 @@ export default function BlockExplorer({ chain, blockInfo, blockTime, mempool }: 
     const minB = addrF.minBalance === "" ? null : Number(addrF.minBalance);
     const out = addressBook.filter(a => {
       if (q && !a.address.toLowerCase().includes(q)) return false;
-      const bal = a.received + a.mined - a.sent;
+      const bal = a.balance;
       if (minB !== null && bal < minB) return false;
       if (addrF.hasMined === "yes" && a.mined <= 0) return false;
       if (addrF.hasMined === "no" && a.mined > 0) return false;
@@ -218,11 +280,11 @@ export default function BlockExplorer({ chain, blockInfo, blockTime, mempool }: 
       return true;
     });
     switch (addrF.sort) {
-      case "balance-asc": out.sort((a, b) => (a.received + a.mined - a.sent) - (b.received + b.mined - b.sent)); break;
+      case "balance-asc": out.sort((a, b) => (a.balance) - b.balance); break;
       case "mined-desc": out.sort((a, b) => b.mined - a.mined); break;
       case "tx-desc": out.sort((a, b) => b.txCount - a.txCount); break;
       case "recent": out.sort((a, b) => b.lastSeen - a.lastSeen); break;
-      default: out.sort((a, b) => (b.received + b.mined - b.sent) - (a.received + a.mined - a.sent));
+      default: out.sort((a, b) => b.balance - (a.balance));
     }
     return out;
   }, [addressBook, addrF]);
@@ -251,10 +313,34 @@ export default function BlockExplorer({ chain, blockInfo, blockTime, mempool }: 
     return { blocks, txs, addresses };
   }, [q, chain, allTxs, memTxs, addressBook]);
 
-  const totalSupply = chain.reduce((s: number, b: any) => s + Number(b.reward || 0), 0);
-  const totalTxs = allTxs.filter(t => t.kind === "transfer").length;
+  const totalSupply = chainTip?.totalSupply ?? stats?.totalSupply ?? 0;
+  const totalTxs = stats?.totalTxs ?? allTxs.filter(t => t.kind === "transfer").length;
+  // totalVolume only sums what's in the recent 500-block window — that's a
+  // visible-window stat, not a network-wide one. Label accordingly in the UI.
   const totalVolume = allTxs.filter(t => t.kind === "transfer").reduce((s, t) => s + t.amount, 0);
   const lastBlock = chain[chain.length - 1];
+
+  // Solscan-style dedicated transaction detail view. When the user selects a
+  // tx (via search, link, or click), take over the whole explorer with the
+  // detail view instead of using the inline expansion.
+  const selectedTx = selTx
+    ? [...txsAll].find((t) => t.id === selTx) ?? null
+    : null;
+  if (selectedTx) {
+    const block = selectedTx.block != null
+      ? chain.find((b: any) => b.height === selectedTx.block)
+      : undefined;
+    return (
+      <TxDetailView
+        tx={selectedTx}
+        block={block}
+        chainTipHeight={chainTip?.height}
+        onBack={() => setSelTx(null)}
+        onSelectAddr={(addr) => { setSelTx(null); setTab("addresses"); setSelAddr(addr); }}
+        onSelectBlock={(h) => { setSelTx(null); setTab("blocks"); setSelBlock(h); }}
+      />
+    );
+  }
 
   return (
     <div className="space-y-3">
@@ -310,7 +396,7 @@ export default function BlockExplorer({ chain, blockInfo, blockTime, mempool }: 
                     className="w-full text-left glass px-3 py-2 mb-1 hover:bg-secondary/30 transition flex items-center justify-between text-xs">
                     <span className="text-foreground/80">{a.address === "coinbase" ? "blob" : shortHash(a.address, 6)}</span>
                     <span className="num text-muted-foreground truncate mx-2">{shortHash(a.address, 8)}</span>
-                    <span className="num text-primary/80">{(a.received + a.mined - a.sent).toFixed(2)} BLOB</span>
+                    <span className="num text-primary/80">{(a.balance).toFixed(2)} BLOB</span>
                   </button>
                 ))}
               </div>
@@ -322,8 +408,8 @@ export default function BlockExplorer({ chain, blockInfo, blockTime, mempool }: 
       {/* Tabs */}
       <div className="glass-hi flex items-center gap-1 px-2 overflow-x-auto">
         <ExplorerTabBtn active={tab === "overview"} onClick={() => setTab("overview")}>Overview</ExplorerTabBtn>
-        <ExplorerTabBtn active={tab === "blocks"} onClick={() => setTab("blocks")} count={chain.length}>Blocks</ExplorerTabBtn>
-        <ExplorerTabBtn active={tab === "txs"} onClick={() => setTab("txs")} count={allTxs.length}>Transactions</ExplorerTabBtn>
+        <ExplorerTabBtn active={tab === "blocks"} onClick={() => setTab("blocks")} count={chainTip?.height ?? chain.length}>Blocks</ExplorerTabBtn>
+        <ExplorerTabBtn active={tab === "txs"} onClick={() => setTab("txs")} count={stats?.totalTxs ?? allTxs.length}>Transactions</ExplorerTabBtn>
         <ExplorerTabBtn active={tab === "mempool"} onClick={() => setTab("mempool")} count={memTxs.length}>Mempool</ExplorerTabBtn>
         <ExplorerTabBtn active={tab === "addresses"} onClick={() => setTab("addresses")} count={addressBook.length}>Addresses</ExplorerTabBtn>
       </div>
@@ -536,7 +622,7 @@ export default function BlockExplorer({ chain, blockInfo, blockTime, mempool }: 
           )}
           {txsFiltered.slice(pTxs * PAGE_SIZE, (pTxs + 1) * PAGE_SIZE).map(t => (
             <div key={t.id}>
-              <div onClick={() => setSelTx(selTx === t.id ? null : t.id)}
+              <div onClick={() => setSelTx(t.id)}
                 className="glass px-3 py-2.5 cursor-pointer hover:bg-secondary/30 transition grid grid-cols-[18px_1fr_70px_60px_60px] sm:grid-cols-[18px_1fr_1fr_80px_70px_80px] gap-2 items-center text-xs">
                 {t.kind === "reward"
                   ? <HandCoins className="w-3.5 h-3.5 text-[hsl(var(--warning))]" />
@@ -549,32 +635,6 @@ export default function BlockExplorer({ chain, blockInfo, blockTime, mempool }: 
                   {t.status === "pending" ? "pending" : timeAgo(t.timestamp)}
                 </span>
               </div>
-              {selTx === t.id && (
-                <div className="glass-hi mt-1 p-3 text-xs space-y-1.5 overflow-x-auto">
-                  <div className="grid grid-cols-[80px_1fr] gap-2"><span className="label-eyebrow">ID</span><span className="num text-foreground/70 break-all">{t.id}</span></div>
-                  <div className="grid grid-cols-[80px_1fr] gap-2">
-                    <span className="label-eyebrow">From</span>
-                    <button onClick={() => { setTab("addresses"); setSelAddr(t.from); }} className="num text-[hsl(var(--warning))] hover:underline text-left break-all">
-                      {t.kind === "reward" ? "Block Reward" : (t.from === "coinbase" ? "blob" : t.from)}
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-[80px_1fr] gap-2">
-                    <span className="label-eyebrow">To</span>
-                    <button onClick={() => { setTab("addresses"); setSelAddr(t.to); }} className="num text-[hsl(var(--warning))] hover:underline text-left break-all">{t.to}</button>
-                  </div>
-                  <div className="grid grid-cols-[80px_1fr] gap-2"><span className="label-eyebrow">Amount</span><span className="num">{t.amount} BLOB</span></div>
-                  <div className="grid grid-cols-[80px_1fr] gap-2"><span className="label-eyebrow">Fee</span><span className="num">{t.fee} BLOB</span></div>
-                  <div className="grid grid-cols-[80px_1fr] gap-2"><span className="label-eyebrow">Status</span>
-                    <span className={t.status === "pending" ? "text-[hsl(var(--warning))]" : "text-foreground/70"}>
-                      {t.status === "pending" ? "⧗ pending in mempool" : `✓ confirmed in block #${t.block}`}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-[80px_1fr] gap-2"><span className="label-eyebrow">Time</span><span>{new Date(t.timestamp).toLocaleString()}</span></div>
-                  {t.signature && (
-                    <div className="grid grid-cols-[80px_1fr] gap-2"><span className="label-eyebrow">Signature</span><span className="num text-foreground/60 break-all text-[10px]">{t.signature}</span></div>
-                  )}
-                </div>
-              )}
             </div>
           ))}
           <Pager page={pTxs} setPage={setPTxs} total={txsFiltered.length} label="transactions" />
@@ -600,8 +660,18 @@ export default function BlockExplorer({ chain, blockInfo, blockTime, mempool }: 
           {selAddr ? (
             (() => {
               const a = addressBook.find(x => x.address === selAddr);
-              const addrTxs = [...memTxs, ...allTxs].filter(t => t.from === selAddr || t.to === selAddr);
-              const balance = (a?.received || 0) + (a?.mined || 0) - (a?.sent || 0);
+              // Combine pending mempool txs (instant) with server-fetched
+              // confirmed txs (full chain). Dedupe by id so a tx that just
+              // confirmed and was returned by both doesn't appear twice.
+              const pending = memTxs.filter(t => t.from === selAddr || t.to === selAddr);
+              const seen = new Set<string>();
+              const addrTxs: any[] = [];
+              for (const t of [...pending, ...selAddrTxs]) {
+                if (t.id && seen.has(t.id)) continue;
+                if (t.id) seen.add(t.id);
+                addrTxs.push(t);
+              }
+              const balance = a?.balance ?? 0;
               return (
                 <div className="space-y-3">
                   <button onClick={() => setSelAddr(null)} className="text-xs text-muted-foreground hover:text-foreground">← Back to addresses</button>
@@ -616,8 +686,10 @@ export default function BlockExplorer({ chain, blockInfo, blockTime, mempool }: 
                     <ExplorerStat label="Received" value={(a?.received || 0).toFixed(2)} />
                     <ExplorerStat label="Sent" value={(a?.sent || 0).toFixed(2)} />
                   </div>
-                  <div className="label-eyebrow px-1">Transactions ({addrTxs.length})</div>
-                  {addrTxs.slice(0, 50).map(t => (
+                  <div className="label-eyebrow px-1">
+                    Transactions ({selAddrLoading ? "…" : addrTxs.length})
+                  </div>
+                  {addrTxs.slice(pAddrTxs * 50, (pAddrTxs + 1) * 50).map(t => (
                     <button key={t.id} onClick={() => { setTab("txs"); setSelTx(t.id); }}
                       className="w-full text-left glass px-3 py-2.5 hover:bg-secondary/30 transition flex items-center justify-between gap-2 text-xs">
                       {t.kind === "reward"
@@ -634,6 +706,7 @@ export default function BlockExplorer({ chain, blockInfo, blockTime, mempool }: 
                       <span className="num text-muted-foreground shrink-0 text-[10px]">{t.status === "pending" ? "pending" : `#${t.block}`}</span>
                     </button>
                   ))}
+                  <Pager page={pAddrTxs} setPage={setPAddrTxs} total={addrTxs.length} label="transactions" pageSize={50} />
                 </div>
               );
             })()
@@ -685,7 +758,7 @@ export default function BlockExplorer({ chain, blockInfo, blockTime, mempool }: 
                 <div className="glass text-center py-10 text-xs text-muted-foreground">No addresses match these filters</div>
               )}
               {addrFiltered.slice(pAddr * PAGE_SIZE, (pAddr + 1) * PAGE_SIZE).map(a => {
-                const balance = a.received + a.mined - a.sent;
+                const balance = a.balance;
                 return (
                   <button key={a.address} onClick={() => setSelAddr(a.address)}
                     className="w-full text-left glass px-3 py-2.5 hover:bg-secondary/30 transition grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_auto_auto_60px] gap-3 items-center text-xs">

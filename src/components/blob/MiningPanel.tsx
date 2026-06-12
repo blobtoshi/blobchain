@@ -3,14 +3,17 @@ import { calcTotalSupply, winProbability } from "@/lib/blob/chain";
 import { MAX_SUPPLY } from "@/lib/blob/constants";
 import runnerArt from "@/assets/blob-coins-stack.png";
 
-function MiningPanel({ blockInfo, blockTime, entries, myEntry, chain }: any) {
+function MiningPanel({ blockInfo, blockTime, entries, myEntry, chain, chainTip }: any) {
   // Revealed entries sort by score desc; pending (commit-only) entries are
   // shown after revealed ones with their score hidden until they reveal.
   const revealed = entries.filter((e: any) => !e.pending).sort((a: any, b: any) => b.score - a.score);
   const pending = entries.filter((e: any) => e.pending);
   const sorted = [...revealed, ...pending];
   const total = revealed.reduce((s: number, e: any) => s + e.score, 0);
-  const supplyNow = calcTotalSupply(chain);
+  // Always prefer the real-time chainTip — chain in memory is capped at 500
+  // blocks and would give a wrong total. Fall back to chain only if tip
+  // hasn't loaded yet.
+  const supplyNow = chainTip?.totalSupply ?? calcTotalSupply(chain);
   const supplyPct = Math.min((supplyNow / MAX_SUPPLY) * 100, 100);
 
   const Stat = ({ label, value, accent }: any) => (

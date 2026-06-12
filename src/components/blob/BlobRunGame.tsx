@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState, useCallback, memo } from "react";
+<<<<<<< HEAD
+import { Maximize2, Minimize2, RotateCw, Volume2, VolumeX, Palette } from "lucide-react";
+=======
 import { Maximize2, Minimize2, RotateCw } from "lucide-react";
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 import * as Relay from "@/lib/blobRelay";
 import { CW, CH, GY, PX } from "@/lib/blob/constants";
 import {
@@ -11,6 +15,20 @@ import {
   encodeInputs, hashInputs, ENGINE_VERSION,
 } from "@/lib/blob/simulator";
 import { ENTRY_REVEAL_WINDOW_SECONDS } from "@/lib/blob/entryPow";
+<<<<<<< HEAD
+import {
+  initSound, isMuted, toggleMuted,
+  sfxJump, sfxLand, sfxDuck, sfxUnduck,
+  sfxPickup, sfxCombo, sfxDeath,
+} from "@/lib/blob/sound";
+import { getCosmetics, subscribeCosmetics } from "@/lib/blob/cosmetics";
+import { getBackgroundById } from "@/lib/blob/backgrounds";
+import { getSkinById } from "@/lib/blob/skins";
+import { getObstacleStyleById } from "@/lib/blob/obstacleStyles";
+import CosmeticsModal from "@/components/blob/CosmeticsModal";
+import BlobClashDevToggle from "@/components/blobclash/BlobClashDevToggle";
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
 type InputEv = { f: number; t: number };
 type SimState = ReturnType<typeof initialState>;
@@ -47,7 +65,11 @@ type FsState =
   | { mode: "native" }       // document.fullscreenElement is set
   | { mode: "ios-pseudo" };  // CSS pseudo-fullscreen on iOS Safari
 
+<<<<<<< HEAD
+function BlobRunGame({ wallet, blockInfo, blockTime, entries, onEntrySubmit }) {
+=======
 function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
   const blockTimeRef = useRef(blockTime);
   blockTimeRef.current = blockTime;
 
@@ -57,8 +79,23 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
   // the player would just burn a run for nothing. In-progress runs are
   // unaffected: they finish naturally and submit through the normal path,
   // which the protocol decides to accept or reject.
+<<<<<<< HEAD
+  // Mirror the node's validateEntry exactly (matches MineHero gate):
+  //   - commit phase (remaining > 30): always open
+  //   - cutoff window (0 < remaining <= 30): always closed
+  //   - overdue (remaining = 0 / overdue):
+  //       * no entries yet -> "overdue grace", node still accepts entries,
+  //         so the gate stays open to let the chain self-heal.
+  //       * any entries -> gate closes, block will seal next tick.
+  const remaining = blockTime?.remaining ?? blockInfo.remaining ?? Infinity;
+  const overdue = remaining <= 0;
+  const entryCount = (entries ?? []).length;
+  const inOverdueGrace = overdue && entryCount === 0;
+  const commitClosed = remaining <= ENTRY_REVEAL_WINDOW_SECONDS && !inOverdueGrace;
+=======
   const remaining = blockTime?.remaining ?? blockInfo.remaining ?? Infinity;
   const commitClosed = remaining <= ENTRY_REVEAL_WINDOW_SECONDS;
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
   const cvs = useRef<HTMLCanvasElement | null>(null);
   const raf = useRef<number | null>(null);
@@ -73,6 +110,42 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
 
   const [fs, setFs] = useState<FsState>({ mode: "off" });
   const [isPortrait, setIsPortrait] = useState(false);
+<<<<<<< HEAD
+  // Mute state mirror: sound module owns the truth (and localStorage),
+  // we keep a local snapshot so the button icon re-renders on toggle.
+  // Initialised to whatever the sound module loaded from storage.
+  const [muted, setMutedState] = useState<boolean>(() => {
+    try { return isMuted(); } catch { return false; }
+  });
+  const onToggleMute = useCallback(() => {
+    initSound(); // ensure ctx exists - this click is the gesture
+    setMutedState(toggleMuted());
+  }, []);
+
+  // Cosmetics modal open/closed state.
+  const [cosmeticsOpen, setCosmeticsOpen] = useState(false);
+
+  // Active drawer refs - looked up from the registries and refreshed
+  // whenever the user picks a new option via the subscribeCosmetics
+  // listener below. The game loop reads `.current` every frame, so
+  // swaps apply instantly without re-mounting the canvas or restarting
+  // the run.
+  const bgDrawRef        = useRef(getBackgroundById(getCosmetics().background).draw);
+  const skinDrawRef      = useRef(getSkinById(getCosmetics().skin).draw);
+  // trailImgRef tracks the active skin's `trailImage` so the trail/
+  // after-image pass in BlobRunGame renders silhouettes of the right
+  // sprite (e.g. Ninja trails ninjas, not default blobs).
+  const trailImgRef      = useRef(getSkinById(getCosmetics().skin).trailImage);
+  const obstacleStyleRef = useRef(getObstacleStyleById(getCosmetics().obstacles));
+  useEffect(() => {
+    return subscribeCosmetics((sel) => {
+      bgDrawRef.current        = getBackgroundById(sel.background).draw;
+      const skin               = getSkinById(sel.skin);
+      skinDrawRef.current      = skin.draw;
+      trailImgRef.current      = skin.trailImage;
+      obstacleStyleRef.current = getObstacleStyleById(sel.obstacles);
+    });
+  }, []);
 
   // Track native fullscreen exits triggered by Esc / browser chrome so our
   // state stays in sync.
@@ -94,6 +167,29 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
     };
   }, []);
 
+=======
+
+  // Track native fullscreen exits triggered by Esc / browser chrome so our
+  // state stays in sync.
+  useEffect(() => {
+    const onChange = () => {
+      const native = !!(document.fullscreenElement
+        || (document as any).webkitFullscreenElement);
+      setFs(prev => {
+        if (native) return { mode: "native" };
+        if (prev.mode === "native") return { mode: "off" };
+        return prev;
+      });
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    document.addEventListener("webkitfullscreenchange", onChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange);
+      document.removeEventListener("webkitfullscreenchange", onChange);
+    };
+  }, []);
+
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
   // Track orientation while in fullscreen so we can show the rotate-prompt
   // / apply iOS CSS rotation.
   useEffect(() => {
@@ -185,12 +281,23 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
     const s = stateRef.current;
     if (!s || s.dead) return;
     inputsRef.current.push({ f: s.frame + 1, t: type });
+    // Sound: input events are gesture-driven so this is safe to fire from
+    // here (no autoplay-policy concerns once initSound has run once).
+    // v3: type 1 is no longer emitted, and landing sfx now fires from the
+    // physics loop when the player actually touches the ground.
+    if      (type === 0) sfxJump();
+    else if (type === 2) sfxDuck();
+    else if (type === 3) sfxUnduck();
   }, []);
 
   useEffect(() => {
     const kd = (e: KeyboardEvent) => {
       if (e.code === "Space" || e.code === "ArrowUp") {
         e.preventDefault();
+        // jRef latches the key-down so OS auto-repeat (which fires keydown
+        // many times while held) doesn't spam type-0 events. The latch is
+        // cleared on keyup but NO release event is emitted - v3 jumps are
+        // one-shot impulses.
         if (!jRef.current) { jRef.current = true; recordEvent(0); }
       }
       if (e.code === "ArrowDown") {
@@ -200,7 +307,7 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
     };
     const ku = (e: KeyboardEvent) => {
       if (e.code === "Space" || e.code === "ArrowUp") {
-        if (jRef.current) { jRef.current = false; recordEvent(1); }
+        jRef.current = false; // clear latch; no event emitted in v3
       }
       if (e.code === "ArrowDown") {
         e.preventDefault();
@@ -305,6 +412,12 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
     // gate; this is the second line of defence for users who are already
     // inside the game when the window closes.
     if (commitClosed) return;
+<<<<<<< HEAD
+    // Init audio on first start. startRun is always called from a click or
+    // tap handler so the browser allows the AudioContext to enter "running".
+    initSound();
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
     if (raf.current != null) cancelAnimationFrame(raf.current);
     jRef.current = false; dRef.current = false;
     stRef.current = "playing";
@@ -354,6 +467,11 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
 
     const FNT = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, sans-serif';
     const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+    // hudCache holds only the static background panel (rounded rect + rim).
+    // Labels and values are painted live each frame so each character is
+    // rendered exactly once instead of being layered against a cached
+    // 45%-alpha version of itself - which is what caused the "thick/doubled"
+    // look in the SCORE / BLOCK / SPEED headers.
     const hudCache = document.createElement("canvas");
     hudCache.width = CW; hudCache.height = 56;
     {
@@ -364,14 +482,6 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
       h.strokeStyle = "rgba(125, 255, 224, 0.10)";
       h.lineWidth = 1;
       h.stroke();
-      h.fillStyle = "rgba(180, 220, 230, 0.45)";
-      h.font = `9px ${FNT}`;
-      h.textAlign = "left";  h.fillText("SCORE", 26, 24);
-      h.textAlign = "center"; h.fillText(`BLOCK #${blockInfo.height}`, CW / 2, 24);
-      h.textAlign = "right"; h.fillText(`SPEED`, CW - 26, 24);
-      h.fillStyle = "#7dffe0";
-      h.font = `600 18px ${MONO}`;
-      h.textAlign = "center"; h.fillText(`#${blockInfo.height}`, CW / 2, 42);
     }
 
     let lastScore = -1;
@@ -383,31 +493,27 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
         lastScore = state.score;
         scoreStr = state.score.toLocaleString();
       }
-      ctx.fillStyle = "#e7fff8";
-      ctx.font = `600 18px ${MONO}`;
-      ctx.textAlign = "left";
-      ctx.fillText(scoreStr, 26, 42);
-      ctx.textAlign = "right";
+      // Row 1: small uppercase labels at y=24, single pass at 45% alpha.
       ctx.fillStyle = "rgba(180, 220, 230, 0.45)";
       ctx.font = `9px ${FNT}`;
-      ctx.fillText(`SPEED ×${state.speed.toFixed(1)}`, CW - 26, 24);
+      ctx.textAlign = "left";   ctx.fillText("SCORE", 26, 24);
+      ctx.textAlign = "center"; ctx.fillText(`BLOCK #${blockInfo.height}`, CW / 2, 24);
+      ctx.textAlign = "right";  ctx.fillText(`SPEED \u00d7${state.speed.toFixed(1)}`, CW - 26, 24);
+      // Row 2: big values at y=42.
+      ctx.fillStyle = "#e7fff8";
+      ctx.font = `600 18px ${MONO}`;
+      ctx.textAlign = "left";   ctx.fillText(scoreStr, 26, 42);
+      ctx.fillStyle = "#7dffe0";
+      ctx.textAlign = "center"; ctx.fillText(`#${blockInfo.height}`, CW / 2, 42);
       ctx.fillStyle = "#e7fff8";
       ctx.font = `600 14px ${MONO}`;
-      ctx.fillText(`${blockInfo.reward} BLOB`, CW - 26, 42);
+      ctx.textAlign = "right";  ctx.fillText(`${blockInfo.reward} BLOB`, CW - 26, 42);
+      // Combo flourish - only when chained.
       if (state.combo > 1) {
         ctx.textAlign = "left";
         ctx.fillStyle = "#ffd166";
         ctx.font = `700 ${Math.min(13 + state.combo * 2, 26)}px ${FNT}`;
-        ctx.fillText(`×${state.combo} combo`, 26, CH - 24);
-      }
-      if (state.locked) {
-        ctx.textAlign = "center";
-        ctx.fillStyle = "rgba(7, 12, 22, 0.6)";
-        roundedRect(ctx, CW / 2 - 180, CH - 36, 360, 24, 12);
-        ctx.fill();
-        ctx.fillStyle = "#7dffe0";
-        ctx.font = `600 10px ${FNT}`;
-        ctx.fillText("✓ Replay submitted — awaiting node verification", CW / 2, CH - 20);
+        ctx.fillText(`\u00d7${state.combo} combo`, 26, CH - 24);
       }
     }
 
@@ -418,7 +524,12 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
 
     function drawTrailAndBlob() {
       const p = state.player;
-      if (!state.locked && p.action !== "dead" && _blobImg && _blobImg.complete && _blobImg.naturalWidth > 0) {
+      // Trail uses the ACTIVE skin's image, not the hardcoded default,
+      // so that e.g. the Ninja skin trails Ninja silhouettes instead of
+      // default blobs. trailImgRef is kept in sync by the cosmetics
+      // subscription set up above.
+      const trailImg = trailImgRef.current;
+      if (!state.locked && p.action !== "dead" && trailImg && trailImg.complete && trailImg.naturalWidth > 0) {
         const tT = p.wob * 0.08;
         const trailFloatY = p.action === "duck" ? 0 : Math.sin(tT) * 5;
         trailHead = (trailHead + TRAIL_LEN - 1) % TRAIL_LEN;
@@ -439,7 +550,11 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
           ctx.save();
           ctx.translate(tr.x - i * 6, tr.y);
           ctx.scale(1, p.sq);
+<<<<<<< HEAD
+          ctx.drawImage(trailImg, -baseW / 2, -baseH / 2, baseW, baseH);
+=======
           ctx.drawImage(_blobImg, -baseW / 2, -baseH / 2, baseW, baseH);
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
           ctx.restore();
         }
         ctx.restore();
@@ -467,12 +582,16 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
         n.x -= n.spd;
         if (n.x < -15) n.x = CW + 15;
       }
-      drawBG(ctx, state.frame, nodes);
+      // Background drawn via the cosmetics registry. The default "Obsidian"
+      // option wraps the original drawBG so it behaves identically; other
+      // backgrounds may ignore `nodes` and render their own scene.
+      bgDrawRef.current(ctx, state.frame, nodes);
       drawTrailAndBlob();
       const obs = state.obstacles;
+      const obStyle = obstacleStyleRef.current;
       for (let i = 0; i < obs.length; i++) {
         const o = obs[i];
-        if (o.type === "low") drawLowBar(ctx, o); else drawFork(ctx, o);
+        if (o.type === "low") obStyle.drawLowBar(ctx, o); else obStyle.drawFork(ctx, o);
       }
       const tks = state.tokens;
       for (let i = 0; i < tks.length; i++) {
@@ -491,7 +610,7 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
         }
         ctx.restore();
       }
-      if (!state.dead) drawBlob(ctx, PX, p.y, p.action, p.wob, p.sq, false);
+      if (!state.dead) skinDrawRef.current(ctx, PX, p.y, p.action, p.wob, p.sq, false);
       drawHUD();
     }
 
@@ -505,14 +624,32 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
       for (let i = inputsRef.current.length - 1; i >= 0 && inputsRef.current[i].f === targetFrame; i--) {
         queuedAtFrame.unshift(inputsRef.current[i]);
       }
+      // Snapshot the player's action BEFORE tick so we can detect a
+      // jump->ground transition this frame. v3 removed type-1 events,
+      // so the landing sfx can no longer fire from the input handler -
+      // it has to fire here, when physics actually puts the player back
+      // on the floor (either because their jump arc finished or because
+      // they tapped a one-shot impulse jump that's now done).
+      const wasJumping = state.player.action === "jump";
       const alive = tick(state, lev, queuedAtFrame);
+      if (wasJumping && state.player.action !== "jump" && alive) {
+        sfxLand();
+      }
       const pickedThisFrame = state.tokensPickedThisFrame;
       if (pickedThisFrame > 0) {
         spawnParts(PX, state.player.y, "#00aaff", 8 * pickedThisFrame);
+        // Pitch rises with combo so back-to-back pickups feel rewarding;
+        // the sound module throttles to 40ms so multi-pickups in one
+        // frame coalesce into a single tone.
+        sfxPickup(state.combo);
       }
       if (!alive) {
         spawnParts(PX, state.player.y, "#ff2244", 18);
         spawnParts(PX, state.player.y, "#00ffcc", 8);
+<<<<<<< HEAD
+        sfxDeath();
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
         return false;
       }
       for (let i = 0; i < MAX_PARTICLES; i++) {
@@ -525,6 +662,14 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
         (pickedThisFrame > 0 && state.combo !== lastCombo) ||
         (lastCombo > 0 && state.combo === 0)
       ) {
+<<<<<<< HEAD
+        // Combo milestone sound: every 5x stack (5, 10, 15, ...) plays a
+        // little flourish. Don't fire on combo-breaks (state.combo === 0).
+        if (state.combo > 0 && state.combo % 5 === 0 && state.combo > lastCombo) {
+          sfxCombo(state.combo);
+        }
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
         renderRef.current.lastCombo = state.combo;
         // Defer the React state update outside the inner sim loop so combos
         // crossed in a single render frame only flush one setGs call.
@@ -580,6 +725,45 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Force-end any in-progress run the moment the commit phase closes. Without
+  // this, a player who started during the open phase can keep playing past
+  // the cutoff and submit a score that nobody else could compete with for
+  // this block. The cutoff is the network-wide fair-play boundary; once it
+  // passes, no new inputs may shape the run.
+  //
+  // We discard the run entirely rather than submit the partial score: the
+  // node's simulator replay would reject a forcibly-terminated state because
+  // it requires `result.dead === true`, which only happens when the player
+  // actually loses to an obstacle. A "give up at frame N" code path would
+  // need a new simulator input type and a protocol change. For now, dropping
+  // the run is the right behaviour - the player tried to start too late.
+  //
+  // Exception (matches MineHero / node validator): if there are no entries
+  // yet for this block, we're in the "overdue grace" path. commitClosed
+  // already accounts for that, so this effect won't fire while the chain
+  // is self-healing.
+  useEffect(() => {
+    if (!commitClosed) return;
+    if (stRef.current !== "playing") return;
+    if (raf.current != null) {
+      cancelAnimationFrame(raf.current);
+      raf.current = null;
+    }
+    stRef.current = "expired";
+    setGs({ status: "expired", score: 0, combo: 0 });
+  }, [commitClosed]);
+
+  // When a new block opens (commitClosed flips back to false), reset any
+  // "expired" state so the player can launch a fresh run. The MineHero
+  // LAUNCH button is the canonical entry point; from inside the game the
+  // status returns to idle so tap-to-start works again.
+  useEffect(() => {
+    if (commitClosed) return;
+    if (stRef.current !== "expired") return;
+    stRef.current = "idle";
+    setGs({ status: "idle", score: 0, combo: 0 });
+  }, [commitClosed, blockInfo.height]);
+
   const onTapStart = (e: React.TouchEvent | React.MouseEvent) => {
     e.preventDefault();
     if (gs.status === "idle" || gs.status === "dead") {
@@ -592,7 +776,9 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
     if (!jRef.current) { jRef.current = true; recordEvent(0); }
   };
   const onTapEnd = () => {
-    if (jRef.current) { jRef.current = false; recordEvent(1); }
+    // v3: clear the latch so a future tap can fire a fresh impulse jump,
+    // but emit nothing - jump release is no longer a recorded event.
+    jRef.current = false;
   };
 
   // Wrapper layout. Three layouts share most styles:
@@ -637,7 +823,25 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
   return (
     <div className="space-y-2">
       {!isFullscreen && (
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            aria-label="Open cosmetics"
+            onClick={() => setCosmeticsOpen(true)}
+            onTouchEnd={(e) => { e.preventDefault(); setCosmeticsOpen(true); }}
+            className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-background/60 backdrop-blur-sm border border-accent/40 text-accent hover:bg-accent/20 active:scale-95 transition shadow-[0_0_18px_hsl(var(--accent)/0.25)]"
+          >
+            <Palette className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            aria-label={muted ? "Unmute sound" : "Mute sound"}
+            onClick={onToggleMute}
+            onTouchEnd={(e) => { e.preventDefault(); onToggleMute(); }}
+            className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-background/60 backdrop-blur-sm border border-accent/40 text-accent hover:bg-accent/20 active:scale-95 transition shadow-[0_0_18px_hsl(var(--accent)/0.25)]"
+          >
+            {muted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+          </button>
           <button
             type="button"
             aria-label="Enter fullscreen"
@@ -744,6 +948,58 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
               )}
             </div>
           )}
+<<<<<<< HEAD
+          {gs.status === "expired" && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/85 backdrop-blur-sm">
+              <div className="text-[10px] tracking-[0.3em] text-destructive/80 mb-2">RUN VOIDED</div>
+              <div className="num text-2xl sm:text-3xl font-semibold leading-none text-muted-foreground/80 mb-1">
+                COMMIT PHASE ENDED
+              </div>
+              <div className="text-xs text-muted-foreground mb-6 text-center max-w-xs">
+                Your run was interrupted by the submission cutoff. New entries reopen for block #{blockInfo.height + 1}.
+              </div>
+              <button
+                type="button"
+                disabled
+                aria-disabled="true"
+                className="px-8 py-3 rounded-full bg-muted/20 border border-border/40 text-muted-foreground/70 text-sm font-semibold tracking-wide opacity-70 cursor-not-allowed"
+              >
+                AWAITING NEXT BLOCK
+              </button>
+            </div>
+          )}
+        </div>
+        {isFullscreen && (
+          <>
+            <button
+              type="button"
+              aria-label="Open cosmetics"
+              onClick={() => setCosmeticsOpen(true)}
+              onTouchEnd={(e) => { e.preventDefault(); setCosmeticsOpen(true); }}
+              className="absolute top-3 right-[6.5rem] z-20 p-2 rounded-full bg-background/60 backdrop-blur-sm border border-accent/40 text-accent hover:bg-accent/20 active:scale-95 transition shadow-[0_0_18px_hsl(var(--accent)/0.25)]"
+            >
+              <Palette className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              aria-label={muted ? "Unmute sound" : "Mute sound"}
+              onClick={onToggleMute}
+              onTouchEnd={(e) => { e.preventDefault(); onToggleMute(); }}
+              className="absolute top-3 right-14 z-20 p-2 rounded-full bg-background/60 backdrop-blur-sm border border-accent/40 text-accent hover:bg-accent/20 active:scale-95 transition shadow-[0_0_18px_hsl(var(--accent)/0.25)]"
+            >
+              {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+            </button>
+            <button
+              type="button"
+              aria-label="Exit fullscreen"
+              onClick={toggleFullscreen}
+              onTouchEnd={(e) => { e.preventDefault(); toggleFullscreen(); }}
+              className="absolute top-3 right-3 z-20 p-2 rounded-full bg-background/60 backdrop-blur-sm border border-accent/40 text-accent hover:bg-accent/20 active:scale-95 transition shadow-[0_0_18px_hsl(var(--accent)/0.25)]"
+            >
+              <Minimize2 className="w-4 h-4" />
+            </button>
+          </>
+=======
         </div>
         {isFullscreen && (
           <button
@@ -755,6 +1011,7 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
           >
             <Minimize2 className="w-4 h-4" />
           </button>
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
         )}
       </div>
       {!isFullscreen && (
@@ -764,11 +1021,22 @@ function BlobRunGame({ wallet, blockInfo, blockTime, onEntrySubmit }) {
           <span>Ƀ +50 pts</span>
         </div>
       )}
+<<<<<<< HEAD
+      <CosmeticsModal open={cosmeticsOpen} onClose={() => setCosmeticsOpen(false)} />
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
     </div>
   );
 }
 
+<<<<<<< HEAD
+// Inner memoized game component. Previously the default export; now wrapped
+// by BlobRunGameWithDevToggle below so the BlobClash dev toggle can render
+// above it. The memo comparator is unchanged.
+const MemoizedBlobRunGame = memo(BlobRunGame, (prev, next) => {
+=======
 export default memo(BlobRunGame, (prev, next) => {
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
   if (prev.wallet !== next.wallet) return false;
   if (prev.blockInfo !== next.blockInfo) return false;
   if (prev.onEntrySubmit !== next.onEntrySubmit) return false;
@@ -781,3 +1049,23 @@ export default memo(BlobRunGame, (prev, next) => {
   if (prevClosed !== nextClosed) return false;
   return true;
 });
+<<<<<<< HEAD
+
+// Default export wraps the live game in the BlobClash dev toggle. The toggle
+// is gated behind a dev access code and shows nothing extra to normal users
+// (just a small "Dev" bar with a locked code field). Once unlocked it lets us
+// switch the view to the in-development BlobClash game. All props pass through
+// untouched to the live game.
+//
+// TEMPORARY (Phase 0 dev): when BlobClash ships and replaces BlobRun, delete
+// the wrapper + the dev toggle component and export MemoizedBlobRunGame (or
+// the new game) directly.
+export default function BlobRunGameWithDevToggle(props: any) {
+  return (
+    <BlobClashDevToggle>
+      <MemoizedBlobRunGame {...props} />
+    </BlobClashDevToggle>
+  );
+}
+=======
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154

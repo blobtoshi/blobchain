@@ -2,12 +2,26 @@ import { memo } from "react";
 import { Play, Lock } from "lucide-react";
 import { ENTRY_REVEAL_WINDOW_SECONDS } from "@/lib/blob/entryPow";
 
-function MineHero({ blockInfo, blockTime, onLaunch }: any) {
+function MineHero({ blockInfo, blockTime, entries = [], onLaunch }: any) {
   const remaining = blockTime?.remaining ?? blockInfo.remaining ?? 0;
+  const overdue = !!(blockTime?.overdue ?? blockInfo.overdue);
   const m = Math.floor(remaining / 60);
   const s = remaining % 60;
   const time = m > 0 ? `${m}m ${s}s` : `${s}s`;
 
+<<<<<<< HEAD
+  // Mirror the node's validateEntry exactly (Phase 6):
+  //   - commit phase (remaining > 30): always open
+  //   - cutoff window (0 < remaining <= 30): always closed
+  //   - overdue (remaining = 0 / overdue):
+  //       * no entries yet -> "overdue grace", node still accepts entries, so
+  //         the gate stays open. This is the path that lets the chain
+  //         self-heal when a window passes with zero participation.
+  //       * any entries -> gate closes, the block will seal next tick.
+  const entryCount = entries.length;
+  const inOverdueGrace = overdue && entryCount === 0;
+  const commitClosed = remaining <= ENTRY_REVEAL_WINDOW_SECONDS && !inOverdueGrace;
+=======
   // Commit phase ends ENTRY_REVEAL_WINDOW_SECONDS before block close. We
   // refuse to launch new runs once we're inside the reveal window because
   // their commits would be rejected by the node anyway (validateEntryCommit
@@ -19,6 +33,7 @@ function MineHero({ blockInfo, blockTime, onLaunch }: any) {
   // path is unchanged. They'll fail at the node, and that's expected
   // protocol behaviour.
   const commitClosed = remaining <= ENTRY_REVEAL_WINDOW_SECONDS;
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
   return (
     <div className="relative overflow-hidden rounded-3xl glass-pane px-6 py-12 sm:py-16 text-center">

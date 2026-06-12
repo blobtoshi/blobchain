@@ -21,10 +21,7 @@ export type Tx = {
   feeRate: number;
 
   memo: string;
-<<<<<<< HEAD
   nonce?: string;
-=======
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
   signature: string;
 
@@ -38,7 +35,6 @@ export type Tx = {
 
 export type Entry = {
 
-<<<<<<< HEAD
   address: string;
 
   score: number;
@@ -75,16 +71,10 @@ export type Entry = {
 // peer needs to re-run validateBlockEntry (signature + PoW + simulator replay)
 // so a forged high-score entry can't smuggle a winner/reward through ingest.
 export type BlockEntry = {
-=======
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
   address: string;
-
   score: number;
-
   block_height: number;
-
   block_seed: string;
-<<<<<<< HEAD
   inputs: string;
   inputs_hash: string;
   frame_count: number;
@@ -92,32 +82,7 @@ export type BlockEntry = {
   publicKey: string;
   signature: string;
   engine_version: number;
-=======
-
-  signature: string;
-
-  inputs?: string | null;
-
-  inputs_hash?: string | null;
-
-  frame_count?: number | null;
-
-  engine_version?: number;
-
-  pending?: boolean;
-
-  // Phase 6: required for peer-side re-validation. Present when this is
-
-  // a freshly-gossiped entry, absent when it's a UI-facing snapshot.
-
-  pow_nonce?: string;
-
-  publicKey?: string;
-
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 };
-
-
 
 export type Block = {
 
@@ -129,14 +94,10 @@ export type Block = {
 
   transactions: Tx[];
 
-<<<<<<< HEAD
   // C2: blocks now carry the FULL mining-entry payload so every node can
   // independently re-validate signature + PoW + simulator replay and recompute
   // the winner, instead of trusting the proposer's address/score/signature.
   miningEntries: BlockEntry[];
-=======
-  miningEntries: Array<{ address: string; score: number; signature: string }>;
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
   winner: string | null;
 
@@ -156,13 +117,10 @@ export type Block = {
 
 
 
-<<<<<<< HEAD
 // H1: signed peer-handshake token. Structurally identical to peerAuth.ts's
 // PeerAuth (duplicated here so this framework-free file pulls in no node deps).
 export type PeerAuth = { nodeId: string; ts: number; nonce: string; sig: string };
 
-=======
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 // -- Client -> Server --------------------------------------------------------
 
 export type ClientMsg =
@@ -191,11 +149,7 @@ export type ClientMsg =
 
   // they remain regular subscribers.
 
-<<<<<<< HEAD
   | { type: "peerIdentify"; peerUrl: string; nodeId: string; auth?: PeerAuth }
-=======
-  | { type: "peerIdentify"; peerUrl: string; nodeId: string }
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
   | { type: "getActiveEntries"; height: number }
 
@@ -216,10 +170,7 @@ export type SubmitTxPayload = {
   feeRate: number;
 
   memo?: string;
-<<<<<<< HEAD
   nonce?: string;
-=======
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
   signature: string;
 
@@ -393,11 +344,7 @@ export type EntryCommit = {
 
 export type ServerMsg =
 
-<<<<<<< HEAD
   | { type: "hello"; nodeId: string; version: string; chainTip: ChainTip; auth?: PeerAuth }
-=======
-  | { type: "hello"; nodeId: string; version: string; chainTip: ChainTip }
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
   | { type: "pong"; t: number }
 
@@ -411,11 +358,8 @@ export type ServerMsg =
 
   | { type: "activeEntries"; height: number; commits: EntryCommit[]; reveals: Entry[] }
 
-<<<<<<< HEAD
   | { type: "getActiveEntries"; height: number }
 
-=======
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
   | { type: "activeStateHash"; height: number; hash: string }
 
   | { type: "chainTip"; tip: ChainTip }

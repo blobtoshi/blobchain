@@ -88,10 +88,7 @@ export function openDb(path: string) {
 
       timestamp    INTEGER NOT NULL,
 
-<<<<<<< HEAD
       nonce        TEXT,
-=======
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
       status       TEXT NOT NULL DEFAULT 'pending'
 
     );
@@ -141,11 +138,8 @@ export function openDb(path: string) {
   try { db.exec(`ALTER TABLE entries ADD COLUMN pow_nonce TEXT`); } catch { /* exists */ }
 
   try { db.exec(`ALTER TABLE entries ADD COLUMN public_key TEXT`); } catch { /* exists */ }
-<<<<<<< HEAD
   // H2: per-sender nonce stored alongside the mempool tx (single-use across mempool+chain).
   try { db.exec(`ALTER TABLE mempool ADD COLUMN nonce TEXT`); } catch { /* exists */ }
-=======
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
   db.exec(`
 
@@ -203,7 +197,6 @@ export function openDb(path: string) {
 
     CREATE INDEX IF NOT EXISTS balances_balance_idx ON balances(balance DESC);
 
-<<<<<<< HEAD
     -- H2: durable set of consumed (from_address, nonce) pairs. A nonce that has
     -- been mined into a block lands here so the same signed authorization can
     -- never be replayed again, even after it leaves the mempool.
@@ -214,8 +207,6 @@ export function openDb(path: string) {
       PRIMARY KEY (from_address, nonce)
     );
 
-=======
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
   `);
 
 
@@ -270,21 +261,13 @@ export function openDb(path: string) {
 
       (id, from_address, to_address, amount, fee, fee_rate, memo,
 
-<<<<<<< HEAD
        signature, public_key, timestamp, nonce, status)
-=======
-       signature, public_key, timestamp, status)
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
       VALUES
 
       (@id, @from_address, @to_address, @amount, @fee, @fee_rate, @memo,
 
-<<<<<<< HEAD
        @signature, @public_key, @timestamp, @nonce, 'pending')
-=======
-       @signature, @public_key, @timestamp, 'pending')
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
     `),
 
@@ -308,7 +291,6 @@ export function openDb(path: string) {
 
     deleteTxs: db.prepare<[string]>(`DELETE FROM mempool WHERE id = ?`),
 
-<<<<<<< HEAD
     // H2: nonce single-use checks + durable consumed set.
     getMempoolNonce: db.prepare<[string, string], { id: string }>(
       `SELECT id FROM mempool WHERE from_address = ? AND nonce = ?`,
@@ -355,39 +337,6 @@ export function openDb(path: string) {
         block_seed   = excluded.block_seed
 
     `),
-=======
-
-
-    upsertEntry: db.prepare(`
-
-      INSERT INTO entries
-
-      (address, block_height, score, block_seed, signature, inputs, inputs_hash, frame_count, pow_nonce, public_key)
-
-      VALUES
-
-      (@address, @block_height, @score, @block_seed, @signature, @inputs, @inputs_hash, @frame_count, @pow_nonce, @public_key)
-
-      ON CONFLICT(address, block_height) DO UPDATE SET
-
-        score        = MAX(entries.score, excluded.score),
-
-        signature    = CASE WHEN excluded.score >= entries.score THEN excluded.signature    ELSE entries.signature END,
-
-        inputs       = CASE WHEN excluded.score >= entries.score THEN excluded.inputs       ELSE entries.inputs END,
-
-        inputs_hash  = CASE WHEN excluded.score >= entries.score THEN excluded.inputs_hash  ELSE entries.inputs_hash END,
-
-        frame_count  = CASE WHEN excluded.score >= entries.score THEN excluded.frame_count  ELSE entries.frame_count END,
-
-        pow_nonce    = CASE WHEN excluded.score >= entries.score THEN excluded.pow_nonce    ELSE entries.pow_nonce END,
-
-        public_key   = CASE WHEN excluded.score >= entries.score THEN excluded.public_key   ELSE entries.public_key END,
-
-        block_seed   = excluded.block_seed
-
-    `),
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
     getEntriesForHeight: db.prepare<[number], EntryRow>(
 
@@ -562,10 +511,7 @@ export function seedBalancesFromChain(d: DB): number {
         if (t.to)   applyBalanceDelta(d, t.to,   Number(t.amount));
 
         if (t.from) applyBalanceDelta(d, t.from, -(Number(t.amount) + Number(t.fee ?? 0)));
-<<<<<<< HEAD
         if (t.from && (t as any).nonce) d.stmts.insertSpentNonce.run({ from_address: t.from, nonce: (t as any).nonce, block_height: Number(b.height) });
-=======
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
       }
 
@@ -628,10 +574,7 @@ type MempoolRow = {
   fee_rate: number;
 
   memo: string | null;
-<<<<<<< HEAD
   nonce: string | null;
-=======
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
   signature: string;
 
@@ -746,10 +689,7 @@ export function rowToTx(r: MempoolRow): Tx {
     feeRate: r.fee_rate,
 
     memo: r.memo ?? "",
-<<<<<<< HEAD
     nonce: r.nonce ?? "",
-=======
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
     signature: r.signature,
 

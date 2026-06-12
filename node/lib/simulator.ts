@@ -2,7 +2,6 @@
 
 // Keep BYTE-FOR-BYTE in sync with the client copy. ENGINE_VERSION must match.
 
-<<<<<<< HEAD
 
 
 // Engine v3: jump is a one-shot impulse fired on type-0 (no jump release).
@@ -15,13 +14,6 @@
 
 export const ENGINE_VERSION = 3;
 
-=======
-// Engine v3: jump is a one-shot impulse fired on type-0 (no jump release).
-// v2 traces with type-1 events are rejected. Duck still uses press (type-2)
-// and release (type-3) since holding duck is part of the game. v3 is a
-// breaking wire-format change - node + client must update together.
-export const ENGINE_VERSION = 3;
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 export const MAX_FRAMES = 36000;
 
 export const MAX_INPUTS_PER_RUN = MAX_FRAMES;
@@ -123,7 +115,6 @@ function initialState() {
     player: { y: GY - 28, vy: 0, action: "run", wob: 0, sq: 1 },
 
     obstacles: [] as any[], tokens: [] as any[],
-<<<<<<< HEAD
 
     // jumpHeld removed in v3 - jump is now a one-shot impulse on type-0.
 
@@ -137,14 +128,6 @@ function initialState() {
 
     jumpFireThisFrame: false,
 
-=======
-    // jumpHeld removed in v3 - jump is now a one-shot impulse on type-0.
-    duckHeld: false, dead: false,
-    passedFirstObstacle: false,
-    // Per-tick edge-trigger flag: set true when a type-0 event was
-    // processed this frame; consumed and cleared by tick().
-    jumpFireThisFrame: false,
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
   };
 
 }
@@ -152,7 +135,6 @@ function initialState() {
 
 
 function applyInputs(state: any, events: any[]) {
-<<<<<<< HEAD
 
   state.jumpFireThisFrame = false;
 
@@ -182,22 +164,6 @@ function applyInputs(state: any, events: any[]) {
 
     // entries containing it before this function is called.
 
-=======
-  state.jumpFireThisFrame = false;
-  for (const e of events) {
-    if (e.t === 0) {
-      // Impulse-only jump. Multiple presses on the same frame collapse
-      // to one jump; a press while airborne is consumed but produces no
-      // double-jump (same behaviour as the old held-flag model).
-      state.jumpFireThisFrame = true;
-    } else if (e.t === 2) {
-      state.duckHeld = true;
-    } else if (e.t === 3) {
-      state.duckHeld = false;
-    }
-    // type 1 (jump release) is no longer valid - validator rejects
-    // entries containing it before this function is called.
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
   }
 
 }
@@ -214,7 +180,6 @@ function tick(state: any, level: any, frameInputs: any[]) {
 
   state.frame++;
 
-<<<<<<< HEAD
 
 
   // Jump: fire only on a fresh type-0 event THIS frame, and only when
@@ -227,13 +192,6 @@ function tick(state: any, level: any, frameInputs: any[]) {
 
   if (state.duckHeld && p.action !== "jump") p.action = "duck";
 
-=======
-  // Jump: fire only on a fresh type-0 event THIS frame, and only when
-  // grounded (action !== "jump"). Same gate as v2, just driven by an
-  // edge-trigger flag instead of a held-state flag.
-  if (state.jumpFireThisFrame && p.action !== "jump") { p.vy = JUMP_V; p.action = "jump"; }
-  if (state.duckHeld && p.action !== "jump") p.action = "duck";
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
   else if (!state.duckHeld && p.action === "duck") p.action = "run";
 
   p.vy += GRAVITY;
@@ -413,7 +371,6 @@ export function plausibilityCheck(events: any[], frameCount: number, claimedScor
     if (e.f < last) return "events not sorted";
 
     if (!Number.isInteger(e.t) || e.t < 0 || e.t > 3) return "bad event type";
-<<<<<<< HEAD
 
     // v3: jump is one-shot impulse. Type-1 (jump release) is no longer
 
@@ -423,12 +380,6 @@ export function plausibilityCheck(events: any[], frameCount: number, claimedScor
 
     if (e.t === 1) return "type-1 (jump release) no longer accepted - engine v3 uses impulse jumps";
 
-=======
-    // v3: jump is one-shot impulse. Type-1 (jump release) is no longer
-    // a valid event; entries containing it are legacy v2 traces that
-    // must be re-submitted with the new format.
-    if (e.t === 1) return "type-1 (jump release) no longer accepted - engine v3 uses impulse jumps";
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
     last = e.f;
 
   }

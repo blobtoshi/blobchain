@@ -57,11 +57,8 @@ const SEED_RE = /^[0-9]+$/;
 const SALT_RE = /^[0-9a-fA-F]{32}$/;
 
 const NONCE_RE = /^[0-9a-fA-F]{1,32}$/;
-<<<<<<< HEAD
 // H2: per-transaction sender nonce (single-use). 16–32 random bytes as hex.
 const TX_NONCE_RE = /^[0-9a-fA-F]{16,64}$/;
-=======
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
 const MEMO_RE = /^[\x20-\x7E\u00A0-\uFFFF\n\t]*$/;
 
@@ -185,11 +182,8 @@ export type ValidatedTx = {
 
   memo: string;
 
-<<<<<<< HEAD
   nonce: string;
 
-=======
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
   signature: string;
 
   publicKey: string;
@@ -216,21 +210,14 @@ export function validateTx(d: DB, body: SubmitTxPayload): ValidationResult<Valid
 
     id, from, to, amount, signature, publicKey, timestamp,
 
-<<<<<<< HEAD
     feeRate: feeRateRaw, memo: memoRaw, nonce,
-=======
-    feeRate: feeRateRaw, memo: memoRaw,
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
   } = body ?? ({} as SubmitTxPayload);
 
 
 
   if (typeof id !== "string" || !ID_RE.test(id)) return err("invalid id");
-<<<<<<< HEAD
   if (typeof nonce !== "string" || !TX_NONCE_RE.test(nonce)) return err("invalid nonce");
-=======
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
   if (typeof from !== "string" || !ADDR_RE.test(from)) return err("invalid from");
 
@@ -286,7 +273,6 @@ export function validateTx(d: DB, body: SubmitTxPayload): ValidationResult<Valid
 
   if (derived !== from) return err("from does not match publicKey");
 
-<<<<<<< HEAD
   // H2: single-use nonce across chain (durable) and mempool (pending).
   if (d.stmts.getSpentNonce.get(from, nonce)) return err("nonce already used (replay)");
   const dupMem = d.stmts.getMempoolNonce.get(from, nonce);
@@ -298,11 +284,6 @@ export function validateTx(d: DB, body: SubmitTxPayload): ValidationResult<Valid
   // be re-broadcast under a fresh id (malleability) and a given authorization
   // is bound to exactly one nonce.
   const payload = `${id}:${from}->${to}:${amt}@${ts}|fr=${feeRate}|m=${memo}|n=${nonce}`;
-=======
-
-
-  const payload = `${from}->${to}:${amt}@${ts}|fr=${feeRate}|m=${memo}`;
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
   if (!verifySig(publicKey, signature, payload)) return err("bad signature");
 
@@ -340,11 +321,7 @@ export function validateTx(d: DB, body: SubmitTxPayload): ValidationResult<Valid
 
   return ok({
 
-<<<<<<< HEAD
     id, from, to, amount: amt, fee, feeRate, memo, nonce,
-=======
-    id, from, to, amount: amt, fee, feeRate, memo,
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 
     signature, publicKey, timestamp: ts, bytes,
 
@@ -911,7 +888,6 @@ export function validateEntry(
 
 
   // Bot-cadence detection. Real players exhibit reaction-time variance
-<<<<<<< HEAD
 
   // in their input timing - even when "tapping rhythmically", they hit
 
@@ -1027,65 +1003,6 @@ export function validateEntry(
 
   const duckTempoFlag = checkCadence(duckTempo, "ducks");
 
-=======
-  // in their input timing - even when "tapping rhythmically", they hit
-  // different frame intervals (41, 44, 38, 47, 42 around a ~43-frame
-  // target).
-  //
-  // Bots that fire inputs at fixed delays produce exact-frame intervals
-  // with zero variance. v3 narrows the surface: jumps are one-shot, so
-  // there are no jump-holds to fingerprint - we only check inter-jump
-  // tempo, plus duck-hold duration and duck tempo.
-  //
-  // Flag rule: 5+ exact-matching values, comprising >=80% of the +-2
-  // tolerance band around the mode. A real human can hit the same
-  // value 2-3 times by luck; 5+ is implausibly tight.
-  function checkCadence(intervals: number[], label: string): string | null {
-    if (intervals.length < 5) return null;
-    const counts = new Map<number, number>();
-    for (const iv of intervals) counts.set(iv, (counts.get(iv) ?? 0) + 1);
-    let modeIv = 0, modeCount = 0;
-    for (const [iv, n] of counts) {
-      if (n > modeCount) { modeCount = n; modeIv = iv; }
-    }
-    let bandCount = 0;
-    for (const [iv, n] of counts) {
-      if (Math.abs(iv - modeIv) <= 2) bandCount += n;
-    }
-    const exactShare = bandCount > 0 ? modeCount / bandCount : 0;
-    if (modeCount >= 5 && exactShare >= 0.8) {
-      return `mechanical input pattern detected (${modeCount} ${label} exactly ${modeIv} frames apart)`;
-    }
-    return null;
-  }
-
-  const typedEvents = events as { f: number; t: number }[];
-
-  // Duck press->release HOLD durations (v3: jumps no longer have a release).
-  const duckHolds: number[] = [];
-  for (let i = 0; i < typedEvents.length - 1; i++) {
-    const a = typedEvents[i];
-    const b = typedEvents[i + 1];
-    if (a.t === 2 && b.t === 3) duckHolds.push(b.f - a.f);
-  }
-  const duckHoldFlag = checkCadence(duckHolds, "duck holds");
-  if (duckHoldFlag) return err(duckHoldFlag);
-
-  // Press-press TEMPO intervals, per action.
-  const jumpPresses: number[] = [];
-  const duckPresses: number[] = [];
-  for (const e of typedEvents) {
-    if (e.t === 0) jumpPresses.push(e.f);
-    if (e.t === 2) duckPresses.push(e.f);
-  }
-  const jumpTempo: number[] = [];
-  for (let i = 1; i < jumpPresses.length; i++) jumpTempo.push(jumpPresses[i] - jumpPresses[i - 1]);
-  const duckTempo: number[] = [];
-  for (let i = 1; i < duckPresses.length; i++) duckTempo.push(duckPresses[i] - duckPresses[i - 1]);
-  const jumpTempoFlag = checkCadence(jumpTempo, "jumps");
-  if (jumpTempoFlag) return err(jumpTempoFlag);
-  const duckTempoFlag = checkCadence(duckTempo, "ducks");
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
   if (duckTempoFlag) return err(duckTempoFlag);
 
 
@@ -1104,7 +1021,6 @@ export function validateEntry(
 
 
 
-<<<<<<< HEAD
 // -- Block-context tx validation (C1) -----------------------------------
 // Re-validates a transaction carried inside an *ingested peer block*. Unlike
 // validateTx it does NOT consult the mempool, the live recommended-fee floor,
@@ -1215,8 +1131,6 @@ export function validateBlockEntry(
   return ok({ address, score: sc });
 }
 
-=======
->>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
 // Re-export so full-node.ts can use them when packing blocks.
 
 export { rowToBlock, rowToTx };

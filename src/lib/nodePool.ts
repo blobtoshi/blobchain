@@ -38,6 +38,7 @@ export const BUNDLED_NODES: string[] = [
   "https://node.blobchain.network",
   "https://node-eu.blobchain.network",
   "https://node-us.blobchain.network",
+  "https://node-sea.blobchain.network",
 ];
 
 const STORAGE_KEY = "blob:node-config";

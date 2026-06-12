@@ -6,7 +6,12 @@
 import { mkPrng } from "./chain";
 import { GY, PX, GRAVITY, JUMP_V } from "./constants";
 
-export const ENGINE_VERSION = 2;
+// Engine v3: jump is a one-shot impulse fired on type-0 events alone.
+// Type-1 (jump release) is no longer emitted, recorded, or accepted.
+// Duck still uses press (type-2) and release (type-3) since holding
+// duck is a real gameplay action. v3 is a breaking wire-format change
+// from v2 - every node + every client must update together.
+export const ENGINE_VERSION = 3;
 
 // Maximum number of simulated frames we will replay. ~60 fps * 600 s = 36000.
 // A run that lasts longer than this is rejected (would otherwise enable a
@@ -83,22 +88,30 @@ export function initialState() {
     player: { y: GY - 28, vy: 0, action: "run", wob: 0, sq: 1 },
     obstacles: [] as LiveObstacle[],
     tokens: [] as LiveToken[],
-    jumpHeld: false,
+    // jumpHeld removed in v3 - jump is now a one-shot impulse on type-0.
     duckHeld: false,
     dead: false,
     passedFirstObstacle: false,
     // Per-frame counters consumed by the renderer (visual-only, not part of consensus hash).
     tokensPickedThisFrame: 0,
+    // Edge-trigger flag: set by applyInputs when a type-0 fires this frame,
+    // consumed and cleared by tick(). Replaces the v2 held-state model.
+    jumpFireThisFrame: false,
   };
 }
 
-// Apply input events scheduled for the CURRENT frame.
+// Apply input events scheduled for the CURRENT frame. v3: type-0 is an
+// edge-trigger (impulse jump). Type-1 is no longer accepted - if the
+// validator sees one in a v3 trace, it rejects before getting here.
 function applyInputs(state, events) {
+  state.jumpFireThisFrame = false;
   for (const e of events) {
-    if (e.t === 0) state.jumpHeld = true;
-    else if (e.t === 1) state.jumpHeld = false;
+    if (e.t === 0) state.jumpFireThisFrame = true;
     else if (e.t === 2) state.duckHeld = true;
     else if (e.t === 3) state.duckHeld = false;
+    // type 1 ignored - it's rejected at validation time, but ignoring
+    // here makes the simulator robust against accidental local replay
+    // of an old recording.
   }
 }
 
@@ -113,11 +126,12 @@ export function tick(state, level, frameInputs) {
   const p = state.player;
   state.frame++;
 
-  if (state.jumpHeld && p.action !== "jump") {
+  // Jump: fire on a fresh type-0 this frame, only when grounded.
+  if (state.jumpFireThisFrame && p.action !== "jump") {
     p.vy = JUMP_V;
     p.action = "jump";
   }
-  if (!state.jumpHeld && state.duckHeld && p.action !== "jump") p.action = "duck";
+  if (state.duckHeld && p.action !== "jump") p.action = "duck";
   else if (!state.duckHeld && p.action === "duck") p.action = "run";
   p.vy += GRAVITY;
   p.y += p.vy;
@@ -251,6 +265,10 @@ export function plausibilityCheck(events, frameCount, claimedScore) {
     if (e.f < 1 || e.f > frameCount) return "event frame out of range";
     if (e.f < last) return "events not sorted";
     if (e.t < 0 || e.t > 3 || !Number.isInteger(e.t)) return "bad event type";
+    // v3: jump is one-shot impulse. Type-1 (jump release) is no longer
+    // valid; entries containing it are legacy v2 traces that must be
+    // re-submitted with the new format.
+    if (e.t === 1) return "type-1 (jump release) no longer accepted - engine v3 uses impulse jumps";
     last = e.f;
   }
   return null;

@@ -10,7 +10,7 @@
 // any blocks the client missed by paging getBlocks until caught up.
 
 import type {
-  Block, Tx, Entry, ChainTip, ServerMsg, ClientMsg,
+  Block, Tx, Entry, EntryCommit, ChainTip, ServerMsg, ClientMsg,
   SubmitTxPayload, SubmitEntryPayload,
   SubmitEntryCommitPayload, SubmitEntryRevealPayload,
 } from "@/lib/wsProtocol";
@@ -25,6 +25,8 @@ export type NodeHandlers = {
   onBlock?: (b: Block) => void;
   onTx?: (t: Tx) => void;
   onEntry?: (e: Entry) => void;
+  onEntryCommit?: (c: EntryCommit) => void;
+  onActiveEntries?: (height: number, commits: EntryCommit[], reveals: Entry[]) => void;
   onTip?: (t: ChainTip) => void;
   onStatus?: (s: NodeStatus) => void;
 };
@@ -37,7 +39,7 @@ export type NodeStatus =
   | "closed"
   | "error";
 
-const SYNC_PAGE = 100;
+const SYNC_PAGE = 500;
 const MAX_BACKOFF_MS = 15_000;
 const BASE_BACKOFF_MS = 500;
 const HEARTBEAT_MS = 20_000;
@@ -52,6 +54,9 @@ export class BlobNodeClient {
   private localTipHeight = 0;
   private retryAttempt = 0;
   private heartbeatHandle: number | null = null;
+  // Periodic active-entries resync. Lets the browser see when the node
+  // drops abandoned commits (no per-entry removal event exists yet).
+  private activeRefreshHandle: number | null = null;
   private reconnectHandle: number | null = null;
   private explicitlyClosed = false;
   // Pending submit acks keyed by ref. The server replies with
@@ -84,6 +89,7 @@ export class BlobNodeClient {
   close() {
     this.explicitlyClosed = true;
     this.clearHeartbeat();
+    this.clearActiveRefresh();
     if (this.reconnectHandle != null) {
       window.clearTimeout(this.reconnectHandle);
       this.reconnectHandle = null;
@@ -99,6 +105,31 @@ export class BlobNodeClient {
       const r = await fetch(`${this.httpUrl}/chain/tip`);
       if (!r.ok) return null;
       return (await r.json()) as ChainTip;
+    } catch { return null; }
+  }
+
+  async fetchBalance(address: string): Promise<number> {
+    try {
+      const r = await fetch(`${this.httpUrl}/balance/${encodeURIComponent(address)}`);
+      if (!r.ok) return 0;
+      const j = await r.json() as { balance: number };
+      return Number(j.balance ?? 0);
+    } catch { return 0; }
+  }
+
+  async fetchAddressTxs(address: string, limit = 200): Promise<any[]> {
+    try {
+      const r = await fetch(`${this.httpUrl}/address/${encodeURIComponent(address)}/txs?limit=${limit}`);
+      if (!r.ok) return [];
+      return await r.json() as any[];
+    } catch { return []; }
+  }
+
+  async fetchStats(): Promise<{ height: number; totalSupply: number; totalTxs: number } | null> {
+    try {
+      const r = await fetch(`${this.httpUrl}/stats`);
+      if (!r.ok) return null;
+      return await r.json() as { height: number; totalSupply: number; totalTxs: number };
     } catch { return null; }
   }
 
@@ -147,7 +178,7 @@ export class BlobNodeClient {
     } catch { return []; }
   }
 
-  async fetchAddresses(limit = 200, offset = 0): Promise<Array<Record<string, unknown>>> {
+  async fetchAddresses(limit = 2000, offset = 0): Promise<Array<Record<string, unknown>>> {
     try {
       const r = await fetch(`${this.httpUrl}/addresses?limit=${limit}&offset=${offset}`);
       if (!r.ok) return [];
@@ -188,8 +219,8 @@ export class BlobNodeClient {
 
   // Legacy single-shot — kept so old peers don't break, but full nodes will
   // reject it post-Phase-4. New code should use commit + reveal.
-  submitEntry(entry: SubmitEntryPayload): Promise<{ score: number; verified: boolean }> {
-    return this.requestAck("submitEntry", { type: "submitEntry", entry }) as Promise<{ score: number; verified: boolean }>;
+  submitEntry(entry: SubmitEntryPayload): Promise<{ score: number; isNewBest: boolean }> {
+    return this.requestAck("submitEntry", { type: "submitEntry", entry }) as Promise<{ score: number; isNewBest: boolean }>;
   }
 
   submitEntryCommit(commit: SubmitEntryCommitPayload): Promise<{ address: string; block_height: number }> {
@@ -225,6 +256,7 @@ export class BlobNodeClient {
     ws.addEventListener("open", () => {
       this.retryAttempt = 0;
       this.startHeartbeat();
+      this.startActiveRefresh();
       // Sync flow runs after we receive the server's `hello`.
     });
 
@@ -237,6 +269,7 @@ export class BlobNodeClient {
 
     ws.addEventListener("close", () => {
       this.clearHeartbeat();
+      this.clearActiveRefresh();
       this.failPendingAcks(new Error("socket closed"));
       this.ws = null;
       if (this.explicitlyClosed) return;
@@ -271,6 +304,23 @@ export class BlobNodeClient {
     if (this.heartbeatHandle != null) {
       window.clearInterval(this.heartbeatHandle);
       this.heartbeatHandle = null;
+    }
+  }
+
+  // Refresh the active block's commit + reveal set every 15s. Cheap
+  // (one round trip with a tiny payload) and ensures the UI catches up
+  // when the node prunes abandoned commits or when an event was missed.
+  private startActiveRefresh() {
+    this.clearActiveRefresh();
+    this.activeRefreshHandle = window.setInterval(() => {
+      this.sendRaw({ type: "getActiveEntries", height: this.localTipHeight + 1 } as any);
+    }, 15_000);
+  }
+
+  private clearActiveRefresh() {
+    if (this.activeRefreshHandle != null) {
+      window.clearInterval(this.activeRefreshHandle);
+      this.activeRefreshHandle = null;
     }
   }
 
@@ -334,6 +384,9 @@ export class BlobNodeClient {
         this.localTipHeight = Math.max(this.localTipHeight, serverTip);
         this.handlers.onTip?.(msg.chainTip);
         this.sendRaw({ type: "subscribe" });
+        // Phase 5: pull current active block's commits + reveals so the UI
+        // shows the full set immediately, not just events from this session.
+        this.sendRaw({ type: "getActiveEntries", height: serverTip + 1 } as any);
         this.setStatus("open");
         return;
       }
@@ -348,6 +401,16 @@ export class BlobNodeClient {
         return;
       case "newEntry":
         this.handlers.onEntry?.(msg.entry);
+        return;
+      case "newEntryCommit":
+        this.handlers.onEntryCommit?.(msg.commit);
+        return;
+      case "activeEntries":
+        this.handlers.onActiveEntries?.(msg.height, msg.commits, msg.reveals);
+        return;
+      case "activeStateHash":
+        // Server-pushed state hash — useful for diagnostics, not actionable
+        // by browser clients (which can't independently re-request).
         return;
       case "chainTip":
         this.localTipHeight = Math.max(this.localTipHeight, msg.tip.height);
@@ -373,9 +436,13 @@ export class BlobNodeClient {
 
   private async syncFrom(fromHeight: number, toHeight: number) {
     if (fromHeight > toHeight) return;
+    // Cap to last 500 blocks. Server-side endpoints (/balance, /addresses,
+    // /address/:addr/txs, /stats) provide accurate aggregates and history,
+    // so the frontend doesn't need the full chain in memory.
+    const cappedFrom = Math.max(fromHeight, toHeight - SYNC_PAGE + 1);
     this.setStatus("syncing");
-    let cursor = fromHeight;
-    let safety = 1000; // hard cap on pages to avoid runaway loops
+    let cursor = cappedFrom;
+    let safety = 20;
     while (cursor <= toHeight && safety-- > 0) {
       const blocks = await this.fetchBlocks(cursor, SYNC_PAGE);
       if (blocks.length === 0) break;

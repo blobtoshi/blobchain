@@ -46,11 +46,66 @@ export function getBlockInfo(chain?: any[], hasEntry?: boolean) {
   };
 }
 
+// ── Content commitments (C1) ────────────────────────────────────────────
+// MUST stay byte-for-byte in sync with node/lib/consensus.ts:
+//   canonicalTxLeaf / canonicalEntryLeaf / computeTxRoot / computeEntryRoot.
+// Each field is suffixed with the 0x1f unit separator (which cannot appear in
+// any validated field, including the memo) so the concatenation is
+// unambiguous; the trailing separator on each leaf also delimits leaves.
+const USEP = "\x1f";
+
+export function canonicalTxLeaf(t: any): string {
+  return [
+    String(t.id ?? "") + USEP,
+    String(t.from ?? "") + USEP,
+    String(t.to ?? "") + USEP,
+    to8(Number(t.amount ?? 0)) + USEP,
+    to8(Number(t.fee ?? 0)) + USEP,
+    Math.floor(Number(t.feeRate ?? 0)) + USEP,
+    Math.floor(Number(t.timestamp ?? 0)) + USEP,
+    String(t.nonce ?? "") + USEP,
+    String(t.memo ?? "") + USEP,
+    String(t.publicKey ?? "") + USEP,
+    String(t.signature ?? "") + USEP,
+  ].join("");
+}
+
+export function canonicalEntryLeaf(e: any): string {
+  return [
+    String(e.address ?? "") + USEP,
+    Math.floor(Number(e.score ?? 0)) + USEP,
+    String(e.block_seed ?? "") + USEP,
+    String(e.inputs_hash ?? "") + USEP,
+    Math.floor(Number(e.frame_count ?? 0)) + USEP,
+    String(e.pow_nonce ?? "") + USEP,
+    String(e.publicKey ?? "") + USEP,
+    String(e.signature ?? "") + USEP,
+  ].join("");
+}
+
+export async function computeTxRoot(transactions: any[]): Promise<string> {
+  if (!transactions || transactions.length === 0) return sha256hex("");
+  return sha256hex(transactions.map(canonicalTxLeaf).join(""));
+}
+
+export async function computeEntryRoot(entries: any[]): Promise<string> {
+  if (!entries || entries.length === 0) return sha256hex("");
+  return sha256hex(entries.map(canonicalEntryLeaf).join(""));
+}
+
 export async function computeBlockHash(b) {
+  const txRoot = await computeTxRoot(b.transactions ?? []);
+  const entryRoot = await computeEntryRoot(b.miningEntries ?? []);
   const header = [
     b.height, b.previousHash, b.timestamp,
     b.winner ?? "null", b.winnerScore, b.reward, b.seed,
+<<<<<<< HEAD
+    (b.transactions ?? []).length,
+    txRoot,
+    entryRoot,
+=======
     b.transactions.length,
+>>>>>>> f707b92fa569ff89f0f1c20167310489f865f154
   ].join("|");
   return sha256hex(header);
 }
